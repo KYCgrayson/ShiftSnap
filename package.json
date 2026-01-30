@@ -1,0 +1,33 @@
+{
+  "name": "shiftsnap",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI-Powered Shift Schedule Recognition & Calendar Sync",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "mobile": "pnpm --filter @shiftsnap/mobile",
+    "mobile:start": "pnpm --filter @shiftsnap/mobile start",
+    "mobile:ios": "pnpm --filter @shiftsnap/mobile ios",
+    "mobile:android": "pnpm --filter @shiftsnap/mobile android",
+    "web": "pnpm --filter @shiftsnap/web",
+    "web:dev": "pnpm --filter @shiftsnap/web dev",
+    "web:build": "pnpm --filter @shiftsnap/web build",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "supabase:migrate": "supabase db push",
+    "supabase:generate-types": "supabase gen types typescript --local > packages/shared/src/types/database.ts",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "clean": "pnpm -r clean && rm -rf node_modules"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "author": "Grayson",
+  "license": "MIT"
+}

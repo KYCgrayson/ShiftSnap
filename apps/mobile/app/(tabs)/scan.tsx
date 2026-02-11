@@ -104,7 +104,7 @@ export default function ScanScreen() {
       const blob = await response.blob();
 
       const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('schedule-images')
+        .from('shift-images')
         .upload(fileName, blob, {
           contentType: 'image/jpeg',
         });
@@ -113,20 +113,33 @@ export default function ScanScreen() {
         throw new Error('Failed to upload image: ' + uploadError.message);
       }
 
-      // 2. Get public URL
-      const { data: urlData } = supabase.storage
-        .from('schedule-images')
-        .getPublicUrl(fileName);
+      // 2. Get signed URL (for private bucket)
+      const { data: urlData, error: urlError } = await supabase.storage
+        .from('shift-images')
+        .createSignedUrl(fileName, 3600); // 1 hour expiry
+
+      if (urlError || !urlData?.signedUrl) {
+        throw new Error('Failed to get image URL: ' + (urlError?.message || 'Unknown error'));
+      }
 
       // 3. Call OCR Edge Function
+      console.log('Calling OCR with URL:', urlData.signedUrl);
       const { data: ocrData, error: ocrError } = await supabase.functions.invoke('ocr-process', {
         body: {
-          imageUrl: urlData.publicUrl,
+          imageUrl: urlData.signedUrl,
         },
       });
 
+      console.log('OCR Response:', JSON.stringify(ocrData, null, 2));
+      console.log('OCR Error:', ocrError);
+
       if (ocrError) {
-        throw new Error('Failed to process schedule: ' + ocrError.message);
+        const errorDetail = ocrData?.raw_response || ocrError.message;
+        throw new Error('OCR failed: ' + errorDetail);
+      }
+
+      if (!ocrData?.success) {
+        throw new Error('OCR failed: ' + (ocrData?.raw_response || 'Unknown error'));
       }
 
       // 4. Navigate to results screen

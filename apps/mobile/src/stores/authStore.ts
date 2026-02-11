@@ -14,11 +14,13 @@ interface AuthState {
   loading: boolean;
   initialized: boolean;
   error: string | null;
+  isGuest: boolean;
 
   // Actions
   initialize: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   signUp: (email: string, password: string, displayName?: string) => Promise<{ success: boolean; error?: string }>;
+  signInAsGuest: () => void;
   signOut: () => Promise<void>;
   clearError: () => void;
 }
@@ -29,6 +31,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   loading: false,
   initialized: false,
   error: null,
+  isGuest: false,
 
   initialize: async () => {
     try {
@@ -125,12 +128,34 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
+  signInAsGuest: () => {
+    const guestUser = {
+      id: 'guest-user',
+      email: 'guest@shiftsnap.local',
+      app_metadata: {},
+      user_metadata: { display_name: 'Guest User' },
+      aud: 'authenticated',
+      created_at: new Date().toISOString(),
+    } as User;
+
+    set({
+      user: guestUser,
+      session: null,
+      isGuest: true,
+      loading: false,
+      error: null,
+    });
+  },
+
   signOut: async () => {
+    const { isGuest } = get();
     set({ loading: true });
 
     try {
-      await supabaseSignOut();
-      set({ user: null, session: null, loading: false, error: null });
+      if (!isGuest) {
+        await supabaseSignOut();
+      }
+      set({ user: null, session: null, isGuest: false, loading: false, error: null });
     } catch (error) {
       console.error('Sign out error:', error);
       set({ loading: false });

@@ -19,7 +19,7 @@ import { isValidEmail } from '@shiftsnap/shared';
 
 export default function LoginScreen() {
   const theme = useTheme();
-  const { signIn, loading, error, clearError } = useAuthStore();
+  const { signIn, signInAsGuest, loading, error, clearError } = useAuthStore();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -124,7 +124,10 @@ export default function LoginScreen() {
               </View>
             )}
 
-            <TouchableOpacity style={styles.forgotPassword}>
+            <TouchableOpacity
+              style={styles.forgotPassword}
+              onPress={() => Alert.alert('Reset Password', 'Password reset functionality coming soon')}
+            >
               <Text style={[styles.forgotPasswordText, { color: theme.colors.primary }]}>
                 Forgot password?
               </Text>
@@ -158,6 +161,7 @@ export default function LoginScreen() {
                   borderColor: theme.colors.border,
                 },
               ]}
+              onPress={() => Alert.alert('Google Sign In', 'Google OAuth will be configured in production')}
             >
               <Ionicons name="logo-google" size={20} color="#DB4437" />
               <Text style={[styles.socialButtonText, { color: theme.colors.textPrimary }]}>
@@ -173,6 +177,7 @@ export default function LoginScreen() {
                   borderColor: theme.colors.border,
                 },
               ]}
+              onPress={() => Alert.alert('Apple Sign In', 'Apple OAuth will be configured in production')}
             >
               <Ionicons name="logo-apple" size={20} color={theme.colors.textPrimary} />
               <Text style={[styles.socialButtonText, { color: theme.colors.textPrimary }]}>
@@ -192,6 +197,19 @@ export default function LoginScreen() {
               </Text>
             </Link>
           </View>
+
+          {/* Guest Mode */}
+          <TouchableOpacity
+            style={[styles.guestButton, { borderColor: theme.colors.border }]}
+            onPress={() => {
+              signInAsGuest();
+              router.replace('/(tabs)/home');
+            }}
+          >
+            <Text style={[styles.guestButtonText, { color: theme.colors.textSecondary }]}>
+              Continue as Guest
+            </Text>
+          </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -290,5 +308,14 @@ const styles = StyleSheet.create({
   registerLink: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  guestButton: {
+    marginTop: 24,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderTopWidth: 1,
+  },
+  guestButtonText: {
+    fontSize: 14,
   },
 });

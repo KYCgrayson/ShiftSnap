@@ -66,7 +66,7 @@ export const COMMON_SHIFT_CODES = [
 
 // Supabase storage buckets
 export const STORAGE_BUCKETS = {
-  SCHEDULE_IMAGES: 'schedule-images',
+  SCHEDULE_IMAGES: 'shift-images',
   AVATARS: 'avatars',
 } as const;
 

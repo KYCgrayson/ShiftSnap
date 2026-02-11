@@ -2,6 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Security Rules
+
+**NEVER commit API keys, tokens, or secrets to git.** When handling credentials:
+- Use `supabase secrets set KEY=value` for Edge Function secrets
+- Use `.env` files (already in `.gitignore`) for local development
+- Never echo/print keys in terminal output that gets logged
+- If a user provides a key, store it securely without exposing it in commit messages or file contents that get tracked
+
 ## Project Overview
 
 ShiftSnap is a React Native + Expo mobile app that uses AI (Google Gemini 2.0 Flash Vision) to convert paper shift schedules into digital calendar events. Built as a pnpm monorepo with Supabase backend.

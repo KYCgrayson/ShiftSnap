@@ -4,11 +4,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Security Rules
 
-**NEVER commit API keys, tokens, or secrets to git.** When handling credentials:
-- Use `supabase secrets set KEY=value` for Edge Function secrets
-- Use `.env` files (already in `.gitignore`) for local development
-- Never echo/print keys in terminal output that gets logged
-- If a user provides a key, store it securely without exposing it in commit messages or file contents that get tracked
+**所有 API key、密鑰、個人憑證或敏感資訊都不應該出現在任何公開可見的地方。** 這包括但不限於：commit message、公開的 Git 儲存庫、公開的 issue/PR、終端機輸出日誌，或其他任何會被第三方看到的記錄。
+
+**儲存方式：**
+- 使用 `.env` 檔案儲存環境變數（已加入 `.gitignore`，不納入版本控制）
+- 使用 `supabase secrets set KEY=value` 管理 Edge Function 密鑰
+- 使用 CI/CD secrets、Supabase/Firebase/GCP/AWS secrets 等安全的密鑰管理服務
+- 如果使用者提供密鑰，存放於安全位置，不得出現在被追蹤的檔案或 commit 記錄中
+
+**需從外部注入的環境變數：**
+| 變數名稱 | 用途 | 設定位置 |
+|---------|------|---------|
+| `EXPO_PUBLIC_SUPABASE_URL` | Supabase 專案 URL | `apps/mobile/.env` |
+| `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Supabase 匿名金鑰 | `apps/mobile/.env` |
+| `GEMINI_API_KEY` | Google Gemini Vision API 金鑰 | `supabase secrets set` |
+| Apple OAuth (Services ID, Secret Key) | Apple Sign In | Supabase Dashboard → Auth → Providers |
+| Google OAuth (Client ID, Client Secret) | Google Sign In | Supabase Dashboard → Auth → Providers |
 
 ## Project Overview
 

@@ -45,12 +45,12 @@ enable_signup = false
 enable_confirmations = false
 
 [auth.external.apple]
-enabled = false
+enabled = true
 client_id = "placeholder"
 secret = "env(APPLE_SECRET)"
 
 [auth.external.google]
-enabled = false
+enabled = true
 client_id = "placeholder"
 secret = "env(GOOGLE_SECRET)"
 

@@ -13,11 +13,14 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
 import { Card, Button, Input } from '../../src/components/ui';
-import { supabase } from '../../src/services/supabase';
 import { useAuthStore } from '../../src/stores/authStore';
+import { useShiftCodeStore } from '../../src/stores/shiftCodeStore';
+import { useShiftStore } from '../../src/stores/shiftStore';
+import { useScheduleStore } from '../../src/stores/scheduleStore';
+import { useCalendarStore } from '../../src/stores/calendarStore';
 import { COMMON_SHIFT_CODES } from '@shiftsnap/shared';
 
-interface ShiftCode {
+interface LocalShiftCode {
   id: string;
   code: string;
   meaning: string;
@@ -29,25 +32,60 @@ interface ShiftCode {
 
 export default function ShiftsScreen() {
   const theme = useTheme();
-  const params = useLocalSearchParams();
+  const params = useLocalSearchParams<{
+    ocrResult?: string;
+    scheduleId?: string;
+    yearMonth?: string;
+  }>();
   const { user } = useAuthStore();
+  const {
+    shiftCodes: storeShiftCodes,
+    fetchShiftCodes,
+    saveShiftCode,
+    deleteShiftCode,
+  } = useShiftCodeStore();
+  const { createShiftsFromOCR } = useShiftStore();
+  const { updateScheduleStatus } = useScheduleStore();
+  const { isConnected, syncShift } = useCalendarStore();
 
-  const [shiftCodes, setShiftCodes] = useState<ShiftCode[]>([]);
   const [pendingCodes, setPendingCodes] = useState<string[]>([]);
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [ocrResult, setOcrResult] = useState<any>(null);
+  const [scheduleId, setScheduleId] = useState<string | null>(null);
+  const [yearMonth, setYearMonth] = useState<string | null>(null);
+
+  // Map store shift codes to local format
+  const shiftCodes: LocalShiftCode[] = storeShiftCodes.map((sc) => ({
+    id: sc.id,
+    code: sc.code,
+    meaning: sc.meaning,
+    startTime: sc.start_time,
+    endTime: sc.end_time,
+    isDayOff: sc.is_day_off,
+    isConfirmed: sc.is_confirmed,
+  }));
 
   // Load shift codes
   useEffect(() => {
-    loadShiftCodes();
-  }, []);
+    if (user?.id) {
+      fetchShiftCodes(user.id);
+    }
+  }, [user?.id]);
 
   // Handle OCR result from scan
   useEffect(() => {
     if (params.ocrResult) {
       try {
-        const result = JSON.parse(params.ocrResult as string);
+        const result = JSON.parse(params.ocrResult);
+        setOcrResult(result);
+        setScheduleId(params.scheduleId || null);
+        setYearMonth(params.yearMonth || null);
+
         if (result.unknown_codes && result.unknown_codes.length > 0) {
-          setPendingCodes(result.unknown_codes);
+          // Filter out codes we already know
+          const unknowns = result.unknown_codes.filter(
+            (code: string) => !storeShiftCodes.find((sc) => sc.code === code)
+          );
+          setPendingCodes(unknowns);
         }
       } catch (error) {
         console.error('Error parsing OCR result:', error);
@@ -55,35 +93,7 @@ export default function ShiftsScreen() {
     }
   }, [params.ocrResult]);
 
-  const loadShiftCodes = async () => {
-    if (!user) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('shift_codes')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('code');
-
-      if (error) throw error;
-
-      setShiftCodes(
-        data?.map((code) => ({
-          id: code.id,
-          code: code.code,
-          meaning: code.meaning,
-          startTime: code.start_time,
-          endTime: code.end_time,
-          isDayOff: code.is_day_off,
-          isConfirmed: code.is_confirmed,
-        })) || []
-      );
-    } catch (error) {
-      console.error('Error loading shift codes:', error);
-    }
-  };
-
-  const saveShiftCode = async (
+  const handleSaveShiftCode = async (
     code: string,
     meaning: string,
     startTime: string | null,
@@ -93,28 +103,56 @@ export default function ShiftsScreen() {
     if (!user) return;
 
     try {
-      const { error } = await supabase.from('shift_codes').upsert({
-        user_id: user.id,
-        code,
-        meaning,
-        start_time: startTime,
-        end_time: endTime,
-        is_day_off: isDayOff,
-        is_confirmed: true,
-      });
-
-      if (error) throw error;
-
-      // Remove from pending and refresh
+      await saveShiftCode(user.id, code, meaning, startTime, endTime, isDayOff);
       setPendingCodes((prev) => prev.filter((c) => c !== code));
-      loadShiftCodes();
+
+      // Check if all pending codes are now defined
+      const remainingPending = pendingCodes.filter((c) => c !== code);
+      if (remainingPending.length === 0 && ocrResult && scheduleId && yearMonth) {
+        // All codes defined - create shifts
+        await handleCreateShifts();
+      }
     } catch (error) {
-      console.error('Error saving shift code:', error);
       Alert.alert('Error', 'Failed to save shift code');
     }
   };
 
-  const deleteShiftCode = async (id: string) => {
+  const handleCreateShifts = async () => {
+    if (!user || !ocrResult || !scheduleId || !yearMonth) return;
+
+    try {
+      const allCodes = useShiftCodeStore.getState().shiftCodes;
+      await createShiftsFromOCR(
+        scheduleId,
+        user.id,
+        ocrResult,
+        allCodes.map((sc) => ({
+          code: sc.code,
+          start_time: sc.start_time,
+          end_time: sc.end_time,
+          is_day_off: sc.is_day_off,
+        })),
+        yearMonth
+      );
+
+      await updateScheduleStatus(scheduleId, 'published');
+
+      Alert.alert(
+        'Shifts Saved',
+        'Your shifts have been saved and your schedule is published!',
+        [{ text: 'View Home', onPress: () => router.push('/(tabs)/home') }]
+      );
+
+      // Clear OCR state
+      setOcrResult(null);
+      setScheduleId(null);
+      setYearMonth(null);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to create shifts. Please try again.');
+    }
+  };
+
+  const handleDeleteShiftCode = (id: string) => {
     Alert.alert('Delete Shift Code', 'Are you sure you want to delete this shift code?', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -122,11 +160,8 @@ export default function ShiftsScreen() {
         style: 'destructive',
         onPress: async () => {
           try {
-            const { error } = await supabase.from('shift_codes').delete().eq('id', id);
-            if (error) throw error;
-            loadShiftCodes();
-          } catch (error) {
-            console.error('Error deleting shift code:', error);
+            await deleteShiftCode(id);
+          } catch {
             Alert.alert('Error', 'Failed to delete shift code');
           }
         },
@@ -134,7 +169,7 @@ export default function ShiftsScreen() {
     ]);
   };
 
-  const renderShiftCodeItem = ({ item }: { item: ShiftCode }) => (
+  const renderShiftCodeItem = ({ item }: { item: LocalShiftCode }) => (
     <Card style={styles.codeCard}>
       <View style={styles.codeCardContent}>
         <View
@@ -169,7 +204,7 @@ export default function ShiftsScreen() {
         </View>
         <TouchableOpacity
           style={styles.deleteButton}
-          onPress={() => deleteShiftCode(item.id)}
+          onPress={() => handleDeleteShiftCode(item.id)}
         >
           <Ionicons name="trash-outline" size={18} color={theme.colors.error} />
         </TouchableOpacity>
@@ -186,7 +221,7 @@ export default function ShiftsScreen() {
         </Text>
         <TouchableOpacity
           style={[styles.addButton, { backgroundColor: theme.colors.primary }]}
-          onPress={() => setShowAddModal(true)}
+          onPress={() => setPendingCodes((prev) => [...prev, ''])}
         >
           <Ionicons name="add" size={24} color={theme.colors.white} />
         </TouchableOpacity>
@@ -202,7 +237,7 @@ export default function ShiftsScreen() {
                 New codes detected
               </Text>
               <Text style={[styles.alertText, { color: theme.colors.textSecondary }]}>
-                Please define: {pendingCodes.join(', ')}
+                Please define: {pendingCodes.filter(Boolean).join(', ')}
               </Text>
             </View>
           </Card>
@@ -214,13 +249,20 @@ export default function ShiftsScreen() {
             <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
               Define New Codes
             </Text>
-            {pendingCodes.map((code) => (
+            {pendingCodes.map((code, index) => (
               <PendingCodeCard
-                key={code}
+                key={`${code}-${index}`}
                 code={code}
                 theme={theme}
-                onSave={saveShiftCode}
-                onSkip={() => setPendingCodes((prev) => prev.filter((c) => c !== code))}
+                onSave={handleSaveShiftCode}
+                onSkip={() => {
+                  setPendingCodes((prev) => prev.filter((_, i) => i !== index));
+                  // If this was the last pending code and we have OCR data, create shifts
+                  const remaining = pendingCodes.filter((_, i) => i !== index);
+                  if (remaining.length === 0 && ocrResult && scheduleId && yearMonth) {
+                    handleCreateShifts();
+                  }
+                }}
               />
             ))}
           </View>
@@ -268,15 +310,18 @@ export default function ShiftsScreen() {
                 <TouchableOpacity
                   key={common.code}
                   style={[styles.commonCodeChip, { borderColor: theme.colors.border }]}
-                  onPress={() =>
-                    saveShiftCode(
-                      common.code,
-                      common.meaning,
-                      common.start_time,
-                      null,
-                      common.is_day_off
-                    )
-                  }
+                  onPress={() => {
+                    if (user) {
+                      saveShiftCode(
+                        user.id,
+                        common.code,
+                        common.meaning,
+                        common.start_time,
+                        null,
+                        common.is_day_off
+                      );
+                    }
+                  }}
                 >
                   <Text style={[styles.commonCodeText, { color: theme.colors.textPrimary }]}>
                     {common.code}
@@ -305,28 +350,41 @@ function PendingCodeCard({
   onSave: (code: string, meaning: string, startTime: string | null, endTime: string | null, isDayOff: boolean) => void;
   onSkip: () => void;
 }) {
+  const [codeValue, setCodeValue] = useState(code);
   const [meaning, setMeaning] = useState('');
   const [startTime, setStartTime] = useState('');
   const [isDayOff, setIsDayOff] = useState(false);
 
   const handleSave = () => {
+    const finalCode = codeValue.trim() || code;
     if (!meaning.trim()) {
       Alert.alert('Error', 'Please enter a meaning for this code');
       return;
     }
-    onSave(code, meaning.trim(), isDayOff ? null : startTime || null, null, isDayOff);
+    onSave(finalCode, meaning.trim(), isDayOff ? null : startTime || null, null, isDayOff);
   };
 
   return (
     <Card style={styles.pendingCard}>
       <View style={styles.pendingHeader}>
         <View style={[styles.pendingCodeBox, { backgroundColor: theme.colors.warning + '20' }]}>
-          <Text style={[styles.pendingCodeText, { color: theme.colors.warning }]}>{code}</Text>
+          <Text style={[styles.pendingCodeText, { color: theme.colors.warning }]}>
+            {code || '?'}
+          </Text>
         </View>
         <Text style={[styles.pendingQuestion, { color: theme.colors.textPrimary }]}>
-          What does "{code}" mean?
+          {code ? `What does "${code}" mean?` : 'Add new shift code'}
         </Text>
       </View>
+
+      {!code && (
+        <Input
+          label="Code"
+          placeholder="e.g., A"
+          value={codeValue}
+          onChangeText={setCodeValue}
+        />
+      )}
 
       <Input
         label="Meaning"

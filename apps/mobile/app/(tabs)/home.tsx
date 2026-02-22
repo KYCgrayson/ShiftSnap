@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,32 +13,37 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../src/theme';
 import { useAuthStore } from '../../src/stores/authStore';
+import { useShiftStore } from '../../src/stores/shiftStore';
+import { useShiftCodeStore } from '../../src/stores/shiftCodeStore';
 import { Card, Button } from '../../src/components/ui';
-import { formatDate, isToday } from '@shiftsnap/shared';
+import { formatDate } from '@shiftsnap/shared';
 
 export default function HomeScreen() {
   const theme = useTheme();
   const { user } = useAuthStore();
+  const { todayShift, upcomingShifts, fetchTodayShift, fetchUpcomingShifts } = useShiftStore();
+  const { shiftCodes, fetchShiftCodes, getCodeInfo } = useShiftCodeStore();
   const [refreshing, setRefreshing] = useState(false);
-  const [todayShift, setTodayShift] = useState<{
-    code: string;
-    startTime: string;
-    endTime?: string;
-  } | null>(null);
-  const [upcomingShifts, setUpcomingShifts] = useState<
-    Array<{
-      id: string;
-      date: Date;
-      code: string;
-      startTime: string;
-    }>
-  >([]);
 
   const displayName = user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'User';
+  const userId = user?.id;
+
+  const loadData = useCallback(async () => {
+    if (!userId) return;
+    await Promise.all([
+      fetchTodayShift(userId),
+      fetchUpcomingShifts(userId),
+      fetchShiftCodes(userId),
+    ]);
+  }, [userId]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    // TODO: Fetch shifts from Supabase
+    await loadData();
     setRefreshing(false);
   };
 
@@ -48,6 +53,8 @@ export default function HomeScreen() {
     if (hour < 18) return 'Good afternoon';
     return 'Good evening';
   };
+
+  const todayCodeInfo = todayShift ? getCodeInfo(todayShift.shift_code) : null;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.warmWhite }]}>
@@ -101,10 +108,16 @@ export default function HomeScreen() {
             </View>
             {todayShift ? (
               <View style={styles.shiftInfo}>
-                <Text style={styles.shiftCode}>{todayShift.code}</Text>
+                <Text style={styles.shiftCode}>{todayShift.shift_code}</Text>
+                {todayCodeInfo?.meaning && (
+                  <Text style={styles.shiftMeaning}>{todayCodeInfo.meaning}</Text>
+                )}
                 <Text style={styles.shiftTime}>
-                  {todayShift.startTime}
-                  {todayShift.endTime && ` - ${todayShift.endTime}`}
+                  {todayShift.is_day_off
+                    ? 'Day Off'
+                    : todayShift.start_time
+                      ? `${todayShift.start_time}${todayShift.end_time ? ` - ${todayShift.end_time}` : ''}`
+                      : ''}
                 </Text>
               </View>
             ) : (
@@ -174,38 +187,46 @@ export default function HomeScreen() {
           </View>
 
           {upcomingShifts.length > 0 ? (
-            upcomingShifts.map((shift) => (
-              <Card key={shift.id} style={styles.shiftCard}>
-                <View style={styles.shiftCardContent}>
-                  <View
-                    style={[
-                      styles.dateBox,
-                      { backgroundColor: theme.colors.primary + '15' },
-                    ]}
-                  >
-                    <Text style={[styles.dateDay, { color: theme.colors.primary }]}>
-                      {shift.date.getDate()}
-                    </Text>
-                    <Text style={[styles.dateMonth, { color: theme.colors.primary }]}>
-                      {shift.date.toLocaleDateString('en', { month: 'short' })}
-                    </Text>
+            upcomingShifts.map((shift) => {
+              const codeInfo = getCodeInfo(shift.shift_code);
+              const shiftDate = new Date(shift.date + 'T00:00:00');
+              return (
+                <Card key={shift.id} style={styles.shiftCard}>
+                  <View style={styles.shiftCardContent}>
+                    <View
+                      style={[
+                        styles.dateBox,
+                        { backgroundColor: theme.colors.primary + '15' },
+                      ]}
+                    >
+                      <Text style={[styles.dateDay, { color: theme.colors.primary }]}>
+                        {shiftDate.getDate()}
+                      </Text>
+                      <Text style={[styles.dateMonth, { color: theme.colors.primary }]}>
+                        {shiftDate.toLocaleDateString('en', { month: 'short' })}
+                      </Text>
+                    </View>
+                    <View style={styles.shiftCardInfo}>
+                      <Text style={[styles.shiftCardCode, { color: theme.colors.textPrimary }]}>
+                        {codeInfo?.meaning || `Shift ${shift.shift_code}`}
+                      </Text>
+                      <Text style={[styles.shiftCardTime, { color: theme.colors.textSecondary }]}>
+                        {shift.is_day_off
+                          ? 'Day Off'
+                          : shift.start_time
+                            ? `Starts at ${shift.start_time}`
+                            : shift.shift_code}
+                      </Text>
+                    </View>
+                    <Ionicons
+                      name="chevron-forward"
+                      size={20}
+                      color={theme.colors.textMuted}
+                    />
                   </View>
-                  <View style={styles.shiftCardInfo}>
-                    <Text style={[styles.shiftCardCode, { color: theme.colors.textPrimary }]}>
-                      Shift {shift.code}
-                    </Text>
-                    <Text style={[styles.shiftCardTime, { color: theme.colors.textSecondary }]}>
-                      Starts at {shift.startTime}
-                    </Text>
-                  </View>
-                  <Ionicons
-                    name="chevron-forward"
-                    size={20}
-                    color={theme.colors.textMuted}
-                  />
-                </View>
-              </Card>
-            ))
+                </Card>
+              );
+            })
           ) : (
             <Card style={styles.emptyCard}>
               <Ionicons
@@ -294,6 +315,12 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 48,
     fontWeight: '700',
+    marginBottom: 4,
+  },
+  shiftMeaning: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 16,
+    fontWeight: '500',
     marginBottom: 4,
   },
   shiftTime: {

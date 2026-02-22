@@ -18,6 +18,9 @@ export const Colors = {
   warmWhite: '#FFFBF7',
   softCream: '#FFF5EB',
   softGray: '#F7F4F1',
+  background: '#FFFBF7',
+  backgroundElevated: '#FFFFFF',
+  surface: '#FFF5EB',
 
   // Text
   textPrimary: '#3D3D3D',
@@ -56,6 +59,9 @@ export const DarkColors = {
   secondaryLight: '#F7C488',
 
   // Backgrounds
+  warmWhite: '#1A1B1E',
+  softCream: '#252528',
+  softGray: '#2C2C2E',
   background: '#1A1B1E',
   backgroundElevated: '#2C2C2E',
   surface: '#252528',

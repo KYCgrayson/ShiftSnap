@@ -19,7 +19,7 @@ import { isValidEmail } from '@shiftsnap/shared';
 
 export default function LoginScreen() {
   const theme = useTheme();
-  const { signIn, signInAsGuest, loading, error, clearError } = useAuthStore();
+  const { signIn, signInAsGuest, signInWithGoogle, signInWithApple, loading, error, clearError } = useAuthStore();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -161,7 +161,12 @@ export default function LoginScreen() {
                   borderColor: theme.colors.border,
                 },
               ]}
-              onPress={() => Alert.alert('Google Sign In', 'Google OAuth will be configured in production')}
+              onPress={async () => {
+                const result = await signInWithGoogle();
+                if (result.success) {
+                  router.replace('/(tabs)/home');
+                }
+              }}
             >
               <Ionicons name="logo-google" size={20} color="#DB4437" />
               <Text style={[styles.socialButtonText, { color: theme.colors.textPrimary }]}>
@@ -169,21 +174,28 @@ export default function LoginScreen() {
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[
-                styles.socialButton,
-                {
-                  backgroundColor: theme.colors.white,
-                  borderColor: theme.colors.border,
-                },
-              ]}
-              onPress={() => Alert.alert('Apple Sign In', 'Apple OAuth will be configured in production')}
-            >
-              <Ionicons name="logo-apple" size={20} color={theme.colors.textPrimary} />
-              <Text style={[styles.socialButtonText, { color: theme.colors.textPrimary }]}>
-                Apple
-              </Text>
-            </TouchableOpacity>
+            {Platform.OS === 'ios' && (
+              <TouchableOpacity
+                style={[
+                  styles.socialButton,
+                  {
+                    backgroundColor: theme.colors.white,
+                    borderColor: theme.colors.border,
+                  },
+                ]}
+                onPress={async () => {
+                  const result = await signInWithApple();
+                  if (result.success) {
+                    router.replace('/(tabs)/home');
+                  }
+                }}
+              >
+                <Ionicons name="logo-apple" size={20} color={theme.colors.textPrimary} />
+                <Text style={[styles.socialButtonText, { color: theme.colors.textPrimary }]}>
+                  Apple
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Register link */}

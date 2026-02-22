@@ -1,17 +1,18 @@
 import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useColorScheme, View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import { useAuthStore } from '../src/stores/authStore';
-import { Colors, DarkColors } from '../src/theme';
+import { useThemeStore } from '../src/stores/themeStore';
+import { useCalendarStore } from '../src/stores/calendarStore';
+import { useTheme, Colors, DarkColors } from '../src/theme';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
 
-export default function RootLayout() {
-  const colorScheme = useColorScheme();
-  const colors = colorScheme === 'dark' ? DarkColors : Colors;
+function RootLayoutInner() {
+  const theme = useTheme();
   const { initialized, initialize } = useAuthStore();
 
   useEffect(() => {
@@ -22,19 +23,19 @@ export default function RootLayout() {
 
   if (!initialized) {
     return (
-      <View style={[styles.loading, { backgroundColor: colors.warmWhite }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
+      <View style={[styles.loading, { backgroundColor: theme.colors.warmWhite }]}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
       </View>
     );
   }
 
   return (
     <>
-      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+      <StatusBar style={theme.isDark ? 'light' : 'dark'} />
       <Stack
         screenOptions={{
           headerShown: false,
-          contentStyle: { backgroundColor: colors.warmWhite },
+          contentStyle: { backgroundColor: theme.colors.warmWhite },
           animation: 'slide_from_right',
         }}
       >
@@ -44,6 +45,18 @@ export default function RootLayout() {
       </Stack>
     </>
   );
+}
+
+export default function RootLayout() {
+  const initializeTheme = useThemeStore((s) => s.initialize);
+  const initializeCalendar = useCalendarStore((s) => s.initialize);
+
+  useEffect(() => {
+    initializeTheme();
+    initializeCalendar();
+  }, []);
+
+  return <RootLayoutInner />;
 }
 
 const styles = StyleSheet.create({

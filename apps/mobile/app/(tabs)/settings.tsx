@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -8,17 +8,27 @@ import {
   TouchableOpacity,
   Alert,
   Switch,
+  TextInput,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
 import { Card } from '../../src/components/ui';
 import { useAuthStore } from '../../src/stores/authStore';
+import { useThemeStore } from '../../src/stores/themeStore';
+import { useCalendarStore } from '../../src/stores/calendarStore';
+import { supabase } from '../../src/services/supabase';
 import { APP_VERSION, EXTERNAL_LINKS } from '@shiftsnap/shared';
 
 export default function SettingsScreen() {
   const theme = useTheme();
   const { user, signOut } = useAuthStore();
+  const themeMode = useThemeStore((s) => s.mode);
+  const setThemeMode = useThemeStore((s) => s.setMode);
+  const { isConnected: calendarConnected, connectCalendar, disconnectCalendar, loading: calendarLoading } = useCalendarStore();
+
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [editName, setEditName] = useState('');
 
   const displayName = user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'User';
   const email = user?.email || '';
@@ -47,12 +57,58 @@ export default function SettingsScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
-            // TODO: Implement account deletion
             Alert.alert('Contact Support', 'Please contact support@shiftsnap.app to delete your account.');
           },
         },
       ]
     );
+  };
+
+  const handleEditProfile = () => {
+    setEditName(displayName);
+    setEditingProfile(true);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!editName.trim()) {
+      Alert.alert('Error', 'Name cannot be empty');
+      return;
+    }
+
+    try {
+      await supabase.auth.updateUser({
+        data: { display_name: editName.trim() },
+      });
+      setEditingProfile(false);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update profile');
+    }
+  };
+
+  const handleToggleDarkMode = () => {
+    if (themeMode === 'dark') {
+      setThemeMode('light');
+    } else {
+      setThemeMode('dark');
+    }
+  };
+
+  const handleCalendarConnect = async () => {
+    if (calendarConnected) {
+      Alert.alert('Disconnect Calendar', 'Stop syncing shifts to your calendar?', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Disconnect',
+          style: 'destructive',
+          onPress: () => disconnectCalendar(),
+        },
+      ]);
+    } else {
+      const success = await connectCalendar();
+      if (success) {
+        Alert.alert('Connected', 'Your shifts will now sync to Apple Calendar');
+      }
+    }
   };
 
   const SettingsItem = ({
@@ -134,21 +190,60 @@ export default function SettingsScreen() {
               </Text>
             </View>
             <View style={styles.profileInfo}>
-              <Text style={[styles.profileName, { color: theme.colors.textPrimary }]}>
-                {displayName}
-              </Text>
+              {editingProfile ? (
+                <TextInput
+                  style={[styles.profileNameInput, {
+                    color: theme.colors.textPrimary,
+                    borderColor: theme.colors.primary,
+                  }]}
+                  value={editName}
+                  onChangeText={setEditName}
+                  autoFocus
+                  onSubmitEditing={handleSaveProfile}
+                  returnKeyType="done"
+                />
+              ) : (
+                <Text style={[styles.profileName, { color: theme.colors.textPrimary }]}>
+                  {displayName}
+                </Text>
+              )}
               <Text style={[styles.profileEmail, { color: theme.colors.textSecondary }]}>
                 {email}
               </Text>
             </View>
           </View>
-          <TouchableOpacity
-            style={[styles.editProfileButton, { borderColor: theme.colors.border }]}
-          >
-            <Text style={[styles.editProfileText, { color: theme.colors.primary }]}>
-              Edit Profile
-            </Text>
-          </TouchableOpacity>
+          {editingProfile ? (
+            <View style={styles.editActions}>
+              <TouchableOpacity
+                style={[styles.editProfileButton, { borderColor: theme.colors.border }]}
+                onPress={() => setEditingProfile(false)}
+              >
+                <Text style={[styles.editProfileText, { color: theme.colors.textSecondary }]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.editProfileButton, {
+                  borderColor: theme.colors.primary,
+                  backgroundColor: theme.colors.primary,
+                }]}
+                onPress={handleSaveProfile}
+              >
+                <Text style={[styles.editProfileText, { color: theme.colors.white }]}>
+                  Save
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[styles.editProfileButton, { borderColor: theme.colors.border }]}
+              onPress={handleEditProfile}
+            >
+              <Text style={[styles.editProfileText, { color: theme.colors.primary }]}>
+                Edit Profile
+              </Text>
+            </TouchableOpacity>
+          )}
         </Card>
 
         {/* Preferences */}
@@ -183,8 +278,8 @@ export default function SettingsScreen() {
               title="Dark Mode"
               rightElement={
                 <Switch
-                  value={theme.isDark}
-                  onValueChange={() => {}}
+                  value={themeMode === 'dark'}
+                  onValueChange={handleToggleDarkMode}
                   trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
                   thumbColor={theme.colors.white}
                 />
@@ -200,17 +295,21 @@ export default function SettingsScreen() {
           </Text>
           <Card padding="none">
             <SettingsItem
-              icon="logo-google"
-              title="Google Calendar"
-              subtitle="Not connected"
-              onPress={() => {}}
-            />
-            <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
-            <SettingsItem
               icon="logo-apple"
               title="Apple Calendar"
-              subtitle="Not connected"
-              onPress={() => {}}
+              subtitle={calendarConnected ? 'Connected' : 'Not connected'}
+              onPress={handleCalendarConnect}
+              rightElement={
+                calendarLoading ? (
+                  <Text style={{ color: theme.colors.textMuted, fontSize: 13 }}>...</Text>
+                ) : calendarConnected ? (
+                  <View style={[styles.connectedBadge, { backgroundColor: theme.colors.success + '20' }]}>
+                    <Text style={[styles.connectedText, { color: theme.colors.success }]}>Connected</Text>
+                  </View>
+                ) : (
+                  <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
+                )
+              }
             />
           </Card>
         </View>
@@ -317,6 +416,13 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '600',
   },
+  profileNameInput: {
+    fontSize: 20,
+    fontWeight: '600',
+    borderBottomWidth: 2,
+    paddingBottom: 4,
+    marginBottom: 2,
+  },
   profileEmail: {
     fontSize: 14,
     marginTop: 2,
@@ -326,10 +432,15 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 10,
     alignItems: 'center',
+    flex: 1,
   },
   editProfileText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  editActions: {
+    flexDirection: 'row',
+    gap: 12,
   },
   section: {
     marginBottom: 24,
@@ -368,6 +479,15 @@ const styles = StyleSheet.create({
   divider: {
     height: 1,
     marginLeft: 64,
+  },
+  connectedBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  connectedText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   footerText: {
     fontSize: 12,

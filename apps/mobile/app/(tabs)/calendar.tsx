@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,12 +6,16 @@ import {
   SafeAreaView,
   ScrollView,
   TouchableOpacity,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Calendar, DateData } from 'react-native-calendars';
 import { useTheme } from '../../src/theme';
+import { useAuthStore } from '../../src/stores/authStore';
+import { useShiftStore } from '../../src/stores/shiftStore';
+import { useShiftCodeStore } from '../../src/stores/shiftCodeStore';
 import { Card } from '../../src/components/ui';
-import { formatYearMonth, getDaysInMonth, getFirstDayOfMonth } from '@shiftsnap/shared';
+import { formatYearMonth } from '@shiftsnap/shared';
 
 interface ShiftEvent {
   id: string;
@@ -26,24 +30,58 @@ interface ShiftEvent {
 
 export default function CalendarScreen() {
   const theme = useTheme();
+  const { user } = useAuthStore();
+  const { monthShifts, fetchShiftsForMonth, loading } = useShiftStore();
+  const { shiftCodes, fetchShiftCodes, getCodeInfo } = useShiftCodeStore();
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
   const [currentMonth, setCurrentMonth] = useState<string>(formatYearMonth(new Date()));
+  const [refreshing, setRefreshing] = useState(false);
 
-  // TODO: Replace with actual data from Supabase
-  const shifts: ShiftEvent[] = [];
+  const userId = user?.id;
+
+  const loadMonth = useCallback(async (yearMonth: string) => {
+    if (!userId) return;
+    await fetchShiftsForMonth(userId, yearMonth);
+  }, [userId]);
+
+  useEffect(() => {
+    if (userId) {
+      fetchShiftCodes(userId);
+      loadMonth(currentMonth);
+    }
+  }, [userId, currentMonth]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadMonth(currentMonth);
+    setRefreshing(false);
+  };
+
+  // Convert DB shifts to ShiftEvent format
+  const shifts: ShiftEvent[] = useMemo(() => {
+    return monthShifts.map((shift) => {
+      const codeInfo = getCodeInfo(shift.shift_code);
+      return {
+        id: shift.id,
+        date: shift.date,
+        code: shift.shift_code,
+        startTime: shift.start_time,
+        endTime: shift.end_time,
+        isDayOff: shift.is_day_off,
+        color: shift.is_day_off ? theme.colors.success : theme.colors.primary,
+      };
+    });
+  }, [monthShifts, shiftCodes, theme]);
 
   // Generate marked dates for calendar
   const markedDates = useMemo(() => {
     const marks: Record<string, any> = {};
 
-    // Add shift markers
     shifts.forEach((shift) => {
       if (!marks[shift.date]) {
-        marks[shift.date] = {
-          dots: [],
-        };
+        marks[shift.date] = { dots: [] };
       }
       marks[shift.date].dots.push({
         key: shift.id,
@@ -51,7 +89,6 @@ export default function CalendarScreen() {
       });
     });
 
-    // Add selected date styling
     if (marks[selectedDate]) {
       marks[selectedDate] = {
         ...marks[selectedDate],
@@ -70,7 +107,6 @@ export default function CalendarScreen() {
     return marks;
   }, [shifts, selectedDate, theme]);
 
-  // Get shifts for selected date
   const selectedDateShifts = useMemo(() => {
     return shifts.filter((shift) => shift.date === selectedDate);
   }, [shifts, selectedDate]);
@@ -80,7 +116,8 @@ export default function CalendarScreen() {
   };
 
   const handleMonthChange = (month: DateData) => {
-    setCurrentMonth(`${month.year}-${String(month.month).padStart(2, '0')}`);
+    const ym = `${month.year}-${String(month.month).padStart(2, '0')}`;
+    setCurrentMonth(ym);
   };
 
   return (
@@ -95,7 +132,16 @@ export default function CalendarScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.colors.primary}
+          />
+        }
+      >
         {/* Calendar */}
         <Card style={styles.calendarCard} padding="small">
           <Calendar
@@ -136,38 +182,43 @@ export default function CalendarScreen() {
           </Text>
 
           {selectedDateShifts.length > 0 ? (
-            selectedDateShifts.map((shift) => (
-              <Card key={shift.id} style={styles.shiftCard}>
-                <View style={styles.shiftCardContent}>
-                  <View
-                    style={[styles.colorIndicator, { backgroundColor: shift.color }]}
-                  />
-                  <View style={styles.shiftInfo}>
-                    <Text style={[styles.shiftCode, { color: theme.colors.textPrimary }]}>
-                      {shift.isDayOff ? 'Day Off' : `Shift ${shift.code}`}
-                    </Text>
-                    {shift.personName && (
-                      <Text style={[styles.personName, { color: theme.colors.textSecondary }]}>
-                        {shift.personName}
-                      </Text>
-                    )}
-                    {!shift.isDayOff && shift.startTime && (
-                      <Text style={[styles.shiftTime, { color: theme.colors.textSecondary }]}>
-                        {shift.startTime}
-                        {shift.endTime && ` - ${shift.endTime}`}
-                      </Text>
-                    )}
-                  </View>
-                  <TouchableOpacity style={styles.moreButton}>
-                    <Ionicons
-                      name="ellipsis-horizontal"
-                      size={20}
-                      color={theme.colors.textMuted}
+            selectedDateShifts.map((shift) => {
+              const codeInfo = getCodeInfo(shift.code);
+              return (
+                <Card key={shift.id} style={styles.shiftCard}>
+                  <View style={styles.shiftCardContent}>
+                    <View
+                      style={[styles.colorIndicator, { backgroundColor: shift.color }]}
                     />
-                  </TouchableOpacity>
-                </View>
-              </Card>
-            ))
+                    <View style={styles.shiftInfo}>
+                      <Text style={[styles.shiftCode, { color: theme.colors.textPrimary }]}>
+                        {shift.isDayOff
+                          ? codeInfo?.meaning || 'Day Off'
+                          : codeInfo?.meaning || `Shift ${shift.code}`}
+                      </Text>
+                      {shift.personName && (
+                        <Text style={[styles.personName, { color: theme.colors.textSecondary }]}>
+                          {shift.personName}
+                        </Text>
+                      )}
+                      {!shift.isDayOff && shift.startTime && (
+                        <Text style={[styles.shiftTime, { color: theme.colors.textSecondary }]}>
+                          {shift.startTime}
+                          {shift.endTime && ` - ${shift.endTime}`}
+                        </Text>
+                      )}
+                    </View>
+                    <TouchableOpacity style={styles.moreButton}>
+                      <Ionicons
+                        name="ellipsis-horizontal"
+                        size={20}
+                        color={theme.colors.textMuted}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </Card>
+              );
+            })
           ) : (
             <Card style={styles.emptyCard}>
               <Ionicons
@@ -196,7 +247,6 @@ export default function CalendarScreen() {
                 My Schedule
               </Text>
             </View>
-            {/* TODO: Add more people from personStore */}
           </Card>
         </View>
       </ScrollView>

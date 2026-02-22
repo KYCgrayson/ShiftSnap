@@ -18,9 +18,11 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.shiftsnap.app",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "NSCameraUsageDescription": "ShiftSnap needs camera access to scan your work schedule",
-        "NSPhotoLibraryUsageDescription": "ShiftSnap needs photo library access to select schedule images"
+        "NSPhotoLibraryUsageDescription": "ShiftSnap needs photo library access to select schedule images",
+        "NSCalendarsFullAccessUsageDescription": "ShiftSnap needs access to your calendar to sync shift schedules"
       }
     },
     "android": {
@@ -60,6 +62,14 @@
         {
           "icon": "./assets/notification-icon.png",
           "color": "#4A9DAD"
+        }
+      ],
+      "expo-apple-authentication",
+      "expo-web-browser",
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "ShiftSnap needs calendar access to sync your shift schedule"
         }
       ]
     ],

@@ -6,6 +6,8 @@ import {
   signUpWithEmail,
   signOut as supabaseSignOut,
   getCurrentSession,
+  signInWithGoogle as googleSignIn,
+  signInWithApple as appleSignIn,
 } from '../services/supabase';
 
 interface AuthState {
@@ -21,6 +23,8 @@ interface AuthState {
   signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   signUp: (email: string, password: string, displayName?: string) => Promise<{ success: boolean; error?: string }>;
   signInAsGuest: () => void;
+  signInWithGoogle: () => Promise<{ success: boolean; error?: string }>;
+  signInWithApple: () => Promise<{ success: boolean; error?: string }>;
   signOut: () => Promise<void>;
   clearError: () => void;
 }
@@ -145,6 +149,58 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       loading: false,
       error: null,
     });
+  },
+
+  signInWithGoogle: async () => {
+    set({ loading: true, error: null });
+    try {
+      const { data, error } = await googleSignIn();
+      if (error) {
+        set({ loading: false, error: error.message });
+        return { success: false, error: error.message };
+      }
+      if (!data) {
+        set({ loading: false });
+        return { success: false }; // User cancelled
+      }
+      set({
+        user: data.user,
+        session: data.session,
+        loading: false,
+        error: null,
+      });
+      return { success: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Google sign in failed';
+      set({ loading: false, error: message });
+      return { success: false, error: message };
+    }
+  },
+
+  signInWithApple: async () => {
+    set({ loading: true, error: null });
+    try {
+      const { data, error } = await appleSignIn();
+      if (error) {
+        set({ loading: false, error: error.message });
+        return { success: false, error: error.message };
+      }
+      if (!data) {
+        set({ loading: false });
+        return { success: false }; // User cancelled
+      }
+      set({
+        user: data.user,
+        session: data.session,
+        loading: false,
+        error: null,
+      });
+      return { success: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Apple sign in failed';
+      set({ loading: false, error: message });
+      return { success: false, error: message };
+    }
   },
 
   signOut: async () => {

@@ -16,6 +16,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
 import { Button } from '../../src/components/ui';
 import { supabase } from '../../src/services/supabase';
+import { useAuthStore } from '../../src/stores/authStore';
+import { useScheduleStore } from '../../src/stores/scheduleStore';
+import { useShiftStore } from '../../src/stores/shiftStore';
+import { useShiftCodeStore } from '../../src/stores/shiftCodeStore';
+import { useCalendarStore } from '../../src/stores/calendarStore';
+import { formatYearMonth } from '@shiftsnap/shared';
 
 export default function ScanScreen() {
   const theme = useTheme();
@@ -23,6 +29,11 @@ export default function ScanScreen() {
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const cameraRef = useRef<CameraView>(null);
+  const { user } = useAuthStore();
+  const { createScheduleFromOCR } = useScheduleStore();
+  const { createShiftsFromOCR } = useShiftStore();
+  const { shiftCodes, fetchShiftCodes } = useShiftCodeStore();
+  const { isConnected } = useCalendarStore();
 
   // Request camera permission
   if (!permission) {
@@ -32,6 +43,18 @@ export default function ScanScreen() {
       </SafeAreaView>
     );
   }
+
+  const pickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setCapturedImage(result.assets[0].uri);
+    }
+  };
 
   // Permission denied view
   if (!permission.granted) {
@@ -77,24 +100,12 @@ export default function ScanScreen() {
     }
   };
 
-  const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.8,
-    });
-
-    if (!result.canceled && result.assets[0]) {
-      setCapturedImage(result.assets[0].uri);
-    }
-  };
-
   const retakePhoto = () => {
     setCapturedImage(null);
   };
 
   const processSchedule = async () => {
-    if (!capturedImage) return;
+    if (!capturedImage || !user) return;
 
     setProcessing(true);
     try {
@@ -123,15 +134,11 @@ export default function ScanScreen() {
       }
 
       // 3. Call OCR Edge Function
-      console.log('Calling OCR with URL:', urlData.signedUrl);
       const { data: ocrData, error: ocrError } = await supabase.functions.invoke('ocr-process', {
         body: {
           imageUrl: urlData.signedUrl,
         },
       });
-
-      console.log('OCR Response:', JSON.stringify(ocrData, null, 2));
-      console.log('OCR Error:', ocrError);
 
       if (ocrError) {
         const errorDetail = ocrData?.raw_response || ocrError.message;
@@ -142,11 +149,76 @@ export default function ScanScreen() {
         throw new Error('OCR failed: ' + (ocrData?.raw_response || 'Unknown error'));
       }
 
-      // 4. Navigate to results screen
-      router.push({
-        pathname: '/(tabs)/shifts',
-        params: { ocrResult: JSON.stringify(ocrData) },
-      });
+      // 4. Determine year-month from OCR or use current
+      const yearMonth = ocrData.detected_year && ocrData.detected_month
+        ? `${ocrData.detected_year}-${String(ocrData.detected_month).padStart(2, '0')}`
+        : formatYearMonth(new Date());
+
+      // 5. Create schedule record in DB
+      const scheduleId = await createScheduleFromOCR(
+        user.id,
+        urlData.signedUrl,
+        yearMonth,
+        ocrData
+      );
+
+      // 6. Load user's shift codes
+      await fetchShiftCodes(user.id);
+
+      // 7. Check for unknown codes
+      const unknownCodes = ocrData.unknown_codes || [];
+      const currentShiftCodes = useShiftCodeStore.getState().shiftCodes;
+      const trulyUnknown = unknownCodes.filter(
+        (code: string) => !currentShiftCodes.find((sc) => sc.code === code)
+      );
+
+      if (trulyUnknown.length === 0) {
+        // No unknown codes - create shifts directly
+        try {
+          await createShiftsFromOCR(
+            scheduleId,
+            user.id,
+            ocrData,
+            currentShiftCodes.map((sc) => ({
+              code: sc.code,
+              start_time: sc.start_time,
+              end_time: sc.end_time,
+              is_day_off: sc.is_day_off,
+            })),
+            yearMonth
+          );
+
+          // Update schedule to published
+          await useScheduleStore.getState().updateScheduleStatus(scheduleId, 'published');
+
+          Alert.alert(
+            'Schedule Processed',
+            'Your shifts have been saved successfully!',
+            [{ text: 'OK', onPress: () => router.push('/(tabs)/home') }]
+          );
+        } catch (error) {
+          console.error('Error creating shifts:', error);
+          // Still navigate to shifts screen for manual handling
+          router.push({
+            pathname: '/(tabs)/shifts',
+            params: {
+              ocrResult: JSON.stringify(ocrData),
+              scheduleId,
+              yearMonth,
+            },
+          });
+        }
+      } else {
+        // Has unknown codes - navigate to shifts screen for definition
+        router.push({
+          pathname: '/(tabs)/shifts',
+          params: {
+            ocrResult: JSON.stringify(ocrData),
+            scheduleId,
+            yearMonth,
+          },
+        });
+      }
     } catch (error) {
       console.error('Error processing schedule:', error);
       Alert.alert(

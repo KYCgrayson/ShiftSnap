@@ -16,7 +16,7 @@ type ButtonSize = 'small' | 'medium' | 'large';
 
 interface ButtonProps {
   title: string;
-  onPress: () => void;
+  onPress?: () => void;
   variant?: ButtonVariant;
   size?: ButtonSize;
   disabled?: boolean;

@@ -7,9 +7,14 @@ import { useColorScheme } from 'react-native';
 import { Colors, DarkColors, Gradients, PersonColors } from '@shiftsnap/shared';
 import { FontSize, FontWeight, TextStyles } from '@shiftsnap/shared';
 import { Spacing, BorderRadius, Shadows, InputSize, ButtonSize, CardSize, IconSize } from '@shiftsnap/shared';
+import { useThemeStore } from '../stores/themeStore';
+
+export type AppColors = {
+  [K in keyof typeof Colors | keyof typeof DarkColors]: string;
+};
 
 export interface Theme {
-  colors: typeof Colors | typeof DarkColors;
+  colors: AppColors;
   gradients: typeof Gradients;
   personColors: typeof PersonColors;
   fonts: {
@@ -47,7 +52,7 @@ export const lightTheme: Theme = {
 };
 
 export const darkTheme: Theme = {
-  colors: DarkColors,
+  colors: DarkColors as any,
   gradients: Gradients,
   personColors: PersonColors,
   fonts: {
@@ -65,10 +70,19 @@ export const darkTheme: Theme = {
   isDark: true,
 };
 
-// Hook to get current theme based on system preference
+// Hook to get current theme based on user preference or system
 export function useTheme(): Theme {
-  const colorScheme = useColorScheme();
-  return colorScheme === 'dark' ? darkTheme : lightTheme;
+  const systemColorScheme = useColorScheme();
+  const themeMode = useThemeStore((state) => state.mode);
+
+  let isDark: boolean;
+  if (themeMode === 'system') {
+    isDark = systemColorScheme === 'dark';
+  } else {
+    isDark = themeMode === 'dark';
+  }
+
+  return isDark ? darkTheme : lightTheme;
 }
 
 // Re-export for convenience

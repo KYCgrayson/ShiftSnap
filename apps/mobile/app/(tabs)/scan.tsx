@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
-import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
@@ -18,9 +18,6 @@ import { Button } from '../../src/components/ui';
 import { supabase } from '../../src/services/supabase';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useScheduleStore } from '../../src/stores/scheduleStore';
-import { useShiftStore } from '../../src/stores/shiftStore';
-import { useShiftCodeStore } from '../../src/stores/shiftCodeStore';
-import { useCalendarStore } from '../../src/stores/calendarStore';
 import { formatYearMonth } from '@shiftsnap/shared';
 
 export default function ScanScreen() {
@@ -31,9 +28,6 @@ export default function ScanScreen() {
   const cameraRef = useRef<CameraView>(null);
   const { user } = useAuthStore();
   const { createScheduleFromOCR } = useScheduleStore();
-  const { createShiftsFromOCR } = useShiftStore();
-  const { shiftCodes, fetchShiftCodes } = useShiftCodeStore();
-  const { isConnected } = useCalendarStore();
 
   // Request camera permission
   if (!permission) {
@@ -162,63 +156,15 @@ export default function ScanScreen() {
         ocrData
       );
 
-      // 6. Load user's shift codes
-      await fetchShiftCodes(user.id);
-
-      // 7. Check for unknown codes
-      const unknownCodes = ocrData.unknown_codes || [];
-      const currentShiftCodes = useShiftCodeStore.getState().shiftCodes;
-      const trulyUnknown = unknownCodes.filter(
-        (code: string) => !currentShiftCodes.find((sc) => sc.code === code)
-      );
-
-      if (trulyUnknown.length === 0) {
-        // No unknown codes - create shifts directly
-        try {
-          await createShiftsFromOCR(
-            scheduleId,
-            user.id,
-            ocrData,
-            currentShiftCodes.map((sc) => ({
-              code: sc.code,
-              start_time: sc.start_time,
-              end_time: sc.end_time,
-              is_day_off: sc.is_day_off,
-            })),
-            yearMonth
-          );
-
-          // Update schedule to published
-          await useScheduleStore.getState().updateScheduleStatus(scheduleId, 'published');
-
-          Alert.alert(
-            'Schedule Processed',
-            'Your shifts have been saved successfully!',
-            [{ text: 'OK', onPress: () => router.push('/(tabs)/home') }]
-          );
-        } catch (error) {
-          console.error('Error creating shifts:', error);
-          // Still navigate to shifts screen for manual handling
-          router.push({
-            pathname: '/(tabs)/shifts',
-            params: {
-              ocrResult: JSON.stringify(ocrData),
-              scheduleId,
-              yearMonth,
-            },
-          });
-        }
-      } else {
-        // Has unknown codes - navigate to shifts screen for definition
-        router.push({
-          pathname: '/(tabs)/shifts',
-          params: {
-            ocrResult: JSON.stringify(ocrData),
-            scheduleId,
-            yearMonth,
-          },
-        });
-      }
+      // 6. Navigate to review screen — user reviews and corrects before saving
+      router.push({
+        pathname: '/review-schedule',
+        params: {
+          ocrResult: JSON.stringify(ocrData),
+          scheduleId,
+          yearMonth,
+        },
+      });
     } catch (error) {
       console.error('Error processing schedule:', error);
       Alert.alert(

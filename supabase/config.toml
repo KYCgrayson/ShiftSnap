@@ -55,4 +55,4 @@ client_id = "placeholder"
 secret = "env(GOOGLE_SECRET)"
 
 [functions.ocr-process]
-verify_jwt = true
+verify_jwt = false

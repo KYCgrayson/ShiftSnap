@@ -28,7 +28,13 @@ ShiftSnap is a React Native + Expo mobile app that uses AI (Google Gemini 2.0 Fl
 ## Commands
 
 ```bash
-# Development
+# Development (preferred — run from apps/mobile/)
+cd apps/mobile
+npx expo start            # Start Expo dev server
+npx expo start --ios      # Start and open iOS simulator
+npx expo start --android  # Start and open Android emulator
+
+# Development (pnpm workspace aliases — run from repo root)
 pnpm mobile:start       # Start Expo dev server
 pnpm mobile:ios         # Run on iOS simulator
 pnpm mobile:android     # Run on Android emulator

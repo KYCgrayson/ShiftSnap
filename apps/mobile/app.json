@@ -60,7 +60,6 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/notification-icon.png",
           "color": "#4A9DAD"
         }
       ],
@@ -71,7 +70,9 @@
         {
           "calendarPermission": "ShiftSnap needs calendar access to sync your shift schedule"
         }
-      ]
+      ],
+      "expo-font",
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true

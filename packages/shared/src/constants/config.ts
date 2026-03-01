@@ -12,15 +12,13 @@ export const DEFAULT_LOCALE = 'en';
 export const DEFAULT_TIMEZONE = 'Asia/Taipei';
 export const DEFAULT_ALARM_MINUTES = 60;
 
-// Supported locales
-export const SUPPORTED_LOCALES = ['en', 'zh-TW', 'zh-CN', 'ja'] as const;
+// Supported locales (only include locales with complete translations)
+export const SUPPORTED_LOCALES = ['en', 'zh-TW'] as const;
 
 // Locale display names
 export const LOCALE_NAMES: Record<string, string> = {
   'en': 'English',
   'zh-TW': '繁體中文',
-  'zh-CN': '简体中文',
-  'ja': '日本語',
 };
 
 // Alarm options (minutes before shift)
@@ -52,16 +50,24 @@ export const CALENDAR_SYNC_BATCH_SIZE = 50;
 
 // Common shift codes (pre-defined suggestions)
 export const COMMON_SHIFT_CODES = [
-  { code: 'A', meaning: 'Morning shift', start_time: '06:00', is_day_off: false },
-  { code: 'B', meaning: 'Afternoon shift', start_time: '14:00', is_day_off: false },
-  { code: 'C', meaning: 'Night shift', start_time: '22:00', is_day_off: false },
-  { code: 'D', meaning: 'Day shift', start_time: '09:00', is_day_off: false },
-  { code: '/', meaning: 'Day off', start_time: null, is_day_off: true },
-  { code: 'X', meaning: 'Day off', start_time: null, is_day_off: true },
-  { code: 'OFF', meaning: 'Day off', start_time: null, is_day_off: true },
-  { code: 'O', meaning: 'Day off', start_time: null, is_day_off: true },
-  { code: 'V', meaning: 'Vacation', start_time: null, is_day_off: true },
-  { code: 'H', meaning: 'Holiday', start_time: null, is_day_off: true },
+  { code: 'A', meaning: 'Morning shift', start_time: '06:00', end_time: '14:00', is_day_off: false },
+  { code: 'B', meaning: 'Afternoon shift', start_time: '14:00', end_time: '22:00', is_day_off: false },
+  { code: 'C', meaning: 'Night shift', start_time: '22:00', end_time: '06:00', is_day_off: false },
+  { code: 'D', meaning: 'Day shift', start_time: '09:00', end_time: '17:00', is_day_off: false },
+  { code: '/', meaning: 'Day off', start_time: null, end_time: null, is_day_off: true },
+  { code: 'X', meaning: 'Day off', start_time: null, end_time: null, is_day_off: true },
+  { code: 'OFF', meaning: 'Day off', start_time: null, end_time: null, is_day_off: true },
+  { code: 'O', meaning: 'Day off', start_time: null, end_time: null, is_day_off: true },
+  { code: 'V', meaning: 'Vacation', start_time: null, end_time: null, is_day_off: true },
+  { code: 'H', meaning: 'Holiday', start_time: null, end_time: null, is_day_off: true },
+  { code: '小年', meaning: 'Little New Year', start_time: null, end_time: null, is_day_off: true },
+  { code: '除夕', meaning: "New Year's Eve", start_time: null, end_time: null, is_day_off: true },
+  { code: '初一', meaning: 'CNY Day 1', start_time: null, end_time: null, is_day_off: true },
+  { code: '初二', meaning: 'CNY Day 2', start_time: null, end_time: null, is_day_off: true },
+  { code: '初三', meaning: 'CNY Day 3', start_time: null, end_time: null, is_day_off: true },
+  { code: '初四', meaning: 'CNY Day 4', start_time: null, end_time: null, is_day_off: true },
+  { code: '初五', meaning: 'CNY Day 5', start_time: null, end_time: null, is_day_off: true },
+  { code: '初六', meaning: 'CNY Day 6', start_time: null, end_time: null, is_day_off: true },
 ] as const;
 
 // Supabase storage buckets

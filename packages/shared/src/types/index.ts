@@ -10,12 +10,13 @@ export interface User {
   created_at: string;
 }
 
-export type Locale = 'en' | 'zh-TW' | 'zh-CN' | 'ja';
+export type Locale = 'en' | 'zh-TW';
 
 // Person types (for multi-person schedule tracking)
 export interface Person {
   id: string;
   owner_id: string;
+  group_id: string | null;
   name: string;
   color: string;
   avatar_url: string | null;
@@ -99,11 +100,12 @@ export interface Shift {
   source: ShiftSource;
   comparison_status: ComparisonStatus;
   paired_shift_id: string | null;
+  name_on_schedule: string | null;
   calendar_event_id: string | null;
   synced_at: string | null;
 }
 
-export type ShiftSource = 'self_scan' | 'manager_distributed';
+export type ShiftSource = 'self_scan' | 'reference_scan' | 'manager_distributed';
 export type ComparisonStatus = 'pending' | 'matched' | 'discrepancy' | 'resolved';
 
 // Shift code types
@@ -134,7 +136,7 @@ export interface ShiftCodeDefinition {
 export interface OCRResult {
   success: boolean;
   confidence: number;
-  detected_month: string | null;
+  detected_month: number | null;
   detected_year: number | null;
   rows: OCRRow[];
   unknown_codes: string[];

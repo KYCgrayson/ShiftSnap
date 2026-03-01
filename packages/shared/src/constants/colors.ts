@@ -123,5 +123,28 @@ export function getNextPersonColor(usedColors: string[]): typeof PersonColors[nu
   return PersonColors[0];
 }
 
+// Flat array of person color hex values for easy use
+export const PERSON_COLOR_HEX = PersonColors.map(c => c.hex);
+
+// Shift Type Colors — visually distinguish shift categories on calendar
+export const ShiftTypeColors = {
+  dayOff: '#5EBD8A',    // Green — rest day
+  morning: '#4A9DAD',   // Teal — early shifts (before 12:00)
+  afternoon: '#F5A962', // Gold/Orange — mid-day shifts (12:00–18:00)
+  night: '#B39DDB',     // Lavender — evening/night shifts (after 18:00)
+  unknown: '#A0A0A0',   // Gray — no time info
+} as const;
+
+/** Derive a shift-type color from shift code properties. */
+export function getShiftTypeColor(isDayOff: boolean, startTime: string | null): string {
+  if (isDayOff) return ShiftTypeColors.dayOff;
+  if (!startTime) return ShiftTypeColors.unknown;
+  const hour = parseInt(startTime.split(':')[0], 10);
+  if (isNaN(hour)) return ShiftTypeColors.unknown;
+  if (hour < 12) return ShiftTypeColors.morning;
+  if (hour < 18) return ShiftTypeColors.afternoon;
+  return ShiftTypeColors.night;
+}
+
 export type ColorScheme = typeof Colors;
 export type DarkColorScheme = typeof DarkColors;

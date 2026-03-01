@@ -46,8 +46,8 @@ export function Input({
   };
 
   const getBackgroundColor = () => {
-    if (error) return '#FFF5F5';
-    return theme.colors.white;
+    if (error) return theme.isDark ? '#3D2020' : '#FFF5F5';
+    return theme.colors.cardBackground;
   };
 
   return (

@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Link, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { Button, Input } from '../../src/components/ui';
 import { useTheme } from '../../src/theme';
 import { useAuthStore } from '../../src/stores/authStore';
@@ -19,6 +20,7 @@ import { isValidEmail } from '@shiftsnap/shared';
 
 export default function RegisterScreen() {
   const theme = useTheme();
+  const { t } = useTranslation();
   const { signUp, loading, error, clearError } = useAuthStore();
 
   const [name, setName] = useState('');
@@ -38,47 +40,47 @@ export default function RegisterScreen() {
     clearError();
 
     if (!name.trim()) {
-      setNameError('Name is required');
+      setNameError(t('auth.nameRequired'));
       valid = false;
     } else if (name.trim().length < 2) {
-      setNameError('Name must be at least 2 characters');
+      setNameError(t('auth.nameTooShort'));
       valid = false;
     } else {
       setNameError('');
     }
 
     if (!email.trim()) {
-      setEmailError('Email is required');
+      setEmailError(t('auth.emailRequired'));
       valid = false;
     } else if (!isValidEmail(email)) {
-      setEmailError('Please enter a valid email');
+      setEmailError(t('auth.invalidEmail'));
       valid = false;
     } else {
       setEmailError('');
     }
 
     if (!password) {
-      setPasswordError('Password is required');
+      setPasswordError(t('auth.passwordRequired'));
       valid = false;
     } else if (password.length < 8) {
-      setPasswordError('Password must be at least 8 characters');
+      setPasswordError(t('auth.passwordMin8'));
       valid = false;
     } else {
       setPasswordError('');
     }
 
     if (!confirmPassword) {
-      setConfirmPasswordError('Please confirm your password');
+      setConfirmPasswordError(t('auth.confirmPasswordRequired'));
       valid = false;
     } else if (password !== confirmPassword) {
-      setConfirmPasswordError('Passwords do not match');
+      setConfirmPasswordError(t('auth.passwordMismatch'));
       valid = false;
     } else {
       setConfirmPasswordError('');
     }
 
     if (!termsAccepted) {
-      setTermsError('You must accept the Terms of Service');
+      setTermsError(t('auth.mustAcceptTerms'));
       valid = false;
     } else {
       setTermsError('');
@@ -93,11 +95,11 @@ export default function RegisterScreen() {
     const result = await signUp(email, password, name.trim());
     if (result.success) {
       Alert.alert(
-        'Check your email',
-        'We sent you a verification link. Please verify your email to continue.',
+        t('auth.checkEmail'),
+        t('auth.verificationSent'),
         [
           {
-            text: 'OK',
+            text: t('common.ok'),
             onPress: () => router.replace('/(auth)/login'),
           },
         ]
@@ -128,18 +130,18 @@ export default function RegisterScreen() {
               />
             </TouchableOpacity>
             <Text style={[styles.title, { color: theme.colors.textPrimary }]}>
-              Create account
+              {t('auth.createAccount')}
             </Text>
             <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
-              Start managing your shifts today
+              {t('auth.registerSubtitle')}
             </Text>
           </View>
 
           {/* Form */}
           <View style={styles.form}>
             <Input
-              label="Name"
-              placeholder="Enter your name"
+              label={t('auth.name')}
+              placeholder={t('auth.namePlaceholder')}
               value={name}
               onChangeText={setName}
               autoCapitalize="words"
@@ -148,8 +150,8 @@ export default function RegisterScreen() {
             />
 
             <Input
-              label="Email"
-              placeholder="Enter your email"
+              label={t('auth.email')}
+              placeholder={t('auth.emailPlaceholder')}
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
@@ -160,19 +162,19 @@ export default function RegisterScreen() {
             />
 
             <Input
-              label="Password"
-              placeholder="Create a password"
+              label={t('auth.password')}
+              placeholder={t('auth.createPassword')}
               value={password}
               onChangeText={setPassword}
               secureTextEntry
               error={passwordError}
               leftIcon="lock-closed-outline"
-              hint="At least 8 characters"
+              hint={t('auth.passwordHint')}
             />
 
             <Input
-              label="Confirm Password"
-              placeholder="Confirm your password"
+              label={t('auth.confirmPassword')}
+              placeholder={t('auth.confirmPasswordPlaceholder')}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secureTextEntry
@@ -199,13 +201,13 @@ export default function RegisterScreen() {
                 )}
               </View>
               <Text style={[styles.termsText, { color: theme.colors.textSecondary }]}>
-                I agree to the{' '}
+                {t('auth.agreeTerms')}{' '}
                 <Link href="/(auth)/terms">
-                  <Text style={{ color: theme.colors.primary }}>Terms of Service</Text>
+                  <Text style={{ color: theme.colors.primary }}>{t('auth.termsOfService')}</Text>
                 </Link>
-                {' '}and{' '}
+                {' '}{t('auth.andWord')}{' '}
                 <Link href="/(auth)/terms">
-                  <Text style={{ color: theme.colors.primary }}>Privacy Policy</Text>
+                  <Text style={{ color: theme.colors.primary }}>{t('auth.privacyPolicy')}</Text>
                 </Link>
               </Text>
             </TouchableOpacity>
@@ -224,7 +226,7 @@ export default function RegisterScreen() {
             )}
 
             <Button
-              title="Create Account"
+              title={t('common.createAccount')}
               onPress={handleSignUp}
               loading={loading}
               fullWidth
@@ -235,11 +237,11 @@ export default function RegisterScreen() {
           {/* Login link */}
           <View style={styles.loginRow}>
             <Text style={[styles.loginText, { color: theme.colors.textSecondary }]}>
-              Already have an account?
+              {t('auth.hasAccount')}
             </Text>
             <Link href="/(auth)/login">
               <Text style={[styles.loginLink, { color: theme.colors.primary }]}>
-                {' '}Sign In
+                {' '}{t('common.signIn')}
               </Text>
             </Link>
           </View>

@@ -1,12 +1,20 @@
 import React from 'react';
-import { View, Text, StyleSheet, Image, SafeAreaView } from 'react-native';
-import { Link } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity } from 'react-native';
+import { Link, router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../../src/components/ui';
 import { useTheme } from '../../src/theme';
+import { useAuthStore } from '../../src/stores/authStore';
 
 export default function WelcomeScreen() {
   const theme = useTheme();
+  const { t } = useTranslation();
+  const { signInAsGuest } = useAuthStore();
+
+  const handleGuestMode = () => {
+    signInAsGuest();
+    router.replace('/(tabs)/home');
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.warmWhite }]}>
@@ -22,10 +30,10 @@ export default function WelcomeScreen() {
             <Text style={[styles.logoText, { color: theme.colors.primary }]}>S</Text>
           </View>
           <Text style={[styles.title, { color: theme.colors.textPrimary }]}>
-            ShiftSnap
+            {t('common.appName')}
           </Text>
           <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
-            Snap your schedule, sync your life
+            {t('welcome.subtitle')}
           </Text>
         </View>
 
@@ -33,20 +41,20 @@ export default function WelcomeScreen() {
         <View style={styles.features}>
           <FeatureItem
             icon="camera"
-            title="Scan Schedules"
-            description="Take a photo of your shift schedule"
+            title={t('welcome.scanTitle')}
+            description={t('welcome.scanDesc')}
             theme={theme}
           />
           <FeatureItem
             icon="calendar"
-            title="Auto Sync"
-            description="Sync to your favorite calendar app"
+            title={t('welcome.syncTitle')}
+            description={t('welcome.syncDesc')}
             theme={theme}
           />
           <FeatureItem
             icon="alarm"
-            title="Smart Alarms"
-            description="Never miss a shift again"
+            title={t('welcome.alarmTitle')}
+            description={t('welcome.alarmDesc')}
             theme={theme}
           />
         </View>
@@ -55,28 +63,34 @@ export default function WelcomeScreen() {
       {/* Bottom CTA */}
       <View style={styles.bottomSection}>
         <Link href="/(auth)/register" asChild>
-          <Button title="Get Started" fullWidth />
+          <Button title={t('welcome.getStarted')} fullWidth />
         </Link>
 
         <View style={styles.loginRow}>
           <Text style={[styles.loginText, { color: theme.colors.textSecondary }]}>
-            Already have an account?
+            {t('welcome.alreadyHaveAccount')}
           </Text>
           <Link href="/(auth)/login">
             <Text style={[styles.loginLink, { color: theme.colors.primary }]}>
-              {' '}Sign In
+              {' '}{t('common.signIn')}
             </Text>
           </Link>
         </View>
 
+        <TouchableOpacity onPress={handleGuestMode} style={styles.guestRow}>
+          <Text style={[styles.guestLink, { color: theme.colors.textSecondary }]}>
+            {t('welcome.tryWithoutAccount')}
+          </Text>
+        </TouchableOpacity>
+
         <Text style={[styles.termsText, { color: theme.colors.textMuted }]}>
-          By continuing, you agree to our{' '}
+          {t('welcome.termsAgreement')}
           <Link href="/(auth)/terms">
-            <Text style={{ color: theme.colors.primary }}>Terms of Service</Text>
+            <Text style={{ color: theme.colors.primary }}>{t('welcome.termsOfService')}</Text>
           </Link>
-          {' '}and{' '}
+          {t('welcome.and')}
           <Link href="/(auth)/terms">
-            <Text style={{ color: theme.colors.primary }}>Privacy Policy</Text>
+            <Text style={{ color: theme.colors.primary }}>{t('welcome.privacyPolicy')}</Text>
           </Link>
         </Text>
       </View>
@@ -195,6 +209,14 @@ const styles = StyleSheet.create({
   loginLink: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  guestRow: {
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  guestLink: {
+    fontSize: 14,
+    textDecorationLine: 'underline',
   },
   termsText: {
     fontSize: 12,

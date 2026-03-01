@@ -1,16 +1,14 @@
 import { Stack } from 'expo-router';
-import { useColorScheme } from 'react-native';
-import { Colors, DarkColors } from '../../src/theme';
+import { useTheme } from '../../src/theme';
 
 export default function AuthLayout() {
-  const colorScheme = useColorScheme();
-  const colors = colorScheme === 'dark' ? DarkColors : Colors;
+  const theme = useTheme();
 
   return (
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: colors.warmWhite },
+        contentStyle: { backgroundColor: theme.colors.warmWhite },
         animation: 'slide_from_right',
       }}
     >

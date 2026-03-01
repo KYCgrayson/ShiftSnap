@@ -6,20 +6,31 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useAuthStore } from '../src/stores/authStore';
 import { useThemeStore } from '../src/stores/themeStore';
 import { useCalendarStore } from '../src/stores/calendarStore';
+import { useLocaleStore } from '../src/stores/localeStore';
+import { useGroupStore } from '../src/stores/groupStore';
 import { useTheme, Colors, DarkColors } from '../src/theme';
+import i18n from '../src/i18n';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
 
 function RootLayoutInner() {
   const theme = useTheme();
-  const { initialized, initialize } = useAuthStore();
+  const { initialized, initialize, user } = useAuthStore();
+  const fetchOrCreateDefaultGroup = useGroupStore((s) => s.fetchOrCreateDefaultGroup);
 
   useEffect(() => {
     initialize().finally(() => {
       SplashScreen.hideAsync();
     });
   }, []);
+
+  // Initialize group after auth is ready
+  useEffect(() => {
+    if (initialized && user?.id) {
+      fetchOrCreateDefaultGroup(user.id);
+    }
+  }, [initialized, user?.id]);
 
   if (!initialized) {
     return (
@@ -54,11 +65,21 @@ function RootLayoutInner() {
 export default function RootLayout() {
   const initializeTheme = useThemeStore((s) => s.initialize);
   const initializeCalendar = useCalendarStore((s) => s.initialize);
+  const initializeLocale = useLocaleStore((s) => s.initialize);
+  const locale = useLocaleStore((s) => s.locale);
 
   useEffect(() => {
     initializeTheme();
     initializeCalendar();
+    initializeLocale();
   }, []);
+
+  // Sync persisted locale with i18n
+  useEffect(() => {
+    if (locale && locale !== i18n.language) {
+      i18n.changeLanguage(locale);
+    }
+  }, [locale]);
 
   return <RootLayoutInner />;
 }

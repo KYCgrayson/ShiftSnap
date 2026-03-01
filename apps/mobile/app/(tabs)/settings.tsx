@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,55 +9,124 @@ import {
   Alert,
   Switch,
   TextInput,
+  ActionSheetIOS,
+  Platform,
+  Modal,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../src/theme';
 import { Card } from '../../src/components/ui';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useThemeStore } from '../../src/stores/themeStore';
 import { useCalendarStore } from '../../src/stores/calendarStore';
+import { useLocaleStore } from '../../src/stores/localeStore';
+import { usePersonStore } from '../../src/stores/personStore';
 import { supabase } from '../../src/services/supabase';
-import { APP_VERSION, EXTERNAL_LINKS } from '@shiftsnap/shared';
+import { APP_VERSION, SUPPORTED_LOCALES, LOCALE_NAMES, PERSON_COLOR_HEX } from '@shiftsnap/shared';
+const MY_COLOR_KEY = 'shiftsnap_my_schedule_color';
 
 export default function SettingsScreen() {
   const theme = useTheme();
-  const { user, signOut } = useAuthStore();
+  const { t, i18n } = useTranslation();
+  const { user, signOut, isGuest } = useAuthStore();
   const themeMode = useThemeStore((s) => s.mode);
   const setThemeMode = useThemeStore((s) => s.setMode);
+  const { locale, setLocale } = useLocaleStore();
   const { isConnected: calendarConnected, connectCalendar, disconnectCalendar, loading: calendarLoading } = useCalendarStore();
+
+  const { persons, fetchPersons, createPerson, updatePerson, deletePerson } = usePersonStore();
 
   const [editingProfile, setEditingProfile] = useState(false);
   const [editName, setEditName] = useState('');
+  const [myScheduleColor, setMyScheduleColor] = useState<string>(theme.colors.primary);
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [colorEditTarget, setColorEditTarget] = useState<{ type: 'self' } | { type: 'person'; personId: string } | null>(null);
+  const [showAddCoworker, setShowAddCoworker] = useState(false);
+  const [newCoworkerName, setNewCoworkerName] = useState('');
+
+  useEffect(() => {
+    AsyncStorage.getItem(MY_COLOR_KEY).then((color) => {
+      if (color) setMyScheduleColor(color);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (user?.id) fetchPersons(user.id);
+  }, [user?.id]);
+
+  const saveColor = async (color: string) => {
+    if (!colorEditTarget) return;
+    if (colorEditTarget.type === 'self') {
+      setMyScheduleColor(color);
+      await AsyncStorage.setItem(MY_COLOR_KEY, color);
+    } else {
+      await updatePerson(colorEditTarget.personId, { color });
+    }
+    setShowColorPicker(false);
+    setColorEditTarget(null);
+  };
+
+  const handleAddCoworker = async () => {
+    const name = newCoworkerName.trim();
+    if (!name) return;
+    if (!user?.id) return;
+    try {
+      await createPerson(user.id, name);
+      setNewCoworkerName('');
+      setShowAddCoworker(false);
+    } catch {
+      Alert.alert(t('common.error'), t('shifts.failedToSave'));
+    }
+  };
+
+  const handleDeleteCoworker = (personId: string, personName: string) => {
+    Alert.alert(t('settings.deleteCoworker'), t('settings.deleteCoworkerConfirm'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('common.delete'),
+        style: 'destructive',
+        onPress: () => deletePerson(personId),
+      },
+    ]);
+  };
 
   const displayName = user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'User';
   const email = user?.email || '';
 
   const handleSignOut = () => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign Out',
-        style: 'destructive',
-        onPress: async () => {
-          await signOut();
-          router.replace('/(auth)/welcome');
+    Alert.alert(
+      isGuest ? t('settings.exitGuestMode') : t('settings.signOut'),
+      isGuest
+        ? t('settings.exitGuestDesc')
+        : t('settings.signOutConfirm'),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: isGuest ? t('settings.exit') : t('settings.signOut'),
+          style: 'destructive',
+          onPress: async () => {
+            await signOut();
+            router.replace('/(auth)/welcome');
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   const handleDeleteAccount = () => {
     Alert.alert(
-      'Delete Account',
-      'This will permanently delete your account and all associated data. This action cannot be undone.',
+      t('settings.deleteAccount'),
+      t('settings.deleteAccountDesc'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: () => {
-            Alert.alert('Contact Support', 'Please contact support@shiftsnap.app to delete your account.');
+            Alert.alert(t('settings.contactSupport'), t('settings.contactSupportDesc'));
           },
         },
       ]
@@ -71,7 +140,7 @@ export default function SettingsScreen() {
 
   const handleSaveProfile = async () => {
     if (!editName.trim()) {
-      Alert.alert('Error', 'Name cannot be empty');
+      Alert.alert(t('common.error'), t('settings.nameEmpty'));
       return;
     }
 
@@ -81,7 +150,7 @@ export default function SettingsScreen() {
       });
       setEditingProfile(false);
     } catch (error) {
-      Alert.alert('Error', 'Failed to update profile');
+      Alert.alert(t('common.error'), t('settings.profileUpdateFailed'));
     }
   };
 
@@ -93,12 +162,48 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleLanguageChange = () => {
+    // Only show locales that have translations
+    const availableLocales = SUPPORTED_LOCALES.filter(
+      (loc) => loc === 'en' || loc === 'zh-TW'
+    );
+    const options = availableLocales.map((loc) => LOCALE_NAMES[loc] || loc);
+
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          title: t('settings.selectLanguage'),
+          options: [...options, t('common.cancel')],
+          cancelButtonIndex: options.length,
+        },
+        (buttonIndex) => {
+          if (buttonIndex < availableLocales.length) {
+            const selected = availableLocales[buttonIndex];
+            setLocale(selected);
+            i18n.changeLanguage(selected);
+          }
+        }
+      );
+    } else {
+      // Android fallback: use Alert with buttons
+      const buttons = availableLocales.map((loc) => ({
+        text: LOCALE_NAMES[loc] || loc,
+        onPress: () => {
+          setLocale(loc);
+          i18n.changeLanguage(loc);
+        },
+      }));
+      buttons.push({ text: t('common.cancel'), onPress: () => {} });
+      Alert.alert(t('settings.selectLanguage'), undefined, buttons);
+    }
+  };
+
   const handleCalendarConnect = async () => {
     if (calendarConnected) {
-      Alert.alert('Disconnect Calendar', 'Stop syncing shifts to your calendar?', [
-        { text: 'Cancel', style: 'cancel' },
+      Alert.alert(t('settings.disconnectCalendar'), t('settings.disconnectDesc'), [
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Disconnect',
+          text: t('settings.disconnect'),
           style: 'destructive',
           onPress: () => disconnectCalendar(),
         },
@@ -106,10 +211,12 @@ export default function SettingsScreen() {
     } else {
       const success = await connectCalendar();
       if (success) {
-        Alert.alert('Connected', 'Your shifts will now sync to Apple Calendar');
+        Alert.alert(t('settings.connected'), t('settings.calendarConnected'));
       }
     }
   };
+
+  const currentLocaleName = LOCALE_NAMES[i18n.language] || LOCALE_NAMES[locale] || 'English';
 
   const SettingsItem = ({
     icon,
@@ -173,109 +280,153 @@ export default function SettingsScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Header */}
         <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
-          Settings
+          {t('settings.title')}
         </Text>
 
         {/* Profile Section */}
-        <Card style={styles.profileCard}>
-          <View style={styles.profileHeader}>
-            <View
-              style={[
-                styles.avatarLarge,
-                { backgroundColor: theme.colors.primary + '15' },
-              ]}
-            >
-              <Text style={[styles.avatarTextLarge, { color: theme.colors.primary }]}>
-                {displayName.charAt(0).toUpperCase()}
-              </Text>
-            </View>
-            <View style={styles.profileInfo}>
-              {editingProfile ? (
-                <TextInput
-                  style={[styles.profileNameInput, {
-                    color: theme.colors.textPrimary,
-                    borderColor: theme.colors.primary,
-                  }]}
-                  value={editName}
-                  onChangeText={setEditName}
-                  autoFocus
-                  onSubmitEditing={handleSaveProfile}
-                  returnKeyType="done"
-                />
-              ) : (
-                <Text style={[styles.profileName, { color: theme.colors.textPrimary }]}>
-                  {displayName}
-                </Text>
-              )}
-              <Text style={[styles.profileEmail, { color: theme.colors.textSecondary }]}>
-                {email}
-              </Text>
-            </View>
-          </View>
-          {editingProfile ? (
-            <View style={styles.editActions}>
-              <TouchableOpacity
-                style={[styles.editProfileButton, { borderColor: theme.colors.border }]}
-                onPress={() => setEditingProfile(false)}
+        {isGuest ? (
+          <Card style={styles.profileCard}>
+            <View style={styles.profileHeader}>
+              <View
+                style={[
+                  styles.avatarLarge,
+                  { backgroundColor: theme.colors.primary + '15' },
+                ]}
               >
-                <Text style={[styles.editProfileText, { color: theme.colors.textSecondary }]}>
-                  Cancel
+                <Text style={[styles.avatarTextLarge, { color: theme.colors.primary }]}>G</Text>
+              </View>
+              <View style={styles.profileInfo}>
+                <Text style={[styles.profileName, { color: theme.colors.textPrimary }]}>
+                  {t('settings.guestUser')}
                 </Text>
-              </TouchableOpacity>
+                <Text style={[styles.profileEmail, { color: theme.colors.textSecondary }]}>
+                  {t('settings.guestHint')}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.editActions}>
               <TouchableOpacity
                 style={[styles.editProfileButton, {
                   borderColor: theme.colors.primary,
                   backgroundColor: theme.colors.primary,
                 }]}
-                onPress={handleSaveProfile}
+                onPress={() => router.push('/(auth)/register')}
               >
                 <Text style={[styles.editProfileText, { color: theme.colors.white }]}>
-                  Save
+                  {t('common.createAccount')}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.editProfileButton, { borderColor: theme.colors.border }]}
+                onPress={() => router.push('/(auth)/login')}
+              >
+                <Text style={[styles.editProfileText, { color: theme.colors.primary }]}>
+                  {t('common.signIn')}
                 </Text>
               </TouchableOpacity>
             </View>
-          ) : (
-            <TouchableOpacity
-              style={[styles.editProfileButton, { borderColor: theme.colors.border }]}
-              onPress={handleEditProfile}
-            >
-              <Text style={[styles.editProfileText, { color: theme.colors.primary }]}>
-                Edit Profile
-              </Text>
-            </TouchableOpacity>
-          )}
-        </Card>
+          </Card>
+        ) : (
+          <Card style={styles.profileCard}>
+            <View style={styles.profileHeader}>
+              <View
+                style={[
+                  styles.avatarLarge,
+                  { backgroundColor: theme.colors.primary + '15' },
+                ]}
+              >
+                <Text style={[styles.avatarTextLarge, { color: theme.colors.primary }]}>
+                  {displayName.charAt(0).toUpperCase()}
+                </Text>
+              </View>
+              <View style={styles.profileInfo}>
+                {editingProfile ? (
+                  <TextInput
+                    style={[styles.profileNameInput, {
+                      color: theme.colors.textPrimary,
+                      borderColor: theme.colors.primary,
+                    }]}
+                    value={editName}
+                    onChangeText={setEditName}
+                    autoFocus
+                    onSubmitEditing={handleSaveProfile}
+                    returnKeyType="done"
+                  />
+                ) : (
+                  <Text style={[styles.profileName, { color: theme.colors.textPrimary }]}>
+                    {displayName}
+                  </Text>
+                )}
+                <Text style={[styles.profileEmail, { color: theme.colors.textSecondary }]}>
+                  {email}
+                </Text>
+              </View>
+            </View>
+            {editingProfile ? (
+              <View style={styles.editActions}>
+                <TouchableOpacity
+                  style={[styles.editProfileButton, { borderColor: theme.colors.border }]}
+                  onPress={() => setEditingProfile(false)}
+                >
+                  <Text style={[styles.editProfileText, { color: theme.colors.textSecondary }]}>
+                    {t('common.cancel')}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.editProfileButton, {
+                    borderColor: theme.colors.primary,
+                    backgroundColor: theme.colors.primary,
+                  }]}
+                  onPress={handleSaveProfile}
+                >
+                  <Text style={[styles.editProfileText, { color: theme.colors.white }]}>
+                    {t('common.save')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={[styles.editProfileButton, { borderColor: theme.colors.border }]}
+                onPress={handleEditProfile}
+              >
+                <Text style={[styles.editProfileText, { color: theme.colors.primary }]}>
+                  {t('settings.editProfile')}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </Card>
+        )}
 
         {/* Preferences */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
-            PREFERENCES
+            {t('settings.preferences')}
           </Text>
           <Card padding="none">
             <SettingsItem
               icon="notifications-outline"
-              title="Notifications"
-              subtitle="Shift reminders & updates"
+              title={t('settings.notifications')}
+              subtitle={t('settings.notificationsDesc')}
               onPress={() => {}}
             />
             <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
             <SettingsItem
               icon="alarm-outline"
-              title="Default Alarm"
-              subtitle="60 minutes before shift"
+              title={t('settings.defaultAlarm')}
+              subtitle={t('settings.defaultAlarmDesc')}
               onPress={() => {}}
             />
             <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
             <SettingsItem
               icon="globe-outline"
-              title="Language"
-              subtitle="English"
-              onPress={() => {}}
+              title={t('settings.language')}
+              subtitle={currentLocaleName}
+              onPress={handleLanguageChange}
             />
             <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
             <SettingsItem
               icon="moon-outline"
-              title="Dark Mode"
+              title={t('settings.darkMode')}
               rightElement={
                 <Switch
                   value={themeMode === 'dark'}
@@ -291,20 +442,20 @@ export default function SettingsScreen() {
         {/* Calendar */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
-            CALENDAR
+            {t('settings.calendarSection')}
           </Text>
           <Card padding="none">
             <SettingsItem
               icon="logo-apple"
-              title="Apple Calendar"
-              subtitle={calendarConnected ? 'Connected' : 'Not connected'}
+              title={t('settings.appleCalendar')}
+              subtitle={calendarConnected ? t('settings.connected') : t('settings.notConnected')}
               onPress={handleCalendarConnect}
               rightElement={
                 calendarLoading ? (
                   <Text style={{ color: theme.colors.textMuted, fontSize: 13 }}>...</Text>
                 ) : calendarConnected ? (
                   <View style={[styles.connectedBadge, { backgroundColor: theme.colors.success + '20' }]}>
-                    <Text style={[styles.connectedText, { color: theme.colors.success }]}>Connected</Text>
+                    <Text style={[styles.connectedText, { color: theme.colors.success }]}>{t('settings.connected')}</Text>
                   </View>
                 ) : (
                   <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
@@ -314,33 +465,116 @@ export default function SettingsScreen() {
           </Card>
         </View>
 
+        {/* Coworkers & Colors */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
+            {t('settings.coworkersSection')}
+          </Text>
+          <Card padding="none">
+            {/* My Schedule */}
+            <View style={styles.settingsItem}>
+              <TouchableOpacity
+                style={[styles.colorCircle, { backgroundColor: myScheduleColor }]}
+                onPress={() => {
+                  setColorEditTarget({ type: 'self' });
+                  setShowColorPicker(true);
+                }}
+              />
+              <View style={styles.settingsContent}>
+                <Text style={[styles.settingsTitle, { color: theme.colors.textPrimary }]}>
+                  {t('settings.myScheduleColor')}
+                </Text>
+              </View>
+            </View>
+            {/* Coworkers */}
+            {persons.map((person) => (
+              <React.Fragment key={person.id}>
+                <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
+                <View style={styles.settingsItem}>
+                  <TouchableOpacity
+                    style={[styles.colorCircle, { backgroundColor: person.color }]}
+                    onPress={() => {
+                      setColorEditTarget({ type: 'person', personId: person.id });
+                      setShowColorPicker(true);
+                    }}
+                  />
+                  <View style={styles.settingsContent}>
+                    <Text style={[styles.settingsTitle, { color: theme.colors.textPrimary }]}>
+                      {person.name}
+                    </Text>
+                  </View>
+                  <TouchableOpacity onPress={() => handleDeleteCoworker(person.id, person.name)}>
+                    <Ionicons name="trash-outline" size={18} color={theme.colors.error} />
+                  </TouchableOpacity>
+                </View>
+              </React.Fragment>
+            ))}
+            {/* Add Coworker */}
+            <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
+            <TouchableOpacity
+              style={styles.settingsItem}
+              onPress={() => {
+                if (Platform.OS === 'ios') {
+                  Alert.prompt(
+                    t('settings.addCoworker'),
+                    t('settings.coworkerName'),
+                    [
+                      { text: t('common.cancel'), style: 'cancel' },
+                      {
+                        text: t('common.save'),
+                        onPress: (name: string | undefined) => {
+                          if (name?.trim() && user?.id) {
+                            createPerson(user.id, name.trim());
+                          }
+                        },
+                      },
+                    ],
+                    'plain-text'
+                  );
+                } else {
+                  setShowAddCoworker(true);
+                }
+              }}
+            >
+              <View style={[styles.settingsIcon, { backgroundColor: theme.colors.primary + '15' }]}>
+                <Ionicons name="person-add-outline" size={20} color={theme.colors.primary} />
+              </View>
+              <View style={styles.settingsContent}>
+                <Text style={[styles.settingsTitle, { color: theme.colors.primary }]}>
+                  {t('settings.addCoworker')}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </Card>
+        </View>
+
         {/* About */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
-            ABOUT
+            {t('settings.about')}
           </Text>
           <Card padding="none">
             <SettingsItem
               icon="document-text-outline"
-              title="Terms of Service"
+              title={t('settings.termsOfService')}
               onPress={() => router.push('/(auth)/terms')}
             />
             <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
             <SettingsItem
               icon="shield-outline"
-              title="Privacy Policy"
+              title={t('settings.privacyPolicy')}
               onPress={() => router.push('/(auth)/terms')}
             />
             <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
             <SettingsItem
               icon="help-circle-outline"
-              title="Help & Support"
+              title={t('settings.helpSupport')}
               onPress={() => {}}
             />
             <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
             <SettingsItem
               icon="information-circle-outline"
-              title="Version"
+              title={t('settings.version')}
               subtitle={APP_VERSION}
             />
           </Card>
@@ -349,30 +583,126 @@ export default function SettingsScreen() {
         {/* Account Actions */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
-            ACCOUNT
+            {t('settings.account')}
           </Text>
           <Card padding="none">
-            <SettingsItem
-              icon="log-out-outline"
-              title="Sign Out"
-              onPress={handleSignOut}
-              destructive
-            />
-            <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
-            <SettingsItem
-              icon="trash-outline"
-              title="Delete Account"
-              onPress={handleDeleteAccount}
-              destructive
-            />
+            {isGuest ? (
+              <SettingsItem
+                icon="log-out-outline"
+                title={t('settings.exitGuestMode')}
+                onPress={handleSignOut}
+                destructive
+              />
+            ) : (
+              <>
+                <SettingsItem
+                  icon="log-out-outline"
+                  title={t('settings.signOut')}
+                  onPress={handleSignOut}
+                  destructive
+                />
+                <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
+                <SettingsItem
+                  icon="trash-outline"
+                  title={t('settings.deleteAccount')}
+                  onPress={handleDeleteAccount}
+                  destructive
+                />
+              </>
+            )}
           </Card>
         </View>
 
         {/* Footer */}
         <Text style={[styles.footerText, { color: theme.colors.textMuted }]}>
-          Made with care for shift workers everywhere
+          {t('settings.footer')}
         </Text>
       </ScrollView>
+
+      {/* Color Picker Modal */}
+      <Modal visible={showColorPicker} transparent animationType="fade">
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => { setShowColorPicker(false); setColorEditTarget(null); }}
+        >
+          <View style={[styles.modalContent, { backgroundColor: theme.colors.cardBackground }]}>
+            <Text style={[styles.modalTitle, { color: theme.colors.textPrimary }]}>
+              {t('calendar.chooseColor')}
+            </Text>
+            <View style={styles.colorGrid}>
+              {PERSON_COLOR_HEX.map((color) => {
+                const currentColor = colorEditTarget?.type === 'self'
+                  ? myScheduleColor
+                  : colorEditTarget?.type === 'person'
+                    ? persons.find((p) => p.id === colorEditTarget.personId)?.color
+                    : undefined;
+                return (
+                  <TouchableOpacity
+                    key={color}
+                    style={[
+                      styles.colorOption,
+                      { backgroundColor: color },
+                      currentColor === color && styles.colorOptionSelected,
+                    ]}
+                    onPress={() => saveColor(color)}
+                  />
+                );
+              })}
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Add Coworker Modal (Android) */}
+      <Modal visible={showAddCoworker} transparent animationType="fade">
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowAddCoworker(false)}
+        >
+          <View
+            style={[styles.modalContent, { backgroundColor: theme.colors.cardBackground }]}
+            onStartShouldSetResponder={() => true}
+          >
+            <Text style={[styles.modalTitle, { color: theme.colors.textPrimary }]}>
+              {t('settings.addCoworker')}
+            </Text>
+            <TextInput
+              style={[styles.modalInput, {
+                color: theme.colors.textPrimary,
+                borderColor: theme.colors.border,
+                backgroundColor: theme.colors.warmWhite,
+              }]}
+              placeholder={t('settings.coworkerName')}
+              placeholderTextColor={theme.colors.textMuted}
+              value={newCoworkerName}
+              onChangeText={setNewCoworkerName}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={handleAddCoworker}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, { borderColor: theme.colors.border }]}
+                onPress={() => { setShowAddCoworker(false); setNewCoworkerName(''); }}
+              >
+                <Text style={[styles.modalButtonText, { color: theme.colors.textSecondary }]}>
+                  {t('common.cancel')}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, { borderColor: theme.colors.primary, backgroundColor: theme.colors.primary }]}
+                onPress={handleAddCoworker}
+              >
+                <Text style={[styles.modalButtonText, { color: theme.colors.white }]}>
+                  {t('common.save')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -494,5 +824,72 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 8,
     marginBottom: 32,
+  },
+  colorCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    marginRight: 12,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  modalContent: {
+    width: 280,
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    marginBottom: 20,
+  },
+  colorGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+    justifyContent: 'center',
+  },
+  colorOption: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  colorOptionSelected: {
+    borderWidth: 3,
+    borderColor: '#FFF',
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  modalInput: {
+    width: '100%',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 15,
+    marginBottom: 16,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  modalButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  modalButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

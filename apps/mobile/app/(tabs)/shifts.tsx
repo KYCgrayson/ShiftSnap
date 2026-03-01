@@ -11,14 +11,16 @@ import {
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../src/theme';
-import { Card, Button, Input } from '../../src/components/ui';
+import { Card, Button, Input, TimePickerInput } from '../../src/components/ui';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useShiftCodeStore } from '../../src/stores/shiftCodeStore';
 import { useShiftStore } from '../../src/stores/shiftStore';
 import { useScheduleStore } from '../../src/stores/scheduleStore';
 import { useCalendarStore } from '../../src/stores/calendarStore';
 import { COMMON_SHIFT_CODES } from '@shiftsnap/shared';
+import { GuestUpgradeBanner } from '../../src/components/GuestUpgradeBanner';
 
 interface LocalShiftCode {
   id: string;
@@ -32,6 +34,7 @@ interface LocalShiftCode {
 
 export default function ShiftsScreen() {
   const theme = useTheme();
+  const { t } = useTranslation();
   const params = useLocalSearchParams<{
     ocrResult?: string;
     scheduleId?: string;
@@ -52,6 +55,13 @@ export default function ShiftsScreen() {
   const [ocrResult, setOcrResult] = useState<any>(null);
   const [scheduleId, setScheduleId] = useState<string | null>(null);
   const [yearMonth, setYearMonth] = useState<string | null>(null);
+
+  // Editing existing shift code
+  const [editingCodeId, setEditingCodeId] = useState<string | null>(null);
+  const [editMeaning, setEditMeaning] = useState('');
+  const [editStartTime, setEditStartTime] = useState('');
+  const [editEndTime, setEditEndTime] = useState('');
+  const [editIsDayOff, setEditIsDayOff] = useState(false);
 
   // Map store shift codes to local format
   const shiftCodes: LocalShiftCode[] = storeShiftCodes.map((sc) => ({
@@ -113,7 +123,7 @@ export default function ShiftsScreen() {
         await handleCreateShifts();
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to save shift code');
+      Alert.alert(t('common.error'), t('shifts.failedToSave'));
     }
   };
 
@@ -132,15 +142,16 @@ export default function ShiftsScreen() {
           end_time: sc.end_time,
           is_day_off: sc.is_day_off,
         })),
-        yearMonth
+        yearMonth,
+        0
       );
 
       await updateScheduleStatus(scheduleId, 'published');
 
       Alert.alert(
-        'Shifts Saved',
-        'Your shifts have been saved and your schedule is published!',
-        [{ text: 'View Home', onPress: () => router.push('/(tabs)/home') }]
+        t('shifts.shiftsSaved'),
+        t('shifts.shiftsSavedDesc'),
+        [{ text: t('shifts.viewHome'), onPress: () => router.push('/(tabs)/home') }]
       );
 
       // Clear OCR state
@@ -148,76 +159,186 @@ export default function ShiftsScreen() {
       setScheduleId(null);
       setYearMonth(null);
     } catch (error) {
-      Alert.alert('Error', 'Failed to create shifts. Please try again.');
+      Alert.alert(t('common.error'), t('shifts.failedToCreate'));
     }
   };
 
   const handleDeleteShiftCode = (id: string) => {
-    Alert.alert('Delete Shift Code', 'Are you sure you want to delete this shift code?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('shifts.deleteShiftCode'), t('shifts.deleteShiftCodeConfirm'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Delete',
+        text: t('common.delete'),
         style: 'destructive',
         onPress: async () => {
           try {
             await deleteShiftCode(id);
           } catch {
-            Alert.alert('Error', 'Failed to delete shift code');
+            Alert.alert(t('common.error'), t('shifts.failedToDelete'));
           }
         },
       },
     ]);
   };
 
-  const renderShiftCodeItem = ({ item }: { item: LocalShiftCode }) => (
-    <Card style={styles.codeCard}>
-      <View style={styles.codeCardContent}>
-        <View
-          style={[
-            styles.codeBox,
-            {
-              backgroundColor: item.isDayOff
-                ? theme.colors.success + '20'
-                : theme.colors.primary + '15',
-            },
-          ]}
-        >
-          <Text
-            style={[
-              styles.codeText,
-              { color: item.isDayOff ? theme.colors.success : theme.colors.primary },
-            ]}
-          >
-            {item.code}
-          </Text>
-        </View>
-        <View style={styles.codeInfo}>
-          <Text style={[styles.codeMeaning, { color: theme.colors.textPrimary }]}>
-            {item.meaning}
-          </Text>
-          {!item.isDayOff && item.startTime && (
-            <Text style={[styles.codeTime, { color: theme.colors.textSecondary }]}>
-              {item.startTime}
-              {item.endTime && ` - ${item.endTime}`}
-            </Text>
-          )}
-        </View>
-        <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={() => handleDeleteShiftCode(item.id)}
-        >
-          <Ionicons name="trash-outline" size={18} color={theme.colors.error} />
+  const handleEditCode = (item: LocalShiftCode) => {
+    if (editingCodeId === item.id) {
+      setEditingCodeId(null);
+      return;
+    }
+    setEditingCodeId(item.id);
+    setEditMeaning(item.meaning);
+    setEditStartTime(item.startTime || '');
+    setEditEndTime(item.endTime || '');
+    setEditIsDayOff(item.isDayOff);
+  };
+
+  const handleSaveEdit = async (item: LocalShiftCode) => {
+    if (!user || !editMeaning.trim()) {
+      Alert.alert(t('common.error'), t('shifts.meaningRequired'));
+      return;
+    }
+    const newStartTime = editIsDayOff ? null : editStartTime || null;
+    const newEndTime = editIsDayOff ? null : editEndTime || null;
+    try {
+      await saveShiftCode(
+        user.id,
+        item.code,
+        editMeaning.trim(),
+        newStartTime,
+        newEndTime,
+        editIsDayOff
+      );
+
+      // Re-sync affected shifts to device calendar if connected
+      if (isConnected) {
+        const { monthShifts } = useShiftStore.getState();
+        const affectedShifts = monthShifts.filter((s) => s.shift_code === item.code);
+        for (const shift of affectedShifts) {
+          try {
+            await syncShift(
+              { ...shift, start_time: newStartTime },
+              { meaning: editMeaning.trim(), start_time: newStartTime, end_time: newEndTime }
+            );
+          } catch {
+            // Non-critical: individual sync failure shouldn't block
+          }
+        }
+      }
+
+      setEditingCodeId(null);
+    } catch {
+      Alert.alert(t('common.error'), t('shifts.failedToSave'));
+    }
+  };
+
+  const renderShiftCodeItem = ({ item }: { item: LocalShiftCode }) => {
+    const isEditing = editingCodeId === item.id;
+    return (
+      <Card style={styles.codeCard}>
+        <TouchableOpacity onPress={() => handleEditCode(item)}>
+          <View style={styles.codeCardContent}>
+            <View
+              style={[
+                styles.codeBox,
+                {
+                  backgroundColor: item.isDayOff
+                    ? theme.colors.success + '20'
+                    : theme.colors.primary + '15',
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.codeText,
+                  { color: item.isDayOff ? theme.colors.success : theme.colors.primary },
+                ]}
+              >
+                {item.code}
+              </Text>
+            </View>
+            <View style={styles.codeInfo}>
+              <Text style={[styles.codeMeaning, { color: theme.colors.textPrimary }]}>
+                {item.meaning}
+              </Text>
+              {!item.isDayOff && item.startTime && (
+                <Text style={[styles.codeTime, { color: theme.colors.textSecondary }]}>
+                  {item.startTime}
+                  {item.endTime && ` - ${item.endTime}`}
+                </Text>
+              )}
+            </View>
+            <Ionicons
+              name={isEditing ? 'chevron-up' : 'chevron-down'}
+              size={18}
+              color={theme.colors.textMuted}
+            />
+          </View>
         </TouchableOpacity>
-      </View>
-    </Card>
-  );
+        {isEditing && (
+          <View style={styles.editArea}>
+            <Input
+              label={t('shifts.meaning')}
+              placeholder={t('shifts.meaningPlaceholder')}
+              value={editMeaning}
+              onChangeText={setEditMeaning}
+            />
+            <TouchableOpacity
+              style={styles.dayOffToggle}
+              onPress={() => setEditIsDayOff(!editIsDayOff)}
+            >
+              <View
+                style={[
+                  styles.checkbox,
+                  {
+                    borderColor: theme.colors.border,
+                    backgroundColor: editIsDayOff ? theme.colors.primary : 'transparent',
+                  },
+                ]}
+              >
+                {editIsDayOff && <Ionicons name="checkmark" size={14} color={theme.colors.white} />}
+              </View>
+              <Text style={[styles.dayOffText, { color: theme.colors.textPrimary }]}>
+                {t('shifts.thisIsDayOff')}
+              </Text>
+            </TouchableOpacity>
+            {!editIsDayOff && (
+              <>
+                <TimePickerInput
+                  label={t('shifts.startTime')}
+                  placeholder={t('shifts.startTimePlaceholder')}
+                  value={editStartTime}
+                  onChange={setEditStartTime}
+                />
+                <TimePickerInput
+                  label={t('shifts.endTime')}
+                  placeholder={t('shifts.endTimePlaceholder')}
+                  value={editEndTime}
+                  onChange={setEditEndTime}
+                />
+              </>
+            )}
+            <View style={styles.editActions}>
+              <Button title={t('common.save')} onPress={() => handleSaveEdit(item)} style={{ flex: 1 }} />
+              <Button title={t('common.cancel')} onPress={() => setEditingCodeId(null)} variant="ghost" style={{ flex: 1 }} />
+              <TouchableOpacity
+                style={styles.deleteButton}
+                onPress={() => handleDeleteShiftCode(item.id)}
+              >
+                <Ionicons name="trash-outline" size={18} color={theme.colors.error} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+      </Card>
+    );
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.warmWhite }]}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
-          Shift Codes
+          {t('shifts.title')}
         </Text>
         <TouchableOpacity
           style={[styles.addButton, { backgroundColor: theme.colors.primary }]}
@@ -228,16 +349,18 @@ export default function ShiftsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        <GuestUpgradeBanner message={t('guest.shiftsMessage')} />
+
         {/* Pending Codes Alert */}
         {pendingCodes.length > 0 && (
           <Card style={[styles.alertCard, { backgroundColor: theme.colors.warning + '15' }]}>
             <Ionicons name="alert-circle" size={24} color={theme.colors.warning} />
             <View style={styles.alertContent}>
               <Text style={[styles.alertTitle, { color: theme.colors.textPrimary }]}>
-                New codes detected
+                {t('shifts.newCodesDetected')}
               </Text>
               <Text style={[styles.alertText, { color: theme.colors.textSecondary }]}>
-                Please define: {pendingCodes.filter(Boolean).join(', ')}
+                {t('shifts.pleaseDefine', { codes: pendingCodes.filter(Boolean).join(', ') })}
               </Text>
             </View>
           </Card>
@@ -247,7 +370,7 @@ export default function ShiftsScreen() {
         {pendingCodes.length > 0 && (
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
-              Define New Codes
+              {t('shifts.defineNewCodes')}
             </Text>
             {pendingCodes.map((code, index) => (
               <PendingCodeCard
@@ -271,7 +394,7 @@ export default function ShiftsScreen() {
         {/* Saved Codes Section */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
-            Your Shift Codes
+            {t('shifts.yourShiftCodes')}
           </Text>
           {shiftCodes.length > 0 ? (
             <FlatList
@@ -284,10 +407,10 @@ export default function ShiftsScreen() {
             <Card style={styles.emptyCard}>
               <Ionicons name="code-outline" size={48} color={theme.colors.textMuted} />
               <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>
-                No shift codes yet
+                {t('shifts.noShiftCodesYet')}
               </Text>
               <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
-                Scan a schedule or add codes manually
+                {t('shifts.noShiftCodesDesc')}
               </Text>
             </Card>
           )}
@@ -296,10 +419,10 @@ export default function ShiftsScreen() {
         {/* Common Codes Suggestions */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
-            Common Codes
+            {t('shifts.commonCodes')}
           </Text>
           <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary }]}>
-            Tap to add to your codes
+            {t('shifts.tapToAdd')}
           </Text>
           <View style={styles.commonCodesGrid}>
             {COMMON_SHIFT_CODES.filter(
@@ -350,18 +473,20 @@ function PendingCodeCard({
   onSave: (code: string, meaning: string, startTime: string | null, endTime: string | null, isDayOff: boolean) => void;
   onSkip: () => void;
 }) {
+  const { t } = useTranslation();
   const [codeValue, setCodeValue] = useState(code);
   const [meaning, setMeaning] = useState('');
   const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
   const [isDayOff, setIsDayOff] = useState(false);
 
   const handleSave = () => {
     const finalCode = codeValue.trim() || code;
     if (!meaning.trim()) {
-      Alert.alert('Error', 'Please enter a meaning for this code');
+      Alert.alert(t('common.error'), t('shifts.meaningRequired'));
       return;
     }
-    onSave(finalCode, meaning.trim(), isDayOff ? null : startTime || null, null, isDayOff);
+    onSave(finalCode, meaning.trim(), isDayOff ? null : startTime || null, isDayOff ? null : endTime || null, isDayOff);
   };
 
   return (
@@ -373,22 +498,22 @@ function PendingCodeCard({
           </Text>
         </View>
         <Text style={[styles.pendingQuestion, { color: theme.colors.textPrimary }]}>
-          {code ? `What does "${code}" mean?` : 'Add new shift code'}
+          {code ? t('shifts.whatDoesMean', { code }) : t('shifts.addNewShiftCode')}
         </Text>
       </View>
 
       {!code && (
         <Input
-          label="Code"
-          placeholder="e.g., A"
+          label={t('shifts.code')}
+          placeholder={t('shifts.codePlaceholder')}
           value={codeValue}
           onChangeText={setCodeValue}
         />
       )}
 
       <Input
-        label="Meaning"
-        placeholder="e.g., Morning shift"
+        label={t('shifts.meaning')}
+        placeholder={t('shifts.meaningPlaceholder')}
         value={meaning}
         onChangeText={setMeaning}
       />
@@ -409,23 +534,30 @@ function PendingCodeCard({
           {isDayOff && <Ionicons name="checkmark" size={14} color={theme.colors.white} />}
         </View>
         <Text style={[styles.dayOffText, { color: theme.colors.textPrimary }]}>
-          This is a day off
+          {t('shifts.thisIsDayOff')}
         </Text>
       </TouchableOpacity>
 
       {!isDayOff && (
-        <Input
-          label="Start Time (optional)"
-          placeholder="e.g., 09:00"
-          value={startTime}
-          onChangeText={setStartTime}
-          keyboardType="numbers-and-punctuation"
-        />
+        <>
+          <TimePickerInput
+            label={t('shifts.startTime')}
+            placeholder={t('shifts.startTimePlaceholder')}
+            value={startTime}
+            onChange={setStartTime}
+          />
+          <TimePickerInput
+            label={t('shifts.endTime')}
+            placeholder={t('shifts.endTimePlaceholder')}
+            value={endTime}
+            onChange={setEndTime}
+          />
+        </>
       )}
 
       <View style={styles.pendingActions}>
-        <Button title="Skip" onPress={onSkip} variant="ghost" style={{ flex: 1 }} />
-        <Button title="Save" onPress={handleSave} style={{ flex: 1 }} />
+        <Button title={t('common.skip')} onPress={onSkip} variant="ghost" style={{ flex: 1 }} />
+        <Button title={t('common.save')} onPress={handleSave} style={{ flex: 1 }} />
       </View>
     </Card>
   );
@@ -602,5 +734,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     marginTop: 8,
+  },
+  editArea: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E0E0E0',
+    gap: 8,
+  },
+  editActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+    alignItems: 'center',
   },
 });

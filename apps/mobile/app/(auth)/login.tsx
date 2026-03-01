@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Link, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { Button, Input } from '../../src/components/ui';
 import { useTheme } from '../../src/theme';
 import { useAuthStore } from '../../src/stores/authStore';
@@ -19,6 +20,7 @@ import { isValidEmail } from '@shiftsnap/shared';
 
 export default function LoginScreen() {
   const theme = useTheme();
+  const { t } = useTranslation();
   const { signIn, signInAsGuest, signInWithGoogle, signInWithApple, loading, error, clearError } = useAuthStore();
 
   const [email, setEmail] = useState('');
@@ -31,20 +33,20 @@ export default function LoginScreen() {
     clearError();
 
     if (!email.trim()) {
-      setEmailError('Email is required');
+      setEmailError(t('auth.emailRequired'));
       valid = false;
     } else if (!isValidEmail(email)) {
-      setEmailError('Please enter a valid email');
+      setEmailError(t('auth.invalidEmail'));
       valid = false;
     } else {
       setEmailError('');
     }
 
     if (!password) {
-      setPasswordError('Password is required');
+      setPasswordError(t('auth.passwordRequired'));
       valid = false;
     } else if (password.length < 6) {
-      setPasswordError('Password must be at least 6 characters');
+      setPasswordError(t('auth.passwordTooShort'));
       valid = false;
     } else {
       setPasswordError('');
@@ -85,18 +87,18 @@ export default function LoginScreen() {
               />
             </TouchableOpacity>
             <Text style={[styles.title, { color: theme.colors.textPrimary }]}>
-              Welcome back
+              {t('auth.welcomeBack')}
             </Text>
             <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
-              Sign in to your account
+              {t('auth.signInSubtitle')}
             </Text>
           </View>
 
           {/* Form */}
           <View style={styles.form}>
             <Input
-              label="Email"
-              placeholder="Enter your email"
+              label={t('auth.email')}
+              placeholder={t('auth.emailPlaceholder')}
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
@@ -107,8 +109,8 @@ export default function LoginScreen() {
             />
 
             <Input
-              label="Password"
-              placeholder="Enter your password"
+              label={t('auth.password')}
+              placeholder={t('auth.passwordPlaceholder')}
               value={password}
               onChangeText={setPassword}
               secureTextEntry
@@ -126,15 +128,15 @@ export default function LoginScreen() {
 
             <TouchableOpacity
               style={styles.forgotPassword}
-              onPress={() => Alert.alert('Reset Password', 'Password reset functionality coming soon')}
+              onPress={() => Alert.alert(t('auth.resetPasswordTitle'), t('auth.resetPasswordDesc'))}
             >
               <Text style={[styles.forgotPasswordText, { color: theme.colors.primary }]}>
-                Forgot password?
+                {t('auth.forgotPassword')}
               </Text>
             </TouchableOpacity>
 
             <Button
-              title="Sign In"
+              title={t('common.signIn')}
               onPress={handleSignIn}
               loading={loading}
               fullWidth
@@ -146,7 +148,7 @@ export default function LoginScreen() {
           <View style={styles.divider}>
             <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
             <Text style={[styles.dividerText, { color: theme.colors.textMuted }]}>
-              or continue with
+              {t('auth.orContinueWith')}
             </Text>
             <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
           </View>
@@ -201,11 +203,11 @@ export default function LoginScreen() {
           {/* Register link */}
           <View style={styles.registerRow}>
             <Text style={[styles.registerText, { color: theme.colors.textSecondary }]}>
-              Don't have an account?
+              {t('auth.noAccount')}
             </Text>
             <Link href="/(auth)/register">
               <Text style={[styles.registerLink, { color: theme.colors.primary }]}>
-                {' '}Sign Up
+                {' '}{t('auth.signUp')}
               </Text>
             </Link>
           </View>
@@ -219,7 +221,7 @@ export default function LoginScreen() {
             }}
           >
             <Text style={[styles.guestButtonText, { color: theme.colors.textSecondary }]}>
-              Continue as Guest
+              {t('auth.continueAsGuest')}
             </Text>
           </TouchableOpacity>
         </ScrollView>

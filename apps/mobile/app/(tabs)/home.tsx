@@ -11,16 +11,21 @@ import {
 import { Link, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../src/theme';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useShiftStore } from '../../src/stores/shiftStore';
 import { useShiftCodeStore } from '../../src/stores/shiftCodeStore';
 import { Card, Button } from '../../src/components/ui';
+import { GuestUpgradeBanner } from '../../src/components/GuestUpgradeBanner';
 import { formatDate } from '@shiftsnap/shared';
+import { useLocaleStore } from '../../src/stores/localeStore';
 
 export default function HomeScreen() {
   const theme = useTheme();
+  const { t } = useTranslation();
   const { user } = useAuthStore();
+  const locale = useLocaleStore((s) => s.locale);
   const { todayShift, upcomingShifts, fetchTodayShift, fetchUpcomingShifts } = useShiftStore();
   const { shiftCodes, fetchShiftCodes, getCodeInfo } = useShiftCodeStore();
   const [refreshing, setRefreshing] = useState(false);
@@ -49,9 +54,9 @@ export default function HomeScreen() {
 
   const getGreeting = () => {
     const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 18) return 'Good afternoon';
-    return 'Good evening';
+    if (hour < 12) return t('home.goodMorning');
+    if (hour < 18) return t('home.goodAfternoon');
+    return t('home.goodEvening');
   };
 
   const todayCodeInfo = todayShift ? getCodeInfo(todayShift.shift_code) : null;
@@ -91,6 +96,8 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
+        <GuestUpgradeBanner />
+
         {/* Today's Shift Card */}
         <Card style={styles.todayCard}>
           <LinearGradient
@@ -101,9 +108,9 @@ export default function HomeScreen() {
           />
           <View style={styles.todayContent}>
             <View style={styles.todayHeader}>
-              <Text style={styles.todayLabel}>Today</Text>
+              <Text style={styles.todayLabel}>{t('home.today')}</Text>
               <Text style={styles.todayDate}>
-                {formatDate(new Date(), 'en')}
+                {formatDate(new Date(), locale)}
               </Text>
             </View>
             {todayShift ? (
@@ -114,7 +121,7 @@ export default function HomeScreen() {
                 )}
                 <Text style={styles.shiftTime}>
                   {todayShift.is_day_off
-                    ? 'Day Off'
+                    ? t('common.dayOff')
                     : todayShift.start_time
                       ? `${todayShift.start_time}${todayShift.end_time ? ` - ${todayShift.end_time}` : ''}`
                       : ''}
@@ -123,7 +130,7 @@ export default function HomeScreen() {
             ) : (
               <View style={styles.noShiftInfo}>
                 <Ionicons name="sunny-outline" size={32} color="#FFFFFF" />
-                <Text style={styles.noShiftText}>No shift today</Text>
+                <Text style={styles.noShiftText}>{t('home.noShiftToday')}</Text>
               </View>
             )}
           </View>
@@ -132,7 +139,7 @@ export default function HomeScreen() {
         {/* Quick Actions */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
-            Quick Actions
+            {t('home.quickActions')}
           </Text>
           <View style={styles.quickActions}>
             <TouchableOpacity
@@ -143,7 +150,7 @@ export default function HomeScreen() {
                 <Ionicons name="camera-outline" size={24} color={theme.colors.primary} />
               </View>
               <Text style={[styles.actionText, { color: theme.colors.textPrimary }]}>
-                Scan Schedule
+                {t('home.scanSchedule')}
               </Text>
             </TouchableOpacity>
 
@@ -155,7 +162,7 @@ export default function HomeScreen() {
                 <Ionicons name="calendar-outline" size={24} color={theme.colors.secondary} />
               </View>
               <Text style={[styles.actionText, { color: theme.colors.textPrimary }]}>
-                View Calendar
+                {t('home.viewCalendar')}
               </Text>
             </TouchableOpacity>
 
@@ -167,7 +174,7 @@ export default function HomeScreen() {
                 <Ionicons name="list-outline" size={24} color={theme.colors.success} />
               </View>
               <Text style={[styles.actionText, { color: theme.colors.textPrimary }]}>
-                Shift Codes
+                {t('home.shiftCodes')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -177,11 +184,11 @@ export default function HomeScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
-              Upcoming Shifts
+              {t('home.upcomingShifts')}
             </Text>
             <Link href="/(tabs)/calendar">
               <Text style={[styles.seeAllLink, { color: theme.colors.primary }]}>
-                See All
+                {t('home.seeAll')}
               </Text>
             </Link>
           </View>
@@ -203,18 +210,18 @@ export default function HomeScreen() {
                         {shiftDate.getDate()}
                       </Text>
                       <Text style={[styles.dateMonth, { color: theme.colors.primary }]}>
-                        {shiftDate.toLocaleDateString('en', { month: 'short' })}
+                        {shiftDate.toLocaleDateString(locale, { month: 'short' })}
                       </Text>
                     </View>
                     <View style={styles.shiftCardInfo}>
                       <Text style={[styles.shiftCardCode, { color: theme.colors.textPrimary }]}>
-                        {codeInfo?.meaning || `Shift ${shift.shift_code}`}
+                        {codeInfo?.meaning || t('home.shift', { code: shift.shift_code })}
                       </Text>
                       <Text style={[styles.shiftCardTime, { color: theme.colors.textSecondary }]}>
                         {shift.is_day_off
-                          ? 'Day Off'
+                          ? t('common.dayOff')
                           : shift.start_time
-                            ? `Starts at ${shift.start_time}`
+                            ? t('home.startsAt', { time: shift.start_time })
                             : shift.shift_code}
                       </Text>
                     </View>
@@ -235,13 +242,13 @@ export default function HomeScreen() {
                 color={theme.colors.textMuted}
               />
               <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>
-                No upcoming shifts
+                {t('home.noUpcomingShifts')}
               </Text>
               <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
-                Scan your schedule to see your upcoming shifts here
+                {t('home.noUpcomingDesc')}
               </Text>
               <Button
-                title="Scan Schedule"
+                title={t('home.scanSchedule')}
                 onPress={() => router.push('/(tabs)/scan')}
                 variant="secondary"
                 style={{ marginTop: 16 }}

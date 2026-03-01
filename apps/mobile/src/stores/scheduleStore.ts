@@ -1,11 +1,18 @@
 import { create } from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../services/supabase';
 import type { OCRResult } from '@shiftsnap/shared';
+import { getIsGuest } from './authStore';
+import { getGuestSchedules } from '../data/guestDemoData';
+import { useGroupStore } from './groupStore';
+
+const GUEST_SCHEDULES_KEY = 'shiftsnap:guest-schedules';
 
 interface ScheduleItem {
   id: string;
   owner_id: string;
   person_id: string | null;
+  group_id: string | null;
   image_url: string;
   year_month: string;
   raw_ocr_result: OCRResult | null;
@@ -27,6 +34,8 @@ interface ScheduleState {
     ocrResult: OCRResult
   ) => Promise<string>;
   updateScheduleStatus: (scheduleId: string, status: 'draft' | 'published' | 'archived') => Promise<void>;
+  updateScheduleYearMonth: (scheduleId: string, yearMonth: string) => Promise<void>;
+  reset: () => void;
 }
 
 export const useScheduleStore = create<ScheduleState>((set, get) => ({
@@ -36,6 +45,26 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   error: null,
 
   fetchSchedules: async (userId: string) => {
+    if (getIsGuest()) {
+      // If user already has schedules in state (e.g. from scanning), don't overwrite
+      if (get().schedules.length > 0) return;
+      // Load persisted guest schedules from AsyncStorage
+      try {
+        const stored = await AsyncStorage.getItem(GUEST_SCHEDULES_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored) as ScheduleItem[];
+          if (parsed.length > 0) {
+            set({ schedules: parsed, loading: false });
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load guest schedules from storage:', e);
+      }
+      // Fallback to demo data
+      set({ schedules: getGuestSchedules() as any, loading: false });
+      return;
+    }
     set({ loading: true, error: null });
     try {
       const { data, error } = await supabase
@@ -59,12 +88,38 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     yearMonth: string,
     ocrResult: OCRResult
   ) => {
+    if (getIsGuest()) {
+      const localSchedule: ScheduleItem = {
+        id: `g-schedule-${Date.now()}`,
+        owner_id: userId,
+        person_id: null,
+        group_id: 'guest-group',
+        image_url: imageUrl,
+        year_month: yearMonth,
+        raw_ocr_result: ocrResult,
+        status: 'draft',
+        created_at: new Date().toISOString(),
+      };
+      const updatedSchedules = [localSchedule, ...get().schedules.filter(s => s.id !== localSchedule.id)];
+      set({
+        schedules: updatedSchedules,
+        currentSchedule: localSchedule,
+        loading: false,
+      });
+      // Persist to AsyncStorage (non-blocking)
+      AsyncStorage.setItem(GUEST_SCHEDULES_KEY, JSON.stringify(updatedSchedules)).catch(
+        (e) => console.warn('Failed to persist guest schedules:', e)
+      );
+      return localSchedule.id;
+    }
     set({ loading: true, error: null });
     try {
+      const currentGroup = useGroupStore.getState().currentGroup;
       const { data, error } = await supabase
         .from('schedules')
         .insert({
           owner_id: userId,
+          group_id: currentGroup?.id || null,
           image_url: imageUrl,
           year_month: yearMonth,
           raw_ocr_result: ocrResult,
@@ -90,6 +145,22 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   },
 
   updateScheduleStatus: async (scheduleId: string, status: 'draft' | 'published' | 'archived') => {
+    if (getIsGuest()) {
+      const updatedSchedules = get().schedules.map((s) =>
+        s.id === scheduleId ? { ...s, status } : s
+      );
+      set({
+        schedules: updatedSchedules,
+        currentSchedule:
+          get().currentSchedule?.id === scheduleId
+            ? { ...get().currentSchedule!, status }
+            : get().currentSchedule,
+      });
+      AsyncStorage.setItem(GUEST_SCHEDULES_KEY, JSON.stringify(updatedSchedules)).catch(
+        (e) => console.warn('Failed to persist guest schedules:', e)
+      );
+      return;
+    }
     try {
       const { error } = await supabase
         .from('schedules')
@@ -112,5 +183,51 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
       set({ error: message });
       throw error;
     }
+  },
+
+  updateScheduleYearMonth: async (scheduleId: string, yearMonth: string) => {
+    if (getIsGuest()) {
+      const updatedSchedules = get().schedules.map((s) =>
+        s.id === scheduleId ? { ...s, year_month: yearMonth } : s
+      );
+      set({
+        schedules: updatedSchedules,
+        currentSchedule:
+          get().currentSchedule?.id === scheduleId
+            ? { ...get().currentSchedule!, year_month: yearMonth }
+            : get().currentSchedule,
+      });
+      AsyncStorage.setItem(GUEST_SCHEDULES_KEY, JSON.stringify(updatedSchedules)).catch(
+        (e) => console.warn('Failed to persist guest schedules:', e)
+      );
+      return;
+    }
+    try {
+      const { error } = await supabase
+        .from('schedules')
+        .update({ year_month: yearMonth })
+        .eq('id', scheduleId);
+
+      if (error) throw error;
+
+      set((state) => ({
+        schedules: state.schedules.map((s) =>
+          s.id === scheduleId ? { ...s, year_month: yearMonth } : s
+        ),
+        currentSchedule:
+          state.currentSchedule?.id === scheduleId
+            ? { ...state.currentSchedule, year_month: yearMonth }
+            : state.currentSchedule,
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update schedule year-month';
+      set({ error: message });
+      throw error;
+    }
+  },
+
+  reset: () => {
+    set({ schedules: [], currentSchedule: null, loading: false, error: null });
+    AsyncStorage.removeItem(GUEST_SCHEDULES_KEY).catch(() => {});
   },
 }));

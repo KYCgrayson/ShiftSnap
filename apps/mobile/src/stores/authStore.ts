@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { User, Session } from '@supabase/supabase-js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   supabase,
   signInWithEmail,
@@ -9,6 +10,8 @@ import {
   signInWithGoogle as googleSignIn,
   signInWithApple as appleSignIn,
 } from '../services/supabase';
+
+const GUEST_MODE_KEY = 'shiftsnap:guest-mode';
 
 interface AuthState {
   user: User | null;
@@ -29,6 +32,9 @@ interface AuthState {
   clearError: () => void;
 }
 
+/** Check guest status from outside React (e.g. in other stores). */
+export const getIsGuest = () => useAuthStore.getState().isGuest;
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   session: null,
@@ -46,8 +52,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       if (error) {
         console.error('Error getting session:', error);
-        set({ user: null, session: null, initialized: true, loading: false });
-        return;
       }
 
       if (session) {
@@ -58,7 +62,26 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           loading: false,
         });
       } else {
-        set({ user: null, session: null, initialized: true, loading: false });
+        // No Supabase session — check if guest mode was active
+        try {
+          const wasGuest = await AsyncStorage.getItem(GUEST_MODE_KEY);
+          if (wasGuest === 'true') {
+            // Restore guest session
+            const guestUser = {
+              id: 'guest-user',
+              email: 'guest@shiftsnap.local',
+              app_metadata: {},
+              user_metadata: { display_name: 'Guest User' },
+              aud: 'authenticated',
+              created_at: new Date().toISOString(),
+            } as User;
+            set({ user: guestUser, session: null, isGuest: true, initialized: true, loading: false });
+          } else {
+            set({ user: null, session: null, initialized: true, loading: false });
+          }
+        } catch {
+          set({ user: null, session: null, initialized: true, loading: false });
+        }
       }
 
       // Listen for auth changes
@@ -149,6 +172,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       loading: false,
       error: null,
     });
+    AsyncStorage.setItem(GUEST_MODE_KEY, 'true').catch(
+      (e) => console.warn('Failed to persist guest mode:', e)
+    );
   },
 
   signInWithGoogle: async () => {
@@ -211,7 +237,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (!isGuest) {
         await supabaseSignOut();
       }
+
+      // Reset all data stores to prevent stale guest data
+      const { useShiftStore } = require('./shiftStore');
+      const { useShiftCodeStore } = require('./shiftCodeStore');
+      const { useScheduleStore } = require('./scheduleStore');
+      const { usePersonStore } = require('./personStore');
+      const { useGroupStore } = require('./groupStore');
+      const { useCalendarStore } = require('./calendarStore');
+      useShiftStore.getState().reset();
+      useShiftCodeStore.getState().reset();
+      useScheduleStore.getState().reset();
+      usePersonStore.getState().reset();
+      useGroupStore.getState().reset();
+      useCalendarStore.getState().disconnectCalendar();
+
       set({ user: null, session: null, isGuest: false, loading: false, error: null });
+      AsyncStorage.removeItem(GUEST_MODE_KEY).catch(() => {});
     } catch (error) {
       console.error('Sign out error:', error);
       set({ loading: false });

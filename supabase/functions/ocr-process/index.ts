@@ -1,11 +1,15 @@
 // ShiftSnap OCR Processing Edge Function
-// Uses Google Gemini Flash for schedule recognition
+// Uses Google Gemini for schedule recognition with dynamic model config
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+const DEFAULT_MODEL = "gemini-3-flash-preview";
+const DEFAULT_MAX_TOKENS = 8192;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,7 +17,9 @@ const corsHeaders = {
 };
 
 interface OCRRequest {
-  imageUrl: string;
+  imageUrl?: string;
+  imageBase64?: string;
+  imageMimeType?: string;
   userId?: string;
   existingCodes?: Array<{
     code: string;
@@ -26,7 +32,7 @@ interface OCRRequest {
 interface OCRResult {
   success: boolean;
   confidence: number;
-  detected_month: string | null;
+  detected_month: number | null;
   detected_year: number | null;
   rows: Array<{
     name: string | null;
@@ -40,6 +46,31 @@ interface OCRResult {
   raw_response?: string;
 }
 
+async function getModelConfig(): Promise<{ modelId: string; maxTokens: number }> {
+  try {
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const { data: rows } = await supabase
+      .from("app_config")
+      .select("key, value")
+      .in("key", ["gemini_model", "gemini_max_tokens"]);
+
+    const config: Record<string, string> = {};
+    if (rows) {
+      for (const row of rows) {
+        config[row.key] = row.value;
+      }
+    }
+
+    return {
+      modelId: config["gemini_model"] || DEFAULT_MODEL,
+      maxTokens: parseInt(config["gemini_max_tokens"] || String(DEFAULT_MAX_TOKENS), 10),
+    };
+  } catch (err) {
+    console.error("Failed to read model config, using defaults:", err);
+    return { modelId: DEFAULT_MODEL, maxTokens: DEFAULT_MAX_TOKENS };
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -47,103 +78,136 @@ serve(async (req) => {
   }
 
   try {
-    // Verify authentication
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      throw new Error("Missing authorization header");
-    }
-
     // Parse request body
-    const { imageUrl, existingCodes = [] }: OCRRequest = await req.json();
+    const { imageUrl, imageBase64, imageMimeType, existingCodes = [] }: OCRRequest = await req.json();
 
-    if (!imageUrl) {
-      throw new Error("Missing imageUrl");
+    if (!imageUrl && !imageBase64) {
+      throw new Error("Missing imageUrl or imageBase64");
     }
 
     if (!GEMINI_API_KEY) {
       throw new Error("GEMINI_API_KEY not configured");
     }
 
-    // Fetch image and convert to base64
-    const imageResponse = await fetch(imageUrl);
-    if (!imageResponse.ok) {
-      throw new Error("Failed to fetch image");
+    // Read model config from DB
+    const { modelId, maxTokens } = await getModelConfig();
+    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent`;
+
+    // Get image as base64 — either from request body or by fetching the URL
+    let base64Image: string;
+    let mimeType: string;
+
+    if (imageBase64) {
+      base64Image = imageBase64;
+      mimeType = imageMimeType || "image/jpeg";
+    } else {
+      const imageResponse = await fetch(imageUrl!);
+      if (!imageResponse.ok) {
+        throw new Error("Failed to fetch image");
+      }
+      const imageBuffer = await imageResponse.arrayBuffer();
+      base64Image = btoa(String.fromCharCode(...new Uint8Array(imageBuffer)));
+      mimeType = imageResponse.headers.get("content-type") || "image/jpeg";
     }
-    const imageBuffer = await imageResponse.arrayBuffer();
-    const base64Image = btoa(String.fromCharCode(...new Uint8Array(imageBuffer)));
-    const mimeType = imageResponse.headers.get("content-type") || "image/jpeg";
 
     // Build the prompt
     const existingCodesInfo = existingCodes.length > 0
-      ? `The user has previously defined these shift codes:\n${existingCodes.map(c =>
+      ? `\nThe user has previously defined these shift codes:\n${existingCodes.map(c =>
           `- "${c.code}" = ${c.meaning}${c.startTime ? ` (starts at ${c.startTime})` : ''}${c.isDayOff ? ' [Day Off]' : ''}`
-        ).join('\n')}\n\n`
+        ).join('\n')}\n`
       : '';
 
-    const prompt = `You are an expert at reading work shift schedules. Analyze this image of a work schedule and extract the shift information.
+    const prompt = `You are an expert at reading printed work shift schedule tables, especially those used in Taiwanese workplaces.
 
+**Table format**:
+- TOP ROW = dates (day numbers 1–31)
+- LEFT COLUMN = employee names (Chinese or English)
+- Each CELL = a shift code for that person on that date
+
+**Your task**: Extract the EXACT content of every cell.
 ${existingCodesInfo}
-Please analyze the schedule image and respond with a JSON object in this exact format:
+Rules:
+1. Read EVERY row (person) and EVERY column (date)
+2. Preserve codes EXACTLY as printed — including Chinese characters (小年, 除夕, 初一, 初二, etc.), letters (A, B, C), symbols (/, X, O), or time strings
+3. Skip empty cells
+4. If a title/header contains month/year, extract it
+5. Confidence: 1.0 for clearly legible text, lower for ambiguous/blurry
+6. List any codes NOT in the user's existing codes in unknown_codes
+
+Respond ONLY with JSON (no markdown, no explanation):
 {
-  "detected_month": "January" or "February" etc (or null if not visible),
-  "detected_year": 2026 (or null if not visible),
+  "detected_month": 2,
+  "detected_year": 2025,
   "rows": [
     {
-      "name": "Employee name or null if this is the user's own row",
+      "name": "Employee Name",
       "shifts": [
-        {"date": 1, "code": "A", "confidence": 0.95},
-        {"date": 2, "code": "/", "confidence": 0.90}
+        {"date": 1, "code": "A", "confidence": 0.95}
       ]
     }
   ],
-  "unknown_codes": ["X", "Y"] // List any codes you found that are NOT in the user's existing codes
-}
+  "unknown_codes": ["小年", "除夕"]
+}`;
 
-Important guidelines:
-1. Extract ALL shift codes for ALL days in the schedule
-2. Common shift codes include letters (A, B, C, D), symbols (/, X, O), or time patterns (9-5, 10:30)
-3. "/" or "O" or "X" typically means day off
-4. Include confidence scores (0-1) for each extracted code
-5. If you see a row that appears to be the main/highlighted row, put it first and set name to null
-6. List any codes that are NOT in the user's existing codes in the unknown_codes array
-7. Respond ONLY with the JSON object, no other text`;
-
-    // Call Gemini API
-    const geminiResponse = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { text: prompt },
-              {
-                inline_data: {
-                  mime_type: mimeType,
-                  data: base64Image,
-                },
+    // Call Gemini API with retry
+    const geminiRequestBody = JSON.stringify({
+      contents: [
+        {
+          parts: [
+            { text: prompt },
+            {
+              inline_data: {
+                mime_type: mimeType,
+                data: base64Image,
               },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.1,
-          topK: 32,
-          topP: 1,
-          maxOutputTokens: 4096,
+            },
+          ],
         },
-      }),
+      ],
+      generationConfig: {
+        temperature: 0.1,
+        topK: 32,
+        topP: 1,
+        maxOutputTokens: maxTokens,
+      },
     });
 
-    if (!geminiResponse.ok) {
+    const MAX_RETRIES = 2;
+    let geminiData;
+    let lastError = "";
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      if (attempt > 0) {
+        // Wait before retry: 1s, then 2s
+        await new Promise((r) => setTimeout(r, attempt * 1000));
+        console.log(`Retry attempt ${attempt}/${MAX_RETRIES}...`);
+      }
+
+      const geminiResponse = await fetch(`${geminiApiUrl}?key=${GEMINI_API_KEY}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: geminiRequestBody,
+      });
+
+      if (geminiResponse.ok) {
+        geminiData = await geminiResponse.json();
+        break;
+      }
+
       const errorText = await geminiResponse.text();
-      console.error("Gemini API error:", errorText);
-      throw new Error(`Gemini API error: ${geminiResponse.status}`);
+      lastError = `Gemini API ${geminiResponse.status}: ${errorText.slice(0, 500)}`;
+      console.error(`Gemini attempt ${attempt + 1} failed:`, lastError);
+
+      // Only retry on transient errors
+      const retryable = [429, 500, 502, 503].includes(geminiResponse.status);
+      if (!retryable || attempt === MAX_RETRIES) {
+        throw new Error(lastError);
+      }
     }
 
-    const geminiData = await geminiResponse.json();
+    if (!geminiData) {
+      throw new Error(lastError || "Gemini API returned no data");
+    }
 
     // Extract the text response
     const responseText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -168,7 +232,7 @@ Important guidelines:
     const result: OCRResult = {
       success: true,
       confidence: calculateOverallConfidence(parsedResult.rows),
-      detected_month: parsedResult.detected_month,
+      detected_month: typeof parsedResult.detected_month === 'number' ? parsedResult.detected_month : null,
       detected_year: parsedResult.detected_year,
       rows: parsedResult.rows || [],
       unknown_codes: parsedResult.unknown_codes || [],
@@ -183,6 +247,7 @@ Important guidelines:
   } catch (error) {
     console.error("OCR processing error:", error);
 
+    const errorMessage = error instanceof Error ? error.message : String(error);
     const errorResult: OCRResult = {
       success: false,
       confidence: 0,
@@ -190,12 +255,13 @@ Important guidelines:
       detected_year: null,
       rows: [],
       unknown_codes: [],
-      raw_response: error.message,
+      raw_response: errorMessage,
     };
 
+    // Return 200 with success:false so the client can read the actual error details
     return new Response(JSON.stringify(errorResult), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 400,
+      status: 200,
     });
   }
 });

@@ -21,7 +21,7 @@ import { isValidEmail } from '@shiftsnap/shared';
 export default function RegisterScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
-  const { signUp, loading, error, clearError } = useAuthStore();
+  const { signUp, signInWithGoogle, signInWithApple, loading, error, clearError } = useAuthStore();
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -234,6 +234,62 @@ export default function RegisterScreen() {
             />
           </View>
 
+          {/* Divider */}
+          <View style={styles.divider}>
+            <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
+            <Text style={[styles.dividerText, { color: theme.colors.textMuted }]}>
+              {t('auth.orSignUpWith')}
+            </Text>
+            <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
+          </View>
+
+          {/* Social Sign Up */}
+          <View style={styles.socialButtons}>
+            <TouchableOpacity
+              style={[
+                styles.socialButton,
+                {
+                  backgroundColor: theme.colors.white,
+                  borderColor: theme.colors.border,
+                },
+              ]}
+              onPress={async () => {
+                const result = await signInWithGoogle();
+                if (result.success) {
+                  router.replace('/(tabs)/home');
+                }
+              }}
+            >
+              <Ionicons name="logo-google" size={20} color="#DB4437" />
+              <Text style={[styles.socialButtonText, { color: theme.colors.textPrimary }]}>
+                Google
+              </Text>
+            </TouchableOpacity>
+
+            {Platform.OS === 'ios' && (
+              <TouchableOpacity
+                style={[
+                  styles.socialButton,
+                  {
+                    backgroundColor: theme.colors.white,
+                    borderColor: theme.colors.border,
+                  },
+                ]}
+                onPress={async () => {
+                  const result = await signInWithApple();
+                  if (result.success) {
+                    router.replace('/(tabs)/home');
+                  }
+                }}
+              >
+                <Ionicons name="logo-apple" size={20} color={theme.colors.textPrimary} />
+                <Text style={[styles.socialButtonText, { color: theme.colors.textPrimary }]}>
+                  Apple
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
           {/* Login link */}
           <View style={styles.loginRow}>
             <Text style={[styles.loginText, { color: theme.colors.textSecondary }]}>
@@ -317,6 +373,38 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 14,
     textAlign: 'center',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    fontSize: 14,
+  },
+  socialButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 32,
+  },
+  socialButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 8,
+  },
+  socialButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   loginRow: {
     flexDirection: 'row',

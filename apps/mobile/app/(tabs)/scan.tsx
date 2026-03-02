@@ -204,7 +204,7 @@ export default function ScanScreen() {
   const processSchedule = async () => {
     if (!capturedImage) return;
     if (!user) {
-      Alert.alert(t('common.error'), 'Please sign in first.');
+      Alert.alert(t('common.error'), t('auth.signInRequired'));
       return;
     }
 

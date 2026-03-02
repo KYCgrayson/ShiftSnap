@@ -282,6 +282,15 @@ export default {
     checkEmail: 'Check your email',
     verificationSent: 'We sent you a verification link. Please verify your email to continue.',
     hasAccount: 'Already have an account?',
+    signInRequired: 'Please sign in first.',
+    orSignUpWith: 'or sign up with',
+    accountInfo: 'Account Info',
+    emailLabel: 'Email',
+    provider: 'Sign-in Method',
+    displayName: 'Display Name',
+    updateProfile: 'Update Profile',
+    profileUpdated: 'Profile Updated',
+    profileUpdatedDesc: 'Your profile has been updated successfully.',
   },
 
   // Guest upgrade banner

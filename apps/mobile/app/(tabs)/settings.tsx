@@ -95,6 +95,8 @@ export default function SettingsScreen() {
 
   const displayName = user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'User';
   const email = user?.email || '';
+  const authProvider = user?.app_metadata?.provider || 'email';
+  const providerLabel = authProvider === 'google' ? 'Google' : authProvider === 'apple' ? 'Apple' : 'Email';
 
   const handleSignOut = () => {
     Alert.alert(
@@ -395,6 +397,28 @@ export default function SettingsScreen() {
               </TouchableOpacity>
             )}
           </Card>
+        )}
+
+        {/* Account Info (authenticated users only) */}
+        {!isGuest && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
+              {t('auth.accountInfo')}
+            </Text>
+            <Card padding="none">
+              <SettingsItem
+                icon="mail-outline"
+                title={t('auth.emailLabel')}
+                subtitle={email || '—'}
+              />
+              <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
+              <SettingsItem
+                icon={authProvider === 'google' ? 'logo-google' : authProvider === 'apple' ? 'logo-apple' : 'key-outline'}
+                title={t('auth.provider')}
+                subtitle={providerLabel}
+              />
+            </Card>
+          </View>
         )}
 
         {/* Preferences */}

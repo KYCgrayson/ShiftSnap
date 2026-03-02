@@ -280,6 +280,15 @@ export default {
     checkEmail: '請檢查您的信箱',
     verificationSent: '我們已寄送驗證連結到您的信箱，請驗證後再繼續。',
     hasAccount: '已經有帳號了？',
+    signInRequired: '請先登入。',
+    orSignUpWith: '或使用以下方式註冊',
+    accountInfo: '帳號資訊',
+    emailLabel: '電子郵件',
+    provider: '登入方式',
+    displayName: '顯示名稱',
+    updateProfile: '更新個人資料',
+    profileUpdated: '個人資料已更新',
+    profileUpdatedDesc: '您的個人資料已成功更新。',
   },
 
   // Guest upgrade banner

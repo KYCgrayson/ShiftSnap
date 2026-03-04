@@ -4,6 +4,7 @@
  */
 
 import { formatDateISO, formatYearMonth } from '@shiftsnap/shared';
+import i18n from '../i18n';
 
 // ─── Shift Codes ──────────────────────────────────────────────
 
@@ -19,12 +20,13 @@ export interface GuestShiftCode {
   is_group_shared: boolean;
 }
 
-export const GUEST_SHIFT_CODES: GuestShiftCode[] = [
-  { id: 'g-sc-1', code: 'A', meaning: 'Morning shift', start_time: '06:00', end_time: '14:00', is_day_off: false, is_confirmed: true, group_id: 'guest-group', is_group_shared: true },
-  { id: 'g-sc-2', code: 'B', meaning: 'Afternoon shift', start_time: '14:00', end_time: '22:00', is_day_off: false, is_confirmed: true, group_id: 'guest-group', is_group_shared: true },
-  { id: 'g-sc-3', code: 'C', meaning: 'Night shift', start_time: '22:00', end_time: '06:00', is_day_off: false, is_confirmed: true, group_id: 'guest-group', is_group_shared: true },
-  { id: 'g-sc-4', code: 'X', meaning: 'Day off', start_time: null, end_time: null, is_day_off: true, is_confirmed: true, group_id: 'guest-group', is_group_shared: true },
+export const getGuestShiftCodes = (): GuestShiftCode[] => [
+  { id: 'g-sc-1', code: 'A', meaning: i18n.t('shifts.morningShift'), start_time: '06:00', end_time: '14:00', is_day_off: false, is_confirmed: true, group_id: 'guest-group', is_group_shared: true },
+  { id: 'g-sc-2', code: 'B', meaning: i18n.t('shifts.afternoonShift'), start_time: '14:00', end_time: '22:00', is_day_off: false, is_confirmed: true, group_id: 'guest-group', is_group_shared: true },
+  { id: 'g-sc-3', code: 'C', meaning: i18n.t('shifts.nightShift'), start_time: '22:00', end_time: '06:00', is_day_off: false, is_confirmed: true, group_id: 'guest-group', is_group_shared: true },
+  { id: 'g-sc-4', code: 'X', meaning: i18n.t('shifts.dayOff'), start_time: null, end_time: null, is_day_off: true, is_confirmed: true, group_id: 'guest-group', is_group_shared: true },
 ];
+
 
 // ─── Shift Generation ─────────────────────────────────────────
 
@@ -52,7 +54,7 @@ function codeForIndex(i: number): typeof ROTATION[number] {
 }
 
 function infoForCode(code: string) {
-  return GUEST_SHIFT_CODES.find((sc) => sc.code === code)!;
+  return getGuestShiftCodes().find((sc) => sc.code === code)!;
 }
 
 /** Generate shifts for an entire month. Day 1 of the current month anchors the rotation. */

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '../services/supabase';
 import { getIsGuest } from './authStore';
-import { GUEST_SHIFT_CODES } from '../data/guestDemoData';
+import { getGuestShiftCodes } from '../data/guestDemoData';
 import { useShiftStore } from './shiftStore';
 import { useGroupStore } from './groupStore';
 
@@ -45,7 +45,7 @@ export const useShiftCodeStore = create<ShiftCodeState>((set, get) => ({
     if (getIsGuest()) {
       // If codes are already loaded (e.g. user corrected times in review), don't overwrite
       if (get().shiftCodes.length > 0) return;
-      set({ shiftCodes: [...GUEST_SHIFT_CODES], loading: false });
+      set({ shiftCodes: [...getGuestShiftCodes()], loading: false });
       return;
     }
     set({ loading: true, error: null });
@@ -133,9 +133,17 @@ export const useShiftCodeStore = create<ShiftCodeState>((set, get) => ({
     try {
       const currentGroup = useGroupStore.getState().currentGroup;
 
-      // Check if code already exists for this user, and update or insert accordingly
-      const existing = get().shiftCodes.find((sc) => sc.code === code);
-      if (existing) {
+      // Check DB directly for existing code (not relying on in-memory state)
+      const { data: existingRows } = await supabase
+        .from('shift_codes')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('code', code)
+        .limit(1);
+
+      const existingId = existingRows?.[0]?.id;
+
+      if (existingId) {
         const { error } = await supabase
           .from('shift_codes')
           .update({
@@ -147,7 +155,7 @@ export const useShiftCodeStore = create<ShiftCodeState>((set, get) => ({
             group_id: currentGroup?.id || null,
             is_group_shared: true,
           })
-          .eq('id', existing.id);
+          .eq('id', existingId);
         if (error) throw error;
       } else {
         const { error } = await supabase.from('shift_codes').insert({

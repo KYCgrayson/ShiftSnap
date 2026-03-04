@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, Modal } from 'react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme';
@@ -89,10 +89,11 @@ export function TimePickerInput({ label, value, onChange, placeholder }: TimePic
         </Text>
       </TouchableOpacity>
 
-      {show && (
-        <>
-          {Platform.OS === 'ios' ? (
-            <View style={[styles.iosPickerContainer, { backgroundColor: theme.colors.cardBackground, borderColor: theme.colors.border }]}>
+      {show && Platform.OS === 'ios' && (
+        <Modal transparent animationType="slide">
+          <View style={styles.iosModalOverlay}>
+            <TouchableOpacity style={styles.iosModalBackdrop} activeOpacity={1} onPress={() => setShow(false)} />
+            <View style={[styles.iosPickerContainer, { backgroundColor: theme.colors.cardBackground }]}>
               <View style={styles.iosPickerHeader}>
                 <TouchableOpacity onPress={() => setShow(false)}>
                   <Text style={[styles.iosPickerDone, { color: theme.colors.primary }]}>Done</Text>
@@ -106,16 +107,18 @@ export function TimePickerInput({ label, value, onChange, placeholder }: TimePic
                 is24Hour
               />
             </View>
-          ) : (
-            <DateTimePicker
-              value={parseTime(value)}
-              mode="time"
-              display="default"
-              onChange={handleChange}
-              is24Hour
-            />
-          )}
-        </>
+          </View>
+        </Modal>
+      )}
+
+      {show && Platform.OS === 'android' && (
+        <DateTimePicker
+          value={parseTime(value)}
+          mode="time"
+          display="default"
+          onChange={handleChange}
+          is24Hour
+        />
       )}
     </View>
   );
@@ -140,20 +143,27 @@ const styles = StyleSheet.create({
   valueText: {
     flex: 1,
   },
+  iosModalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  iosModalBackdrop: {
+    flex: 1,
+  },
   iosPickerContainer: {
-    marginTop: 4,
-    borderWidth: 1,
-    borderRadius: 12,
-    overflow: 'hidden',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingBottom: 20,
   },
   iosPickerHeader: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
     paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingTop: 12,
+    paddingBottom: 4,
   },
   iosPickerDone: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '600',
   },
 });

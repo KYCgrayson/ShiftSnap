@@ -1,7 +1,7 @@
 import * as Calendar from 'expo-calendar';
 import { Platform } from 'react-native';
 
-const CALENDAR_NAME = 'ShiftSnap';
+const CALENDAR_NAME = 'IShift';
 const CALENDAR_COLOR = '#4A9DAD';
 const DEFAULT_SHIFT_HOURS = 8;
 
@@ -88,7 +88,7 @@ export async function syncShiftToCalendar(
     endDate,
     allDay: isAllDay,
     calendarId,
-    notes: `ShiftSnap - ${shift.shift_code}`,
+    notes: `IShift - ${shift.shift_code}`,
   };
 
   // Update existing event or create new one

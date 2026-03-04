@@ -20,6 +20,7 @@ interface GroupMemberItem {
   color: string | null;
   is_visible: boolean;
   joined_at: string;
+  display_name?: string;
 }
 
 interface GroupState {
@@ -33,6 +34,9 @@ interface GroupState {
   fetchOrCreateDefaultGroup: (userId: string) => Promise<void>;
   switchGroup: (groupId: string) => void;
   fetchMembers: (groupId: string) => Promise<void>;
+  joinGroupByInvite: (userId: string, inviteCode: string) => Promise<void>;
+  leaveGroup: (userId: string, groupId: string) => Promise<void>;
+  updateGroupName: (groupId: string, name: string) => Promise<void>;
   reset: () => void;
 }
 
@@ -168,13 +172,115 @@ export const useGroupStore = create<GroupState>((set, get) => ({
     try {
       const { data, error } = await supabase
         .from('group_members')
-        .select('*')
+        .select('*, users(display_name, email)')
         .eq('group_id', groupId);
 
       if (error) throw error;
-      set({ members: data || [] });
+      const members: GroupMemberItem[] = (data || []).map((m: any) => ({
+        ...m,
+        display_name: m.users?.display_name || m.users?.email?.split('@')[0] || undefined,
+        users: undefined,
+      }));
+      set({ members });
     } catch (error) {
       console.error('Error fetching group members:', error);
+    }
+  },
+
+  joinGroupByInvite: async (userId: string, inviteCode: string) => {
+    if (getIsGuest()) return;
+    set({ loading: true, error: null });
+    try {
+      // Find group by invite code
+      const { data: group, error: findError } = await supabase
+        .from('groups')
+        .select('*')
+        .eq('invite_code', inviteCode.toUpperCase())
+        .maybeSingle();
+
+      if (findError) throw findError;
+      if (!group) throw new Error('INVALID_CODE');
+
+      // Check if already a member
+      const { data: existing } = await supabase
+        .from('group_members')
+        .select('id')
+        .eq('group_id', group.id)
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (existing) throw new Error('ALREADY_MEMBER');
+
+      // Insert as member
+      const { error: joinError } = await supabase
+        .from('group_members')
+        .insert({
+          group_id: group.id,
+          user_id: userId,
+          role: 'member',
+        });
+
+      if (joinError) throw joinError;
+
+      // Refresh groups and switch to the new one
+      await get().fetchGroups(userId);
+      get().switchGroup(group.id);
+      set({ loading: false });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to join group';
+      set({ loading: false, error: message });
+      throw error;
+    }
+  },
+
+  leaveGroup: async (userId: string, groupId: string) => {
+    if (getIsGuest()) return;
+    set({ loading: true, error: null });
+    try {
+      const { error } = await supabase
+        .from('group_members')
+        .delete()
+        .eq('group_id', groupId)
+        .eq('user_id', userId);
+
+      if (error) throw error;
+
+      // Refresh groups
+      await get().fetchGroups(userId);
+
+      // If the deleted group was the current one, switch
+      if (get().currentGroup?.id === groupId) {
+        const remaining = get().groups;
+        set({ currentGroup: remaining[0] || null });
+      }
+      set({ loading: false });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to leave group';
+      set({ loading: false, error: message });
+      throw error;
+    }
+  },
+
+  updateGroupName: async (groupId: string, name: string) => {
+    if (getIsGuest()) return;
+    try {
+      const { error } = await supabase
+        .from('groups')
+        .update({ name })
+        .eq('id', groupId);
+
+      if (error) throw error;
+
+      // Update local state
+      set((state) => ({
+        groups: state.groups.map((g) => g.id === groupId ? { ...g, name } : g),
+        currentGroup: state.currentGroup?.id === groupId
+          ? { ...state.currentGroup, name }
+          : state.currentGroup,
+      }));
+    } catch (error) {
+      console.error('Error updating group name:', error);
+      throw error;
     }
   },
 

@@ -4,6 +4,7 @@ import { supabase } from '../services/supabase';
 import type { OCRResult } from '@shiftsnap/shared';
 import { formatDateISO } from '@shiftsnap/shared';
 import { getIsGuest } from './authStore';
+import { useGroupStore } from './groupStore';
 import { getGuestTodayShift, getGuestUpcomingShifts, generateGuestShiftsForMonth } from '../data/guestDemoData';
 
 const GUEST_SHIFTS_KEY = 'shiftsnap:guest-shifts';
@@ -170,7 +171,8 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
       const lastDay = new Date(year, month, 0).getDate();
       const endDate = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
 
-      const { data, error } = await supabase
+      // Fetch own shifts
+      const { data: ownShifts, error } = await supabase
         .from('shifts')
         .select('*')
         .eq('user_id', userId)
@@ -179,7 +181,34 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
         .order('date', { ascending: true });
 
       if (error) throw error;
-      set({ monthShifts: data || [], loading: false });
+
+      // Fetch group members' shifts if in a group
+      let allShifts = ownShifts || [];
+      const currentGroup = useGroupStore.getState().currentGroup;
+      if (currentGroup && currentGroup.id !== 'guest-group') {
+        const { data: groupShifts, error: groupError } = await supabase
+          .from('shifts')
+          .select('*, schedules!inner(group_id)')
+          .eq('schedules.group_id', currentGroup.id)
+          .neq('user_id', userId)
+          .gte('date', startDate)
+          .lte('date', endDate)
+          .order('date', { ascending: true });
+
+        if (!groupError && groupShifts) {
+          // Merge and deduplicate by id
+          const ownIds = new Set(allShifts.map((s) => s.id));
+          const uniqueGroupShifts = groupShifts
+            .filter((s: any) => !ownIds.has(s.id))
+            .map((s: any) => {
+              const { schedules, ...shift } = s;
+              return shift;
+            });
+          allShifts = [...allShifts, ...uniqueGroupShifts];
+        }
+      }
+
+      set({ monthShifts: allShifts, loading: false });
     } catch (error) {
       console.error('Error fetching month shifts:', error);
       set({ loading: false });

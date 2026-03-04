@@ -17,10 +17,9 @@ export function useRealtimeShifts(userId: string | undefined, yearMonth: string)
           event: '*',
           schema: 'public',
           table: 'shifts',
-          filter: `user_id=eq.${userId}`,
         },
         () => {
-          // Refetch month shifts when any change occurs
+          // Refetch month shifts when any change occurs (RLS handles group visibility)
           fetchShiftsForMonth(userId, yearMonth);
         }
       )

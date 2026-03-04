@@ -21,9 +21,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Apple OAuth (Services ID, Secret Key) | Apple Sign In | Supabase Dashboard → Auth → Providers |
 | Google OAuth (Client ID, Client Secret) | Google Sign In | Supabase Dashboard → Auth → Providers |
 
+## Branding
+
+- **使用者看到的 App 名稱是「IShift」**，但程式碼內部（package name、import path、slug、URL scheme、bundle ID）全部維持 `shiftsnap` / `ShiftSnap`。
+- 在 i18n 字串、app.json 顯示名稱、權限說明、日曆名稱、服務條款等**使用者可見的文字**中使用「IShift」。
+- **不要改的**：`com.shiftsnap.app`（bundle ID）、`shiftsnap://`（URL scheme）、`@shiftsnap/shared`（package）、repo 名稱、程式碼中的變數名或 import。
+
 ## Project Overview
 
-ShiftSnap is a React Native + Expo mobile app that uses AI (Google Gemini 2.0 Flash Vision) to convert paper shift schedules into digital calendar events. Built as a pnpm monorepo with Supabase backend.
+IShift (codebase: ShiftSnap) is a React Native + Expo mobile app that uses AI (Google Gemini 2.0 Flash Vision) to convert paper shift schedules into digital calendar events. Built as a pnpm monorepo with Supabase backend.
 
 ## Commands
 

@@ -167,6 +167,16 @@ export interface CalendarEvent {
   source_image_url: string | null;
 }
 
+// Daily note types
+export interface DailyNote {
+  id: string;
+  user_id: string;
+  date: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+}
+
 // API Response types
 export interface ApiResponse<T> {
   data: T | null;

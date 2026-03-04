@@ -72,7 +72,7 @@ export function getFirstDayOfMonth(year: number, month: number): number {
 }
 
 /**
- * Format date for display
+ * Format date for display (includes weekday)
  */
 export function formatDate(date: Date | string, locale: string = 'en'): string {
   const d = typeof date === 'string' ? new Date(date) : date;
@@ -80,7 +80,16 @@ export function formatDate(date: Date | string, locale: string = 'en'): string {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
+    weekday: 'short',
   });
+}
+
+/**
+ * Get short weekday name for a date
+ */
+export function getShortWeekday(date: Date | string, locale: string = 'en'): string {
+  const d = typeof date === 'string' ? new Date(date + 'T00:00:00') : date;
+  return d.toLocaleDateString(locale, { weekday: 'short' });
 }
 
 /**

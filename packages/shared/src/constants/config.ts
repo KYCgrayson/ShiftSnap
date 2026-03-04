@@ -3,7 +3,7 @@
  */
 
 // App info
-export const APP_NAME = 'ShiftSnap';
+export const APP_NAME = 'IShift';
 export const APP_VERSION = '1.0.0';
 export const APP_BUNDLE_ID = 'com.shiftsnap.app';
 

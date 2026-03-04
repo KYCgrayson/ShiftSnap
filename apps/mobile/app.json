@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "ShiftSnap",
+    "name": "IShift",
     "slug": "shiftsnap",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/ishift-logo.png",
     "scheme": "shiftsnap",
     "userInterfaceStyle": "automatic",
     "splash": {
@@ -20,27 +20,31 @@
       "bundleIdentifier": "com.shiftsnap.app",
       "usesAppleSignIn": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "ShiftSnap needs camera access to scan your work schedule",
-        "NSPhotoLibraryUsageDescription": "ShiftSnap needs photo library access to select schedule images",
-        "NSCalendarsFullAccessUsageDescription": "ShiftSnap needs access to your calendar to sync shift schedules"
-      }
+        "NSCameraUsageDescription": "IShift needs camera access to scan your work schedule",
+        "NSPhotoLibraryUsageDescription": "IShift needs photo library access to select schedule images",
+        "NSCalendarsFullAccessUsageDescription": "IShift needs access to your calendar to sync shift schedules"
+      },
+      "appleTeamId": "R9CKAABL8D"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/ishift-logo.png",
         "backgroundColor": "#FFFBF7"
       },
       "package": "com.shiftsnap.app",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_CALENDAR",
+        "android.permission.WRITE_CALENDAR"
       ]
     },
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/ishift-logo.png"
     },
     "plugins": [
       "expo-router",
@@ -48,13 +52,13 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "ShiftSnap needs camera access to scan your work schedule"
+          "cameraPermission": "IShift needs camera access to scan your work schedule"
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "ShiftSnap needs photo library access to select schedule images"
+          "photosPermission": "IShift needs photo library access to select schedule images"
         }
       ],
       [
@@ -68,7 +72,7 @@
       [
         "expo-calendar",
         {
-          "calendarPermission": "ShiftSnap needs calendar access to sync your shift schedule"
+          "calendarPermission": "IShift needs calendar access to sync your shift schedule"
         }
       ],
       "expo-font",

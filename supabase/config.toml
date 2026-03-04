@@ -46,12 +46,12 @@ enable_confirmations = false
 
 [auth.external.apple]
 enabled = true
-client_id = "placeholder"
+client_id = "app.shiftsnap.web,com.shiftsnap.app"
 secret = "env(APPLE_SECRET)"
 
 [auth.external.google]
 enabled = true
-client_id = "placeholder"
+client_id = "695322863552-i7mt7sqiegjperovrebbvq22ubib702s.apps.googleusercontent.com"
 secret = "env(GOOGLE_SECRET)"
 
 [functions.ocr-process]

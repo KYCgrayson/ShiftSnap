@@ -2,6 +2,7 @@
 // Uses Google Gemini for schedule recognition with dynamic model config
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
@@ -9,7 +10,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const DEFAULT_MODEL = "gemini-3-flash-preview";
-const DEFAULT_MAX_TOKENS = 8192;
+const DEFAULT_MAX_TOKENS = 16384;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,16 +18,15 @@ const corsHeaders = {
 };
 
 interface OCRRequest {
-  imageUrl?: string;
-  imageBase64?: string;
+  imageBase64: string;
   imageMimeType?: string;
-  userId?: string;
   existingCodes?: Array<{
     code: string;
     meaning: string;
     startTime: string | null;
     isDayOff: boolean;
   }>;
+  hint?: string;
 }
 
 interface OCRResult {
@@ -72,43 +72,29 @@ async function getModelConfig(): Promise<{ modelId: string; maxTokens: number }>
 }
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Parse request body
-    const { imageUrl, imageBase64, imageMimeType, existingCodes = [] }: OCRRequest = await req.json();
+    const body: OCRRequest = await req.json();
+    const { imageBase64, imageMimeType = "image/jpeg", existingCodes = [], hint } = body;
 
-    if (!imageUrl && !imageBase64) {
-      throw new Error("Missing imageUrl or imageBase64");
+    if (!imageBase64) {
+      throw new Error("Missing imageBase64");
     }
 
     if (!GEMINI_API_KEY) {
       throw new Error("GEMINI_API_KEY not configured");
     }
 
+    console.log(`Processing image: ${(imageBase64.length * 0.75 / 1024).toFixed(0)}KB, mime: ${imageMimeType}`);
+
     // Read model config from DB
     const { modelId, maxTokens } = await getModelConfig();
+    console.log(`Using model: ${modelId}, maxTokens: ${maxTokens}`);
+
     const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent`;
-
-    // Get image as base64 — either from request body or by fetching the URL
-    let base64Image: string;
-    let mimeType: string;
-
-    if (imageBase64) {
-      base64Image = imageBase64;
-      mimeType = imageMimeType || "image/jpeg";
-    } else {
-      const imageResponse = await fetch(imageUrl!);
-      if (!imageResponse.ok) {
-        throw new Error("Failed to fetch image");
-      }
-      const imageBuffer = await imageResponse.arrayBuffer();
-      base64Image = btoa(String.fromCharCode(...new Uint8Array(imageBuffer)));
-      mimeType = imageResponse.headers.get("content-type") || "image/jpeg";
-    }
 
     // Build the prompt
     const existingCodesInfo = existingCodes.length > 0
@@ -116,6 +102,8 @@ serve(async (req) => {
           `- "${c.code}" = ${c.meaning}${c.startTime ? ` (starts at ${c.startTime})` : ''}${c.isDayOff ? ' [Day Off]' : ''}`
         ).join('\n')}\n`
       : '';
+
+    const hintInfo = hint ? `\n**Additional instruction**: ${hint}\n` : '';
 
     const prompt = `You are an expert at reading printed work shift schedule tables, especially those used in Taiwanese workplaces.
 
@@ -125,31 +113,25 @@ serve(async (req) => {
 - Each CELL = a shift code for that person on that date
 
 **Your task**: Extract the EXACT content of every cell.
-${existingCodesInfo}
+${existingCodesInfo}${hintInfo}
 Rules:
 1. Read EVERY row (person) and EVERY column (date)
 2. Preserve codes EXACTLY as printed — including Chinese characters (小年, 除夕, 初一, 初二, etc.), letters (A, B, C), symbols (/, X, O), or time strings
-3. Skip empty cells
+3. Skip empty cells (do NOT include them)
 4. If a title/header contains month/year, extract it
-5. Confidence: 1.0 for clearly legible text, lower for ambiguous/blurry
-6. List any codes NOT in the user's existing codes in unknown_codes
+5. List any codes NOT in the user's existing codes in unknown_codes
 
+**IMPORTANT**: Use this COMPACT format — map date number directly to shift code string. Do NOT use arrays of objects for shifts.
 Respond ONLY with JSON (no markdown, no explanation):
 {
   "detected_month": 2,
   "detected_year": 2025,
   "rows": [
-    {
-      "name": "Employee Name",
-      "shifts": [
-        {"date": 1, "code": "A", "confidence": 0.95}
-      ]
-    }
+    {"name": "Employee Name", "shifts": {"1": "A", "5": "B", "10": "/"}}
   ],
   "unknown_codes": ["小年", "除夕"]
 }`;
 
-    // Call Gemini API with retry
     const geminiRequestBody = JSON.stringify({
       contents: [
         {
@@ -157,8 +139,8 @@ Respond ONLY with JSON (no markdown, no explanation):
             { text: prompt },
             {
               inline_data: {
-                mime_type: mimeType,
-                data: base64Image,
+                mime_type: imageMimeType,
+                data: imageBase64,
               },
             },
           ],
@@ -169,39 +151,49 @@ Respond ONLY with JSON (no markdown, no explanation):
         topK: 32,
         topP: 1,
         maxOutputTokens: maxTokens,
+        responseMimeType: "application/json",
       },
     });
 
+    // Call Gemini API with retry
     const MAX_RETRIES = 2;
     let geminiData;
     let lastError = "";
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       if (attempt > 0) {
-        // Wait before retry: 1s, then 2s
         await new Promise((r) => setTimeout(r, attempt * 1000));
         console.log(`Retry attempt ${attempt}/${MAX_RETRIES}...`);
       }
 
-      const geminiResponse = await fetch(`${geminiApiUrl}?key=${GEMINI_API_KEY}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: geminiRequestBody,
-      });
+      try {
+        const geminiResponse = await fetch(`${geminiApiUrl}?key=${GEMINI_API_KEY}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: geminiRequestBody,
+        });
 
-      if (geminiResponse.ok) {
-        geminiData = await geminiResponse.json();
-        break;
-      }
+        if (geminiResponse.ok) {
+          geminiData = await geminiResponse.json();
+          break;
+        }
 
-      const errorText = await geminiResponse.text();
-      lastError = `Gemini API ${geminiResponse.status}: ${errorText.slice(0, 500)}`;
-      console.error(`Gemini attempt ${attempt + 1} failed:`, lastError);
+        const errorText = await geminiResponse.text();
+        lastError = `Gemini API ${geminiResponse.status}: ${errorText.slice(0, 500)}`;
+        console.error(`Gemini attempt ${attempt + 1} failed:`, lastError);
 
-      // Only retry on transient errors
-      const retryable = [429, 500, 502, 503].includes(geminiResponse.status);
-      if (!retryable || attempt === MAX_RETRIES) {
-        throw new Error(lastError);
+        // Only retry on transient errors
+        const retryable = [429, 500, 502, 503].includes(geminiResponse.status);
+        if (!retryable || attempt === MAX_RETRIES) {
+          throw new Error(lastError);
+        }
+      } catch (fetchErr) {
+        if (fetchErr instanceof Error && fetchErr.message.startsWith("Gemini API")) {
+          throw fetchErr;
+        }
+        lastError = `Network error: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}`;
+        console.error(`Gemini attempt ${attempt + 1} network error:`, lastError);
+        if (attempt === MAX_RETRIES) throw new Error(lastError);
       }
     }
 
@@ -212,32 +204,71 @@ Respond ONLY with JSON (no markdown, no explanation):
     // Extract the text response
     const responseText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!responseText) {
+      console.error("Unexpected Gemini response:", JSON.stringify(geminiData).slice(0, 1000));
       throw new Error("No response from Gemini");
     }
 
-    // Parse the JSON from the response
+    // Parse the JSON from the response — try multiple strategies
     let parsedResult;
-    try {
-      // Try to extract JSON from the response (it might be wrapped in markdown code blocks)
-      const jsonMatch = responseText.match(/```json\n?([\s\S]*?)\n?```/) ||
-                        responseText.match(/```\n?([\s\S]*?)\n?```/) ||
-                        [null, responseText];
-      parsedResult = JSON.parse(jsonMatch[1] || responseText);
-    } catch (parseError) {
-      console.error("Failed to parse Gemini response:", responseText);
-      throw new Error("Failed to parse schedule data");
+    const parseAttempts = [
+      // 1. Direct parse
+      () => JSON.parse(responseText),
+      // 2. Extract from ```json ... ``` blocks
+      () => {
+        const m = responseText.match(/```json\s*([\s\S]*?)\s*```/);
+        if (!m) throw new Error("no json block");
+        return JSON.parse(m[1]);
+      },
+      // 3. Extract from ``` ... ``` blocks
+      () => {
+        const m = responseText.match(/```\s*([\s\S]*?)\s*```/);
+        if (!m) throw new Error("no code block");
+        return JSON.parse(m[1]);
+      },
+      // 4. Find first { ... } in the response
+      () => {
+        const start = responseText.indexOf('{');
+        const end = responseText.lastIndexOf('}');
+        if (start === -1 || end === -1) throw new Error("no braces");
+        return JSON.parse(responseText.slice(start, end + 1));
+      },
+      // 5. Repair truncated JSON (output exceeded maxOutputTokens)
+      () => {
+        const repaired = tryRepairTruncatedJson(responseText);
+        if (!repaired) throw new Error("repair failed");
+        console.warn("Used truncated JSON repair — partial results returned");
+        return repaired;
+      },
+    ];
+
+    for (const attempt of parseAttempts) {
+      try {
+        parsedResult = attempt();
+        break;
+      } catch (_) {
+        continue;
+      }
     }
 
-    // Build the result
+    if (!parsedResult) {
+      console.error("Failed to parse Gemini response:", responseText.slice(0, 2000));
+      throw new Error("PARSE_FAILED:" + responseText.slice(0, 500));
+    }
+
+    // Normalize rows: convert compact {"1":"A","2":"B"} format to [{date,code,confidence}]
+    const normalizedRows = normalizeRows(parsedResult.rows || []);
+
     const result: OCRResult = {
       success: true,
-      confidence: calculateOverallConfidence(parsedResult.rows),
+      confidence: calculateOverallConfidence(normalizedRows),
       detected_month: typeof parsedResult.detected_month === 'number' ? parsedResult.detected_month : null,
       detected_year: parsedResult.detected_year,
-      rows: parsedResult.rows || [],
+      rows: normalizedRows,
       unknown_codes: parsedResult.unknown_codes || [],
       raw_response: responseText,
     };
+
+    console.log(`OCR success: ${result.rows.length} rows, confidence: ${result.confidence.toFixed(2)}`);
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -258,13 +289,89 @@ Respond ONLY with JSON (no markdown, no explanation):
       raw_response: errorMessage,
     };
 
-    // Return 200 with success:false so the client can read the actual error details
     return new Response(JSON.stringify(errorResult), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });
   }
 });
+
+/**
+ * Normalize rows from either format to the standard array-of-objects format.
+ * Compact format:  { "shifts": {"1": "A", "2": "B"} }
+ * Standard format: { "shifts": [{"date": 1, "code": "A", "confidence": 1.0}] }
+ */
+function normalizeRows(rows: any[]): any[] {
+  if (!rows || rows.length === 0) return [];
+
+  return rows.map((row) => {
+    // Already in array format
+    if (Array.isArray(row.shifts)) return row;
+
+    // Compact object format — convert to array
+    if (row.shifts && typeof row.shifts === "object") {
+      const shiftsArray = Object.entries(row.shifts).map(([date, code]) => ({
+        date: parseInt(date, 10),
+        code: String(code),
+        confidence: 1.0,
+      }));
+      // Sort by date for consistency
+      shiftsArray.sort((a, b) => a.date - b.date);
+      return { ...row, shifts: shiftsArray };
+    }
+
+    return row;
+  });
+}
+
+/**
+ * Try to repair truncated JSON (when Gemini output exceeds maxOutputTokens).
+ * Strips the last incomplete entry and closes all open brackets/braces.
+ */
+function tryRepairTruncatedJson(text: string): any | null {
+  try {
+    // Already valid
+    return JSON.parse(text);
+  } catch (_) {
+    // Continue with repair
+  }
+
+  // Remove trailing incomplete value after last comma
+  let repaired = text.replace(/,\s*(?:"[^"]*"\s*:\s*)?(?:"[^"]*)?$/, "");
+  repaired = repaired.replace(/,\s*\{[^}]*$/, "");
+  repaired = repaired.replace(/,\s*$/, "");
+
+  // Count unclosed brackets/braces and close them
+  let braces = 0;
+  let brackets = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (const char of repaired) {
+    if (escaped) { escaped = false; continue; }
+    if (char === "\\") { escaped = true; continue; }
+    if (char === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (char === "{") braces++;
+    if (char === "}") braces--;
+    if (char === "[") brackets++;
+    if (char === "]") brackets--;
+  }
+
+  while (brackets > 0) { repaired += "]"; brackets--; }
+  while (braces > 0) { repaired += "}"; braces--; }
+
+  try {
+    const parsed = JSON.parse(repaired);
+    // Sanity check: must have rows array
+    if (parsed.rows && Array.isArray(parsed.rows) && parsed.rows.length > 0) {
+      return parsed;
+    }
+    return null;
+  } catch (_) {
+    return null;
+  }
+}
 
 function calculateOverallConfidence(rows: any[]): number {
   if (!rows || rows.length === 0) return 0;

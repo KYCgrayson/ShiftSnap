@@ -55,7 +55,7 @@ BEGIN
 
   -- Auto-create a default group for the user
   INSERT INTO public.groups (id, name, invite_code, created_by)
-  VALUES (uuid_generate_v4(), COALESCE(NEW.raw_user_meta_data->>'display_name', split_part(NEW.email, '@', 1)) || '''s Team', invite, NEW.id)
+  VALUES (gen_random_uuid(), COALESCE(NEW.raw_user_meta_data->>'display_name', split_part(NEW.email, '@', 1)) || '''s Team', invite, NEW.id)
   RETURNING id INTO new_group_id;
 
   -- Add user as admin of the new group
@@ -83,7 +83,7 @@ BEGIN
     )
   LOOP
     invite := upper(substr(md5(random()::text || u.id::text), 1, 6));
-    new_group_id := uuid_generate_v4();
+    new_group_id := gen_random_uuid();
 
     INSERT INTO public.groups (id, name, invite_code, created_by)
     VALUES (new_group_id, COALESCE(u.display_name, split_part(u.email, '@', 1)) || '''s Team', invite, u.id);

@@ -86,7 +86,7 @@ export default function TermsScreen() {
           7. Contact Us
         </Text>
         <Text style={[styles.paragraph, { color: theme.colors.textSecondary }]}>
-          If you have any questions about these Terms of Service, please contact us at support@shiftsnap.app
+          If you have any questions about these Terms of Service, please use the feedback form in Settings → Help & Support.
         </Text>
       </ScrollView>
     </SafeAreaView>

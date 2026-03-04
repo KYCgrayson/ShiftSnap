@@ -97,7 +97,7 @@ export default function PrivacyScreen() {
           6. Contact Us
         </Text>
         <Text style={[styles.paragraph, { color: theme.colors.textSecondary }]}>
-          If you have any questions or concerns about this Privacy Policy or our data practices, please contact us at support@shiftsnap.app
+          If you have any questions or concerns about this Privacy Policy or our data practices, please use the feedback form in Settings → Help & Support.
         </Text>
       </ScrollView>
     </SafeAreaView>

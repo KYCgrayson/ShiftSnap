@@ -65,6 +65,8 @@ export default function SettingsScreen() {
   const [colorEditTarget, setColorEditTarget] = useState<{ type: 'self' } | { type: 'person'; personId: string } | null>(null);
   const [showAddCoworker, setShowAddCoworker] = useState(false);
   const [newCoworkerName, setNewCoworkerName] = useState('');
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [feedbackText, setFeedbackText] = useState('');
   const [showJoinGroup, setShowJoinGroup] = useState(false);
   const [joinInviteCode, setJoinInviteCode] = useState('');
   const [showShareInvite, setShowShareInvite] = useState(false);
@@ -169,22 +171,9 @@ export default function SettingsScreen() {
         {
           text: t('settings.deleteAndSignOut'),
           style: 'destructive',
-          onPress: () => {
-            Alert.alert(
-              t('settings.deleteAccountFinalTitle'),
-              t('settings.deleteAccountFinalDesc'),
-              [
-                { text: t('common.cancel'), style: 'cancel' },
-                {
-                  text: t('common.delete'),
-                  style: 'destructive',
-                  onPress: async () => {
-                    await signOut();
-                    router.replace('/(auth)/welcome');
-                  },
-                },
-              ]
-            );
+          onPress: async () => {
+            await signOut();
+            router.replace('/(auth)/welcome');
           },
         },
       ]
@@ -926,7 +915,7 @@ export default function SettingsScreen() {
             <SettingsItem
               icon="help-circle-outline"
               title={t('settings.helpSupport')}
-              onPress={() => Linking.openURL('mailto:support@shiftsnap.app')}
+              onPress={() => { setFeedbackText(''); setShowFeedback(true); }}
             />
             <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
             <SettingsItem
@@ -1116,6 +1105,65 @@ export default function SettingsScreen() {
               >
                 <Text style={[styles.modalButtonText, { color: theme.colors.white }]}>
                   {t('common.save')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Feedback / Help Modal */}
+      <Modal visible={showFeedback} transparent animationType="fade">
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowFeedback(false)}
+        >
+          <View
+            style={[styles.modalContent, { backgroundColor: theme.colors.cardBackground }]}
+            onStartShouldSetResponder={() => true}
+          >
+            <Text style={[styles.modalTitle, { color: theme.colors.textPrimary }]}>
+              {t('settings.helpSupport')}
+            </Text>
+            <TextInput
+              style={[styles.modalInput, styles.feedbackInput, {
+                color: theme.colors.textPrimary,
+                borderColor: theme.colors.border,
+                backgroundColor: theme.colors.warmWhite,
+              }]}
+              placeholder={t('settings.feedbackPlaceholder')}
+              placeholderTextColor={theme.colors.textMuted}
+              value={feedbackText}
+              onChangeText={setFeedbackText}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              autoFocus
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, { borderColor: theme.colors.border }]}
+                onPress={() => setShowFeedback(false)}
+              >
+                <Text style={[styles.modalButtonText, { color: theme.colors.textSecondary }]}>
+                  {t('common.cancel')}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, {
+                  borderColor: theme.colors.primary,
+                  backgroundColor: feedbackText.trim() ? theme.colors.primary : theme.colors.primary + '50',
+                }]}
+                disabled={!feedbackText.trim()}
+                onPress={() => {
+                  // TODO: send feedback to backend when ready
+                  setShowFeedback(false);
+                  Alert.alert(t('settings.feedbackSent'), t('settings.feedbackSentDesc'));
+                }}
+              >
+                <Text style={[styles.modalButtonText, { color: theme.colors.white }]}>
+                  {t('settings.sendFeedback')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1383,6 +1431,11 @@ const styles = StyleSheet.create({
   modalButtonText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  feedbackInput: {
+    height: 120,
+    textAlignVertical: 'top',
+    paddingTop: 12,
   },
   inviteCodeDisplay: {
     flexDirection: 'row',

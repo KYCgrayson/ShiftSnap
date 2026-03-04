@@ -8,7 +8,9 @@ import {
   TouchableOpacity,
   FlatList,
   Alert,
+  Switch,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -21,6 +23,9 @@ import { useScheduleStore } from '../../src/stores/scheduleStore';
 import { useCalendarStore } from '../../src/stores/calendarStore';
 import { COMMON_SHIFT_CODES } from '@shiftsnap/shared';
 import { GuestUpgradeBanner } from '../../src/components/GuestUpgradeBanner';
+
+const UNIFY_DAYOFF_KEY = 'shiftsnap_unify_dayoff';
+const UNIFY_DAYOFF_SYMBOL_KEY = 'shiftsnap_unify_dayoff_symbol';
 
 interface LocalShiftCode {
   id: string;
@@ -56,6 +61,10 @@ export default function ShiftsScreen() {
   const [scheduleId, setScheduleId] = useState<string | null>(null);
   const [yearMonth, setYearMonth] = useState<string | null>(null);
 
+  // Unify day-off symbol
+  const [unifyDayOff, setUnifyDayOff] = useState(false);
+  const [unifyDayOffSymbol, setUnifyDayOffSymbol] = useState('');
+
   // Editing existing shift code
   const [editingCodeId, setEditingCodeId] = useState<string | null>(null);
   const [editMeaning, setEditMeaning] = useState('');
@@ -74,12 +83,35 @@ export default function ShiftsScreen() {
     isConfirmed: sc.is_confirmed,
   }));
 
+  const dayOffCodes = shiftCodes
+    .filter((sc) => sc.isDayOff)
+    .map((sc) => sc.code)
+    .sort((a, b) => a.length - b.length || a.localeCompare(b));
+
   // Load shift codes
   useEffect(() => {
     if (user?.id) {
       fetchShiftCodes(user.id);
     }
   }, [user?.id]);
+
+  // Load unify day-off settings
+  useEffect(() => {
+    AsyncStorage.getItem(UNIFY_DAYOFF_KEY).then((val) => {
+      if (val !== null) setUnifyDayOff(val === 'true');
+    });
+    AsyncStorage.getItem(UNIFY_DAYOFF_SYMBOL_KEY).then((val) => {
+      if (val) setUnifyDayOffSymbol(val);
+    });
+  }, []);
+
+  // Auto-detect default symbol when dayOffCodes appear and no symbol is set
+  useEffect(() => {
+    if (!unifyDayOffSymbol && dayOffCodes.length > 0) {
+      setUnifyDayOffSymbol(dayOffCodes[0]);
+      AsyncStorage.setItem(UNIFY_DAYOFF_SYMBOL_KEY, dayOffCodes[0]);
+    }
+  }, [dayOffCodes.length]);
 
   // Handle OCR result from scan
   useEffect(() => {
@@ -350,6 +382,58 @@ export default function ShiftsScreen() {
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <GuestUpgradeBanner message={t('guest.shiftsMessage')} />
+
+        {/* Unify Day-Off Symbol */}
+        {dayOffCodes.length > 0 && (
+          <Card style={styles.unifyCard}>
+            <View style={styles.unifyRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.unifyTitle, { color: theme.colors.textPrimary }]}>
+                  {t('settings.unifyDayOff')}
+                </Text>
+                <Text style={[styles.unifyDesc, { color: theme.colors.textSecondary }]}>
+                  {t('settings.unifyDayOffDesc')}
+                </Text>
+              </View>
+              <Switch
+                value={unifyDayOff}
+                onValueChange={(val) => {
+                  setUnifyDayOff(val);
+                  AsyncStorage.setItem(UNIFY_DAYOFF_KEY, String(val));
+                }}
+                trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+                thumbColor={theme.colors.white}
+              />
+            </View>
+            {unifyDayOff && (
+              <View style={styles.chipRow}>
+                {dayOffCodes.map((code) => {
+                  const selected = code === unifyDayOffSymbol;
+                  return (
+                    <TouchableOpacity
+                      key={code}
+                      style={[
+                        styles.chip,
+                        {
+                          backgroundColor: selected ? theme.colors.primary : theme.colors.warmWhite,
+                          borderColor: selected ? theme.colors.primary : theme.colors.border,
+                        },
+                      ]}
+                      onPress={() => {
+                        setUnifyDayOffSymbol(code);
+                        AsyncStorage.setItem(UNIFY_DAYOFF_SYMBOL_KEY, code);
+                      }}
+                    >
+                      <Text style={[styles.chipText, { color: selected ? theme.colors.white : theme.colors.textPrimary }]}>
+                        {code}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+          </Card>
+        )}
 
         {/* Pending Codes Alert */}
         {pendingCodes.length > 0 && (
@@ -747,5 +831,36 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 8,
     alignItems: 'center',
+  },
+  unifyCard: {
+    marginBottom: 16,
+  },
+  unifyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  unifyTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  unifyDesc: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  chipText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
 });

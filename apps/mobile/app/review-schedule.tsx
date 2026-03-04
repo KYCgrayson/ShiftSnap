@@ -12,13 +12,24 @@ import {
   Platform,
   FlatList,
   Switch,
+  Image,
+  Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  runOnJS,
+} from 'react-native-reanimated';
 import { useTheme } from '../src/theme';
+import { supabase } from '../src/services/supabase';
 import { Card, Button, Input, TimePickerInput } from '../src/components/ui';
 import { useAuthStore } from '../src/stores/authStore';
 import { useShiftCodeStore } from '../src/stores/shiftCodeStore';
@@ -31,6 +42,8 @@ import type { OCRResult, OCRShift } from '@shiftsnap/shared';
 const MY_COLOR_KEY = 'shiftsnap_my_schedule_color';
 
 const STEPS = [1, 2, 3, 4] as const;
+const IMAGE_STRIP_HEIGHT = 150;
+const SCREEN_WIDTH = Dimensions.get('window').width;
 
 export default function ReviewScheduleScreen() {
   const theme = useTheme();
@@ -78,8 +91,24 @@ export default function ReviewScheduleScreen() {
   const [selfColor, setSelfColor] = useState('#4F6BFF');
   const [showColorPickerForRow, setShowColorPickerForRow] = useState<number | null>(null);
 
+  // Step 1: Re-analyze
+  const [reanalyzing, setReanalyzing] = useState(false);
+
   // Step 4: Saving
   const [saving, setSaving] = useState(false);
+
+  // Image reference strip
+  const [imageDims, setImageDims] = useState<{ width: number; height: number } | null>(null);
+  const [imageLoadFailed, setImageLoadFailed] = useState(false);
+
+  // Gesture-based image strip transform
+  const stripContainerWidth = SCREEN_WIDTH - 32; // minus padding
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const scale = useSharedValue(1);
+  const savedTranslateX = useSharedValue(0);
+  const savedTranslateY = useSharedValue(0);
+  const savedScale = useSharedValue(1);
 
   const scheduleId = params.scheduleId;
 
@@ -131,6 +160,102 @@ export default function ReviewScheduleScreen() {
       if (color) setSelfColor(color);
     });
   }, []);
+
+  // Get original image dimensions for reference strip
+  useEffect(() => {
+    setImageLoadFailed(false);
+    if (params.imageUrl) {
+      Image.getSize(
+        params.imageUrl,
+        (width, height) => setImageDims({ width, height }),
+        () => {
+          console.warn('Failed to get image dimensions for:', params.imageUrl?.slice(0, 80));
+          // Fallback: use typical phone photo aspect ratio so image strip still shows
+          setImageDims({ width: 4032, height: 3024 });
+        }
+      );
+    }
+  }, [params.imageUrl]);
+
+  // Base image dimensions (fit width to container)
+  const imageBaseWidth = stripContainerWidth;
+  const imageBaseHeight = imageDims
+    ? imageDims.height * (stripContainerWidth / imageDims.width)
+    : 0;
+
+  // Calculate initial transform for image strip
+  const getInitialTransform = useCallback(() => {
+    if (!imageDims || !ocrData || selectedPersonIndex === null) return null;
+    const rowCount = ocrData.rows.length + 1; // +1 for header row
+    const rowHeight = imageBaseHeight / rowCount;
+    // Center the selected person's row vertically in the strip
+    const selectedRowCenter = (selectedPersonIndex + 1 + 0.5) * rowHeight;
+    const yOffset = -(selectedRowCenter - IMAGE_STRIP_HEIGHT / 2);
+    return { scale: 1, translateX: 0, translateY: yOffset };
+  }, [imageDims, ocrData, selectedPersonIndex, imageBaseHeight]);
+
+  const resetTransform = useCallback(() => {
+    const initial = getInitialTransform();
+    if (!initial) return;
+    translateX.value = withTiming(initial.translateX, { duration: 300 });
+    translateY.value = withTiming(initial.translateY, { duration: 300 });
+    scale.value = withTiming(initial.scale, { duration: 300 });
+    savedTranslateX.value = initial.translateX;
+    savedTranslateY.value = initial.translateY;
+    savedScale.value = initial.scale;
+  }, [getInitialTransform]);
+
+  // Set initial transform when image dims / selected person change
+  useEffect(() => {
+    const initial = getInitialTransform();
+    if (!initial) return;
+    translateX.value = initial.translateX;
+    translateY.value = initial.translateY;
+    scale.value = initial.scale;
+    savedTranslateX.value = initial.translateX;
+    savedTranslateY.value = initial.translateY;
+    savedScale.value = initial.scale;
+  }, [imageDims, selectedPersonIndex, ocrData]);
+
+  // Gesture definitions for image strip
+  const panGesture = Gesture.Pan()
+    .minPointers(2)
+    .onUpdate((e) => {
+      translateX.value = savedTranslateX.value + e.translationX;
+      translateY.value = savedTranslateY.value + e.translationY;
+    })
+    .onEnd(() => {
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
+    });
+
+  const pinchGesture = Gesture.Pinch()
+    .onUpdate((e) => {
+      const newScale = savedScale.value * e.scale;
+      scale.value = Math.min(Math.max(newScale, 0.5), 5);
+    })
+    .onEnd(() => {
+      savedScale.value = scale.value;
+    });
+
+  const doubleTapGesture = Gesture.Tap()
+    .numberOfTaps(2)
+    .onStart(() => {
+      runOnJS(resetTransform)();
+    });
+
+  const composedGesture = Gesture.Race(
+    doubleTapGesture,
+    Gesture.Simultaneous(panGesture, pinchGesture)
+  );
+
+  const animatedImageStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
+    ],
+  }));
 
   // Initialize coworker selections when OCR data and selected person are set
   useEffect(() => {
@@ -304,13 +429,11 @@ export default function ReviewScheduleScreen() {
   };
 
   // --- Code confirmation (shared by Step 2 & 3) ---
+  const [savingCode, setSavingCode] = useState(false);
+
   const handleExpandCode = (code: string) => {
-    if (expandedCode === code) {
-      setExpandedCode(null);
-      return;
-    }
-    setExpandedCode(code);
-    // Pre-fill from existing DB entry, or from COMMON_SHIFT_CODES
+    if (savingCode) return;
+    // Always open as modal — pre-fill from existing DB entry, or from COMMON_SHIFT_CODES
     const existing = shiftCodes.find((sc) => sc.code === code);
     if (existing) {
       setDefMeaning(existing.meaning);
@@ -331,26 +454,98 @@ export default function ReviewScheduleScreen() {
         setDefIsDayOff(false);
       }
     }
+    setExpandedCode(code);
   };
 
   const handleConfirmCode = async (code: string) => {
-    if (!user) return;
+    if (!user || savingCode) return;
     if (!defMeaning.trim()) {
       Alert.alert(t('common.error'), t('shifts.meaningRequired'));
       return;
     }
 
-    await saveShiftCode(
-      user.id,
-      code,
-      defMeaning.trim(),
-      defIsDayOff ? null : defStartTime || null,
-      defIsDayOff ? null : defEndTime || null,
-      defIsDayOff
-    );
+    setSavingCode(true);
+    try {
+      await saveShiftCode(
+        user.id,
+        code,
+        defMeaning.trim(),
+        defIsDayOff ? null : defStartTime || null,
+        defIsDayOff ? null : defEndTime || null,
+        defIsDayOff
+      );
 
-    setSessionConfirmedCodes((prev) => new Set(prev).add(code));
-    setExpandedCode(null);
+      setSessionConfirmedCodes((prev) => new Set(prev).add(code));
+      setExpandedCode(null);
+    } catch (e) {
+      console.error('Failed to save shift code:', e);
+      Alert.alert(t('common.error'), t('shifts.failedToSave'));
+    } finally {
+      setSavingCode(false);
+    }
+  };
+
+  // Quick confirm as day off (bypass modal)
+  const handleQuickDayOff = async (code: string) => {
+    if (!user || savingCode) return;
+    setSavingCode(true);
+    try {
+      await saveShiftCode(user.id, code, t('review.dayOff'), null, null, true);
+      setSessionConfirmedCodes((prev) => new Set(prev).add(code));
+    } catch (e) {
+      console.error('Failed to save shift code:', e);
+      Alert.alert(t('common.error'), t('shifts.failedToSave'));
+    } finally {
+      setSavingCode(false);
+    }
+  };
+
+  // Re-analyze the schedule image
+  const handleReanalyze = async () => {
+    if (!params.imageUrl || reanalyzing) return;
+    setReanalyzing(true);
+    try {
+      // Convert image to base64
+      const response = await fetch(params.imageUrl);
+      const blob = await response.blob();
+      const base64: string = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const dataUrl = reader.result as string;
+          resolve(dataUrl.split(',')[1]);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+
+      // Call OCR with hint to extract more rows
+      const { data, error } = await supabase.functions.invoke('ocr-process', {
+        body: {
+          imageBase64: base64,
+          imageMimeType: 'image/jpeg',
+          hint: 'Please extract ALL rows/people from the schedule. Include every person visible in the image, even if partially visible.',
+        },
+      });
+
+      if (error || !data?.success) {
+        throw new Error(data?.raw_response || error?.message || 'OCR failed');
+      }
+
+      // Update OCR data with new results
+      const newOcrData: OCRResult = data;
+      setOcrData(newOcrData);
+      if (newOcrData.detected_year) setEditYear(newOcrData.detected_year);
+      if (newOcrData.detected_month) setEditMonth(newOcrData.detected_month);
+      // Reset person selection
+      setSelectedPersonIndex(null);
+      setSessionConfirmedCodes(new Set());
+      setSessionIgnoredCodes(new Set());
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      Alert.alert(t('common.error'), msg);
+    } finally {
+      setReanalyzing(false);
+    }
   };
 
   // --- Step navigation ---
@@ -507,22 +702,18 @@ export default function ReviewScheduleScreen() {
       const isExpanded = expandedCode === code;
       const isIgnored = sessionIgnoredCodes.has(code);
 
-      // Determine status color and icon
+      // Determine status color
       let statusColor = theme.colors.success;
-      let statusIcon: 'checkmark-circle' | 'alert-circle' | 'help-circle' | 'remove-circle' = 'checkmark-circle';
       let statusLabel = t('review.confirmed');
       if (isIgnored) {
         statusColor = theme.colors.textMuted;
-        statusIcon = 'remove-circle';
         statusLabel = t('review.ignored');
       } else if (needsConfirm) {
         if (status === 'suggested') {
           statusColor = theme.colors.warning;
-          statusIcon = 'alert-circle';
           statusLabel = t('review.needsConfirm');
         } else {
           statusColor = theme.colors.error;
-          statusIcon = 'help-circle';
           statusLabel = t('review.needsDefinition');
         }
       }
@@ -549,6 +740,7 @@ export default function ReviewScheduleScreen() {
               },
             ]}
             onPress={() => {
+              if (savingCode) return;
               if (isIgnored) {
                 setSessionIgnoredCodes((prev) => { const n = new Set(prev); n.delete(code); return n; });
               } else {
@@ -565,111 +757,38 @@ export default function ReviewScheduleScreen() {
               </Text>
               <Text style={[styles.codeStatus, { color: statusColor }]}>{statusLabel}</Text>
             </View>
-            <Ionicons name={statusIcon} size={20} color={statusColor} />
             {!isIgnored && needsConfirm && (
-              <TouchableOpacity
-                onPress={() => setSessionIgnoredCodes((prev) => new Set(prev).add(code))}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                style={{ marginLeft: 4 }}
-              >
-                <Ionicons name="close-circle-outline" size={20} color={theme.colors.textMuted} />
-              </TouchableOpacity>
+              <View style={styles.codeRowActions}>
+                <TouchableOpacity
+                  onPress={(e) => {
+                    e.stopPropagation?.();
+                    handleQuickDayOff(code);
+                  }}
+                  disabled={savingCode}
+                  style={[styles.quickDayOffBtn, { backgroundColor: theme.colors.success + '18', borderColor: theme.colors.success + '40' }]}
+                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                >
+                  <Ionicons name="checkmark" size={20} color={theme.colors.success} />
+                  <Text style={[styles.quickDayOffLabel, { color: theme.colors.success }]}>
+                    {t('review.dayOff')}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={(e) => {
+                    e.stopPropagation?.();
+                    setSessionIgnoredCodes((prev) => new Set(prev).add(code));
+                  }}
+                  style={[styles.codeRowIgnoreBtn, { borderColor: theme.colors.textMuted + '40' }]}
+                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                >
+                  <Ionicons name="close" size={18} color={theme.colors.textMuted} />
+                </TouchableOpacity>
+              </View>
             )}
-            {!isIgnored && (
-              <Ionicons
-                name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                size={16}
-                color={theme.colors.textMuted}
-                style={{ marginLeft: 4 }}
-              />
+            {!needsConfirm && !isIgnored && (
+              <Ionicons name="checkmark-circle" size={20} color={theme.colors.success} />
             )}
           </TouchableOpacity>
-
-          {/* Expanded definition area */}
-          {isExpanded && !isIgnored && (
-            <View style={[styles.codeExpandedArea, { backgroundColor: theme.colors.cardBackground, borderColor: theme.colors.border }]}>
-              <Input
-                label={t('shifts.meaning')}
-                placeholder={t('shifts.meaningPlaceholder')}
-                value={defMeaning}
-                onChangeText={setDefMeaning}
-              />
-
-              <TouchableOpacity
-                style={styles.dayOffToggle}
-                onPress={() => setDefIsDayOff(!defIsDayOff)}
-              >
-                <View
-                  style={[
-                    styles.checkbox,
-                    {
-                      borderColor: theme.colors.border,
-                      backgroundColor: defIsDayOff ? theme.colors.primary : 'transparent',
-                    },
-                  ]}
-                >
-                  {defIsDayOff && <Ionicons name="checkmark" size={14} color={theme.colors.white} />}
-                </View>
-                <Text style={[styles.dayOffText, { color: theme.colors.textPrimary }]}>
-                  {t('shifts.thisIsDayOff')}
-                </Text>
-              </TouchableOpacity>
-
-              {!defIsDayOff && (
-                <>
-                  <TimePickerInput
-                    label={t('shifts.startTime')}
-                    placeholder={t('shifts.startTimePlaceholder')}
-                    value={defStartTime}
-                    onChange={setDefStartTime}
-                  />
-                  <TimePickerInput
-                    label={t('shifts.endTime')}
-                    placeholder={t('shifts.endTimePlaceholder')}
-                    value={defEndTime}
-                    onChange={setDefEndTime}
-                  />
-                </>
-              )}
-
-              {/* Quick fill chips */}
-              <View style={styles.quickFillSection}>
-                <Text style={[styles.quickFillLabel, { color: theme.colors.textSecondary }]}>
-                  {t('review.quickFill')}
-                </Text>
-                <View style={styles.quickFillRow}>
-                  {[
-                    { label: t('review.dayOff'), meaning: 'Day off', isDayOff: true, time: '', endTime: '' },
-                    { label: t('review.morning'), meaning: 'Morning shift', isDayOff: false, time: '06:00', endTime: '14:00' },
-                    { label: t('review.afternoon'), meaning: 'Afternoon shift', isDayOff: false, time: '14:00', endTime: '22:00' },
-                    { label: t('review.night'), meaning: 'Night shift', isDayOff: false, time: '22:00', endTime: '06:00' },
-                  ].map((preset) => (
-                    <TouchableOpacity
-                      key={preset.label}
-                      style={[styles.quickFillChip, { borderColor: theme.colors.border }]}
-                      onPress={() => {
-                        setDefMeaning(preset.meaning);
-                        setDefIsDayOff(preset.isDayOff);
-                        setDefStartTime(preset.time);
-                        setDefEndTime(preset.endTime);
-                      }}
-                    >
-                      <Text style={[styles.quickFillChipText, { color: theme.colors.primary }]}>
-                        {preset.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-              <Button
-                title={needsConfirm ? t('review.confirm') : t('review.update')}
-                onPress={() => handleConfirmCode(code)}
-                fullWidth
-                style={{ marginTop: 4 }}
-              />
-            </View>
-          )}
         </View>
       );
     });
@@ -721,6 +840,30 @@ export default function ReviewScheduleScreen() {
             </View>
           </Card>
         )}
+        ListFooterComponent={
+          <View style={styles.reanalyzeSection}>
+            <Text style={[styles.reanalyzeHint, { color: theme.colors.textMuted }]}>
+              {t('review.reanalyzeHint')}
+            </Text>
+            <TouchableOpacity
+              style={[styles.reanalyzeBtn, {
+                backgroundColor: theme.colors.warning + '12',
+                borderColor: theme.colors.warning + '50',
+              }]}
+              onPress={handleReanalyze}
+              disabled={reanalyzing}
+            >
+              {reanalyzing ? (
+                <ActivityIndicator size="small" color={theme.colors.warning} />
+              ) : (
+                <Ionicons name="refresh" size={22} color={theme.colors.warning} />
+              )}
+              <Text style={[styles.reanalyzeBtnText, { color: theme.colors.warning }]}>
+                {reanalyzing ? t('review.reanalyzing') : t('review.reanalyze')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        }
       />
     </View>
   );
@@ -784,7 +927,7 @@ export default function ReviewScheduleScreen() {
         </View>
 
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 100 }}>
-          {/* Date strip — horizontal scroll */}
+          {/* Date strip — horizontal scroll with image reference */}
           <View style={styles.dateStripSection}>
             <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
               {t('review.myScheduleTitle')}
@@ -792,33 +935,77 @@ export default function ReviewScheduleScreen() {
             <Text style={[styles.sectionHint, { color: theme.colors.textSecondary }]}>
               {t('review.tapDateToEdit')}
             </Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dateStrip}>
-              {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
-                const shift = shiftMap.get(day);
-                const bgColor = shift
-                  ? getConfidenceColor(shift.confidence) + '20'
-                  : 'transparent';
 
-                return (
-                  <TouchableOpacity
-                    key={day}
-                    style={[styles.dateCell, {
-                      backgroundColor: bgColor,
-                      borderColor: shift ? getConfidenceColor(shift.confidence) + '40' : theme.colors.border,
-                    }]}
-                    onPress={() => handleCellPress(day, shift?.code || '')}
-                  >
-                    <Text style={[styles.dateCellDay, { color: theme.colors.textSecondary }]}>
-                      {day}
-                    </Text>
-                    <Text style={[styles.dateCellCode, {
-                      color: shift ? getConfidenceColor(shift.confidence) : theme.colors.textMuted,
-                    }]}>
-                      {shift?.code || '·'}
+            {/* Image strip — independent area with gesture support */}
+            {imageDims && params.imageUrl && selectedPersonIndex !== null && !imageLoadFailed && (
+              <View style={styles.imageStripContainer}>
+                <View style={styles.imageStripHeader}>
+                  <Text style={[styles.imageStripLabel, { color: theme.colors.textMuted }]}>
+                    {t('review.originalReference')}
+                  </Text>
+                  <TouchableOpacity onPress={resetTransform}>
+                    <Text style={[styles.imageStripResetLabel, { color: theme.colors.primary }]}>
+                      {t('review.doubleTapToReset')}
                     </Text>
                   </TouchableOpacity>
-                );
-              })}
+                </View>
+                <View style={[styles.imageStripCrop, {
+                  height: IMAGE_STRIP_HEIGHT,
+                  borderColor: theme.colors.primary + '40',
+                }]}>
+                  <GestureDetector gesture={composedGesture}>
+                    <Animated.Image
+                      source={{ uri: params.imageUrl }}
+                      style={[
+                        {
+                          width: imageBaseWidth,
+                          height: imageBaseHeight,
+                          position: 'absolute',
+                          left: 0,
+                          top: 0,
+                          transformOrigin: 'top left',
+                        },
+                        animatedImageStyle,
+                      ]}
+                      onError={() => setImageLoadFailed(true)}
+                    />
+                  </GestureDetector>
+                </View>
+              </View>
+            )}
+
+            {/* Date cells — still in horizontal ScrollView */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dateStrip}>
+              <View>
+                <View style={{ flexDirection: 'row', gap: 6 }}>
+                  {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
+                    const shift = shiftMap.get(day);
+                    const bgColor = shift
+                      ? getConfidenceColor(shift.confidence) + '20'
+                      : 'transparent';
+
+                    return (
+                      <TouchableOpacity
+                        key={day}
+                        style={[styles.dateCell, {
+                          backgroundColor: bgColor,
+                          borderColor: shift ? getConfidenceColor(shift.confidence) + '40' : theme.colors.border,
+                        }]}
+                        onPress={() => handleCellPress(day, shift?.code || '')}
+                      >
+                        <Text style={[styles.dateCellDay, { color: theme.colors.textSecondary }]}>
+                          {day}
+                        </Text>
+                        <Text style={[styles.dateCellCode, {
+                          color: shift ? getConfidenceColor(shift.confidence) : theme.colors.textMuted,
+                        }]}>
+                          {shift?.code || '·'}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
             </ScrollView>
           </View>
 
@@ -1183,6 +1370,139 @@ export default function ReviewScheduleScreen() {
           </TouchableOpacity>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Code Definition Modal */}
+      <Modal visible={!!expandedCode} transparent animationType="fade">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => { if (!savingCode) setExpandedCode(null); }}
+          >
+            <TouchableOpacity activeOpacity={1} style={[styles.codeDefModalContent, { backgroundColor: theme.colors.cardBackground }]}>
+              {/* Modal header with code badge */}
+              <View style={styles.codeDefHeader}>
+                <View style={[styles.codeBadge, { backgroundColor: theme.colors.primary + '18' }]}>
+                  <Text style={[styles.codeBadgeText, { color: theme.colors.primary }]}>{expandedCode}</Text>
+                </View>
+                <Text style={[styles.modalTitle, { color: theme.colors.textPrimary, marginBottom: 0, flex: 1 }]}>
+                  {t('shifts.whatDoesMean', { code: expandedCode })}
+                </Text>
+              </View>
+
+              {/* Quick fill chips */}
+              <View style={styles.quickFillSection}>
+                <Text style={[styles.quickFillLabel, { color: theme.colors.textSecondary }]}>
+                  {t('review.quickFill')}
+                </Text>
+                <View style={styles.quickFillRow}>
+                  {[
+                    { label: t('review.dayOff'), meaning: t('review.dayOff'), dayOff: true, start: '', end: '' },
+                    { label: t('review.morning'), meaning: t('review.morning'), dayOff: false, start: '06:00', end: '14:00' },
+                    { label: t('review.afternoon'), meaning: t('review.afternoon'), dayOff: false, start: '14:00', end: '22:00' },
+                    { label: t('review.night'), meaning: t('review.night'), dayOff: false, start: '22:00', end: '06:00' },
+                  ].map((preset) => (
+                    <TouchableOpacity
+                      key={preset.label}
+                      style={[styles.quickFillChip, { borderColor: theme.colors.primary + '40' }]}
+                      onPress={() => {
+                        setDefMeaning(preset.meaning);
+                        setDefIsDayOff(preset.dayOff);
+                        setDefStartTime(preset.start);
+                        setDefEndTime(preset.end);
+                      }}
+                    >
+                      <Text style={[styles.quickFillChipText, { color: theme.colors.primary }]}>{preset.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Meaning input */}
+              <TextInput
+                style={[styles.codeDefInput, {
+                  color: theme.colors.textPrimary,
+                  borderColor: theme.colors.border,
+                  backgroundColor: theme.colors.warmWhite,
+                }]}
+                value={defMeaning}
+                onChangeText={setDefMeaning}
+                placeholder={t('shifts.meaningPlaceholder')}
+                placeholderTextColor={theme.colors.textMuted}
+                autoFocus
+              />
+
+              {/* Day off toggle */}
+              <TouchableOpacity
+                style={styles.dayOffToggle}
+                onPress={() => setDefIsDayOff(!defIsDayOff)}
+              >
+                <View style={[styles.checkbox, {
+                  borderColor: defIsDayOff ? theme.colors.primary : theme.colors.border,
+                  backgroundColor: defIsDayOff ? theme.colors.primary : 'transparent',
+                }]}>
+                  {defIsDayOff && <Ionicons name="checkmark" size={14} color="#fff" />}
+                </View>
+                <Text style={[styles.dayOffText, { color: theme.colors.textPrimary }]}>
+                  {t('shifts.thisIsDayOff')}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Time inputs (hidden when day off) */}
+              {!defIsDayOff && (
+                <View style={styles.codeDefTimeRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.codeDefTimeLabel, { color: theme.colors.textSecondary }]}>
+                      {t('shifts.startTime')}
+                    </Text>
+                    <TimePickerInput
+                      value={defStartTime}
+                      onChange={setDefStartTime}
+                      placeholder={t('shifts.startTimePlaceholder')}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.codeDefTimeLabel, { color: theme.colors.textSecondary }]}>
+                      {t('shifts.endTime')}
+                    </Text>
+                    <TimePickerInput
+                      value={defEndTime}
+                      onChange={setDefEndTime}
+                      placeholder={t('shifts.endTimePlaceholder')}
+                    />
+                  </View>
+                </View>
+              )}
+
+              {/* Action buttons */}
+              <View style={styles.modalActions}>
+                <Button
+                  title={t('review.ignore')}
+                  onPress={() => {
+                    if (expandedCode) {
+                      setSessionIgnoredCodes((prev) => new Set(prev).add(expandedCode));
+                    }
+                    setExpandedCode(null);
+                  }}
+                  variant="ghost"
+                  style={{ flex: 1 }}
+                  disabled={savingCode}
+                />
+                <Button
+                  title={savingCode ? t('review.saving') : t('review.confirm')}
+                  onPress={() => { if (expandedCode) handleConfirmCode(expandedCode); }}
+                  style={{ flex: 2 }}
+                  loading={savingCode}
+                  disabled={savingCode}
+                />
+              </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1300,6 +1620,30 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  reanalyzeSection: {
+    alignItems: 'center',
+    paddingTop: 16,
+    paddingBottom: 24,
+    gap: 8,
+  },
+  reanalyzeHint: {
+    fontSize: 13,
+  },
+  reanalyzeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    minWidth: 200,
+  },
+  reanalyzeBtnText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
   // Step 2: Month/Year row
   monthYearRow: {
     flexDirection: 'row',
@@ -1347,8 +1691,30 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   dateStrip: {
-    gap: 6,
     paddingVertical: 4,
+  },
+  imageStripContainer: {
+    marginBottom: 10,
+  },
+  imageStripHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  imageStripLabel: {
+    fontSize: 10,
+    letterSpacing: 0.3,
+  },
+  imageStripResetLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  imageStripCrop: {
+    overflow: 'hidden',
+    borderRadius: 8,
+    borderWidth: 1,
+    position: 'relative',
   },
   dateCell: {
     width: 44,
@@ -1377,11 +1743,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 12,
     borderRadius: 10,
     borderWidth: 1,
     marginTop: 8,
+    minHeight: 56,
+  },
+  codeRowActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  quickDayOffBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  quickDayOffLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  codeRowIgnoreBtn: {
+    padding: 8,
+    borderRadius: 8,
+    borderWidth: 1,
   },
   codeBadge: {
     minWidth: 40,
@@ -1545,6 +1935,33 @@ const styles = StyleSheet.create({
   coworkerName: {
     fontSize: 15,
     fontWeight: '600',
+  },
+  // Code Definition Modal
+  codeDefModalContent: {
+    width: 320,
+    borderRadius: 16,
+    padding: 20,
+    gap: 14,
+  },
+  codeDefHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  codeDefInput: {
+    fontSize: 16,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  codeDefTimeRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  codeDefTimeLabel: {
+    fontSize: 12,
+    marginBottom: 4,
   },
   coworkerHint: {
     fontSize: 12,

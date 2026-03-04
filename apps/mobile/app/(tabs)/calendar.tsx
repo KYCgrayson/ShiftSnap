@@ -10,10 +10,11 @@ import {
   Modal,
   Switch,
   Alert,
+  TextInput,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { Calendar, DateData } from 'react-native-calendars';
+import { Calendar, DateData, LocaleConfig } from 'react-native-calendars';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../src/theme';
 import { useAuthStore } from '../../src/stores/authStore';
@@ -26,8 +27,22 @@ import { GuestUpgradeBanner } from '../../src/components/GuestUpgradeBanner';
 import { CalendarDayWithBars } from '../../src/components/CalendarDayWithBars';
 import { useRealtimeShifts } from '../../src/hooks/useRealtimeShifts';
 import { useLocaleStore } from '../../src/stores/localeStore';
+import { useDailyNoteStore } from '../../src/stores/dailyNoteStore';
+import { useFocusEffect } from 'expo-router';
 import { formatYearMonth, PERSON_COLOR_HEX, getShiftTypeColor, ShiftTypeColors } from '@shiftsnap/shared';
+
+// Configure zh-TW locale for react-native-calendars
+LocaleConfig.locales['zh-TW'] = {
+  monthNames: ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'],
+  monthNamesShort: ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'],
+  dayNames: ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'],
+  dayNamesShort: ['日', '一', '二', '三', '四', '五', '六'],
+  today: '今天',
+};
+
 const SHOW_CODES_KEY = 'shiftsnap_show_shift_codes';
+const UNIFY_DAYOFF_KEY = 'shiftsnap_unify_dayoff';
+const UNIFY_DAYOFF_SYMBOL_KEY = 'shiftsnap_unify_dayoff_symbol';
 
 interface ShiftEvent {
   id: string;
@@ -42,6 +57,7 @@ interface ShiftEvent {
   source: string;
   nameOnSchedule: string | null;
   comparisonStatus: string | null;
+  shiftUserId: string;
 }
 
 export default function CalendarScreen() {
@@ -53,6 +69,7 @@ export default function CalendarScreen() {
   const { shiftCodes, fetchShiftCodes, getCodeInfo } = useShiftCodeStore();
   const { persons, fetchPersons, updatePerson } = usePersonStore();
   const { isConnected: calendarConnected, syncShift } = useCalendarStore();
+  const { notesByDate, fetchNotesForMonth, saveNote } = useDailyNoteStore();
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
@@ -62,6 +79,9 @@ export default function CalendarScreen() {
   const [colorEditTarget, setColorEditTarget] = useState<{ personId: string; personName: string } | null>(null);
   const [visiblePersonIds, setVisiblePersonIds] = useState<Set<string>>(new Set(['self']));
   const [showShiftCodes, setShowShiftCodes] = useState(false);
+  const [showCoworkerShifts, setShowCoworkerShifts] = useState(false);
+  const [unifyDayOff, setUnifyDayOff] = useState(false);
+  const [unifyDayOffSymbol, setUnifyDayOffSymbol] = useState('');
 
   // Shift edit modal state
   const [showEditModal, setShowEditModal] = useState(false);
@@ -69,7 +89,14 @@ export default function CalendarScreen() {
   const [editStartTime, setEditStartTime] = useState('');
   const [editEndTime, setEditEndTime] = useState('');
 
+  // Note modal state
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [noteText, setNoteText] = useState('');
+
   const userId = user?.id;
+
+  // Set calendar locale
+  LocaleConfig.defaultLocale = locale === 'zh-TW' ? 'zh-TW' : '';
 
   // Realtime shifts subscription
   useRealtimeShifts(userId, currentMonth);
@@ -80,6 +107,18 @@ export default function CalendarScreen() {
       if (val !== null) setShowShiftCodes(val === 'true');
     });
   }, []);
+
+  // Reload unify day-off settings when tab is focused
+  useFocusEffect(
+    useCallback(() => {
+      AsyncStorage.getItem(UNIFY_DAYOFF_KEY).then((val) => {
+        setUnifyDayOff(val === 'true');
+      });
+      AsyncStorage.getItem(UNIFY_DAYOFF_SYMBOL_KEY).then((val) => {
+        setUnifyDayOffSymbol(val || '');
+      });
+    }, [])
+  );
 
   // Auto-add new persons to visible set
   useEffect(() => {
@@ -107,6 +146,7 @@ export default function CalendarScreen() {
       fetchShiftCodes(userId);
       fetchPersons(userId);
       loadMonth(currentMonth);
+      fetchNotesForMonth(userId, currentMonth);
     }
   }, [userId, currentMonth]);
 
@@ -120,7 +160,9 @@ export default function CalendarScreen() {
   const shifts: ShiftEvent[] = useMemo(() => {
     return monthShifts.map((shift) => {
       const person = shift.person_id ? persons.find((p) => p.id === shift.person_id) : null;
-      const isSelf = shift.source === 'self_scan' || !shift.source || shift.source === 'manual';
+      // isSelf: must match both source type AND user_id
+      const isSelfSource = shift.source === 'self_scan' || !shift.source || shift.source === 'manual';
+      const isSelf = isSelfSource && shift.user_id === userId;
       // For self shifts: color by shift type (morning/afternoon/night/day-off)
       // For coworker shifts: color by person
       const codeInfo = getCodeInfo(shift.shift_code);
@@ -141,15 +183,32 @@ export default function CalendarScreen() {
         source: shift.source || 'self_scan',
         nameOnSchedule: (shift as any).name_on_schedule || null,
         comparisonStatus: (shift as any).comparison_status || null,
+        shiftUserId: shift.user_id,
       };
     });
-  }, [monthShifts, shiftCodes, theme, persons, getCodeInfo]);
+  }, [monthShifts, shiftCodes, theme, persons, getCodeInfo, userId]);
 
-  // Filter by visible person IDs
+  // Helper to check if a shift belongs to the current user
+  const isMyShift = useCallback((shift: ShiftEvent) => {
+    const isSelfSource = shift.source === 'self_scan' || shift.source === 'manual' || !shift.source;
+    return isSelfSource && shift.shiftUserId === userId;
+  }, [userId]);
+
+  // Helper to check if a shift's times differ from its shift code defaults
+  const isShiftOverridden = useCallback((shift: ShiftEvent) => {
+    const codeInfo = getCodeInfo(shift.code);
+    if (!codeInfo) return false;
+    const defaultStart = codeInfo.start_time || null;
+    const defaultEnd = codeInfo.end_time || null;
+    const shiftStart = shift.startTime || null;
+    const shiftEnd = shift.endTime || null;
+    return shiftStart !== defaultStart || shiftEnd !== defaultEnd;
+  }, [getCodeInfo]);
+
+  // Filter by visible person IDs, then sort: self first, then coworkers grouped by person
   const filteredShifts = useMemo(() => {
-    return shifts.filter((shift) => {
-      const isSelf = shift.source === 'self_scan' || shift.source === 'manual' || !shift.source;
-      if (isSelf) {
+    const filtered = shifts.filter((shift) => {
+      if (isMyShift(shift)) {
         return visiblePersonIds.has('self');
       }
       // Match by person_id directly
@@ -166,20 +225,63 @@ export default function CalendarScreen() {
       // No match — show if 'self' is visible (fallback)
       return visiblePersonIds.has('self');
     });
-  }, [shifts, visiblePersonIds, persons]);
+
+    // Sort: self shifts first, then coworker shifts grouped by personId
+    filtered.sort((a, b) => {
+      const aIsSelf = isMyShift(a);
+      const bIsSelf = isMyShift(b);
+      if (aIsSelf && !bIsSelf) return -1;
+      if (!aIsSelf && bIsSelf) return 1;
+      // Both coworker shifts — group by personId then personName
+      if (!aIsSelf && !bIsSelf) {
+        const aKey = a.personId || a.personName || '';
+        const bKey = b.personId || b.personName || '';
+        if (aKey !== bKey) return aKey.localeCompare(bKey);
+      }
+      return 0;
+    });
+
+    return filtered;
+  }, [shifts, visiblePersonIds, persons, isMyShift]);
 
   // Generate marked dates for calendar (bars format)
+  // Default: only self shifts; when expanded: include coworker shifts
   const markedDates = useMemo(() => {
     const marks: Record<string, any> = {};
 
     filteredShifts.forEach((shift) => {
+      if (!isMyShift(shift) && !showCoworkerShifts) return;
+
       if (!marks[shift.date]) {
         marks[shift.date] = { bars: [] };
       }
+      const mine = isMyShift(shift);
       marks[shift.date].bars.push({
         key: shift.id,
         color: shift.color,
-        label: shift.code,
+        label: (unifyDayOff && shift.isDayOff && unifyDayOffSymbol) ? unifyDayOffSymbol : shift.code,
+        isMine: mine,
+      });
+
+      // Mark days that have my data
+      if (isMyShift(shift)) {
+        marks[shift.date].hasMyData = true;
+      }
+    });
+
+    // Add note indicators
+    Object.keys(notesByDate).forEach((date) => {
+      if (!marks[date]) {
+        marks[date] = { bars: [], hasMyData: true };
+      } else {
+        marks[date].hasMyData = true;
+      }
+      marks[date].bars = marks[date].bars || [];
+      marks[date].bars.push({
+        key: `note-${date}`,
+        color: '#F97316',
+        label: '📝',
+        isNote: true,
       });
     });
 
@@ -195,14 +297,24 @@ export default function CalendarScreen() {
     }
 
     return marks;
-  }, [filteredShifts, selectedDate, theme]);
+  }, [filteredShifts, selectedDate, showCoworkerShifts, theme, isMyShift, unifyDayOff, unifyDayOffSymbol, notesByDate]);
 
   const selectedDateShifts = useMemo(() => {
     return filteredShifts.filter((shift) => shift.date === selectedDate);
   }, [filteredShifts, selectedDate]);
 
+  // Split into self vs coworker shifts for the selected date
+  const myDateShifts = useMemo(() => {
+    return selectedDateShifts.filter((s) => isMyShift(s));
+  }, [selectedDateShifts, isMyShift]);
+
+  const coworkerDateShifts = useMemo(() => {
+    return selectedDateShifts.filter((s) => !isMyShift(s));
+  }, [selectedDateShifts, isMyShift]);
+
   const handleDayPress = (day: DateData) => {
     setSelectedDate(day.dateString);
+    setShowCoworkerShifts(false);
   };
 
   const handleMonthChange = (month: DateData) => {
@@ -260,6 +372,33 @@ export default function CalendarScreen() {
     }
   };
 
+  // Note handlers
+  const openNoteModal = () => {
+    const existing = notesByDate[selectedDate];
+    setNoteText(existing?.content || '');
+    setShowNoteModal(true);
+  };
+
+  const handleSaveNote = async () => {
+    if (!userId) return;
+    try {
+      await saveNote(userId, selectedDate, noteText);
+      setShowNoteModal(false);
+    } catch {
+      Alert.alert(t('common.error'));
+    }
+  };
+
+  const handleDeleteNote = async () => {
+    if (!userId) return;
+    try {
+      await saveNote(userId, selectedDate, '');
+      setShowNoteModal(false);
+    } catch {
+      Alert.alert(t('common.error'));
+    }
+  };
+
   // Coworker entries: persons excluding the demo "Me"
   const coworkerEntries = useMemo(() => {
     return persons
@@ -291,9 +430,55 @@ export default function CalendarScreen() {
         <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
           {t('calendar.title')}
         </Text>
-        <TouchableOpacity style={styles.filterButton}>
-          <Ionicons name="filter-outline" size={22} color={theme.colors.textPrimary} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          {/* Toggle shift codes on calendar */}
+          <TouchableOpacity
+            style={styles.headerIconButton}
+            onPress={() => {
+              const val = !showShiftCodes;
+              setShowShiftCodes(val);
+              AsyncStorage.setItem(SHOW_CODES_KEY, String(val));
+            }}
+          >
+            <Text style={{
+              fontSize: 14,
+              fontWeight: '800',
+              color: showShiftCodes ? theme.colors.primary : theme.colors.textMuted,
+            }}>
+              {shiftCodes.find((sc) => !sc.is_day_off)?.code || 'A'}
+            </Text>
+          </TouchableOpacity>
+          {/* Toggle unify day-off symbol */}
+          {unifyDayOffSymbol !== '' && (
+            <TouchableOpacity
+              style={styles.headerIconButton}
+              onPress={() => {
+                const val = !unifyDayOff;
+                setUnifyDayOff(val);
+                AsyncStorage.setItem(UNIFY_DAYOFF_KEY, String(val));
+              }}
+            >
+              <Text style={{
+                fontSize: 14,
+                fontWeight: '800',
+                color: unifyDayOff ? theme.colors.primary : theme.colors.textMuted,
+              }}>
+                {unifyDayOffSymbol}
+              </Text>
+            </TouchableOpacity>
+          )}
+          {/* Toggle coworker shifts */}
+          <TouchableOpacity
+            style={styles.headerIconButton}
+            onPress={() => setShowCoworkerShifts(!showCoworkerShifts)}
+          >
+            <Ionicons
+              name={showCoworkerShifts ? 'people' : 'people-outline'}
+              size={20}
+              color={showCoworkerShifts ? theme.colors.primary : theme.colors.textMuted}
+            />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -309,7 +494,7 @@ export default function CalendarScreen() {
         {/* Calendar */}
         <Card style={styles.calendarCard} padding="small">
           <Calendar
-            key={`cal-${filteredShifts.length}-${[...visiblePersonIds].sort().join(',')}-${showShiftCodes}`}
+            key={`cal-${filteredShifts.length}-${[...visiblePersonIds].sort().join(',')}-${showShiftCodes}-${showCoworkerShifts}-${locale}`}
             current={selectedDate}
             onDayPress={handleDayPress}
             onMonthChange={handleMonthChange}
@@ -347,8 +532,9 @@ export default function CalendarScreen() {
             })}
           </Text>
 
-          {selectedDateShifts.length > 0 ? (
-            selectedDateShifts.map((shift) => {
+          {/* My shifts — always visible */}
+          {myDateShifts.length > 0 ? (
+            myDateShifts.map((shift) => {
               const codeInfo = getCodeInfo(shift.code);
               const isReference = shift.source === 'reference_scan';
               return (
@@ -372,19 +558,24 @@ export default function CalendarScreen() {
                     <View style={styles.shiftInfo}>
                       <Text style={[styles.shiftCode, { color: theme.colors.textPrimary }]}>
                         {shift.isDayOff
-                          ? codeInfo?.meaning || t('common.dayOff')
+                          ? (unifyDayOff && unifyDayOffSymbol
+                              ? unifyDayOffSymbol
+                              : (codeInfo?.meaning || t('common.dayOff')))
                           : codeInfo?.meaning || t('home.shift', { code: shift.code })}
                       </Text>
-                      {shift.personName && (
-                        <Text style={[styles.personName, { color: theme.colors.textSecondary }]}>
-                          {shift.personName}
-                        </Text>
-                      )}
                       {!shift.isDayOff && shift.startTime && (
                         <Text style={[styles.shiftTime, { color: theme.colors.textSecondary }]}>
                           {shift.startTime}
                           {shift.endTime && ` - ${shift.endTime}`}
                         </Text>
+                      )}
+                      {isShiftOverridden(shift) && (
+                        <View style={styles.overriddenBadge}>
+                          <Ionicons name="pencil" size={11} color="#D97706" />
+                          <Text style={styles.overriddenText}>
+                            {t('calendar.customTime')}
+                          </Text>
+                        </View>
                       )}
                       {isReference && (
                         <Text style={[styles.referenceLabel, { color: theme.colors.textMuted }]}>
@@ -415,6 +606,114 @@ export default function CalendarScreen() {
               </Text>
             </Card>
           )}
+
+          {/* Daily note */}
+          {notesByDate[selectedDate] ? (
+            <TouchableOpacity
+              style={[styles.noteCard, { backgroundColor: '#FFF7ED', borderColor: '#FDBA74' }]}
+              onPress={openNoteModal}
+              activeOpacity={0.7}
+            >
+              <View style={styles.noteIndicator} />
+              <Ionicons name="document-text-outline" size={16} color="#EA580C" />
+              <Text
+                style={[styles.noteText, { color: theme.colors.textPrimary }]}
+                numberOfLines={2}
+              >
+                {notesByDate[selectedDate].content}
+              </Text>
+              <Ionicons name="pencil-outline" size={14} color="#F97316" />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.addNoteButton, { borderColor: theme.colors.border }]}
+              onPress={openNoteModal}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="add" size={16} color={theme.colors.textMuted} />
+              <Text style={[styles.addNoteText, { color: theme.colors.textMuted }]}>
+                {t('calendar.addNote')}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Coworker shifts — expandable */}
+          {coworkerDateShifts.length > 0 && (
+            <>
+              <TouchableOpacity
+                style={[styles.coworkerExpandButton, { borderColor: theme.colors.border }]}
+                onPress={() => setShowCoworkerShifts(!showCoworkerShifts)}
+              >
+                <Ionicons name="people-outline" size={16} color={theme.colors.textSecondary} />
+                <Text style={[styles.coworkerExpandText, { color: theme.colors.textSecondary }]}>
+                  {t('calendar.coworkers')} ({coworkerDateShifts.length})
+                </Text>
+                <Ionicons
+                  name={showCoworkerShifts ? 'chevron-up' : 'chevron-down'}
+                  size={16}
+                  color={theme.colors.textSecondary}
+                />
+              </TouchableOpacity>
+
+              {showCoworkerShifts && coworkerDateShifts.map((shift) => {
+                const codeInfo = getCodeInfo(shift.code);
+                const isReference = shift.source === 'reference_scan';
+                return (
+                  <Card
+                    key={shift.id}
+                    style={[
+                      styles.shiftCard,
+                      isReference && styles.referenceShiftCard,
+                      !isReference && {
+                        shadowColor: shift.color,
+                        shadowOpacity: 0.15,
+                        shadowRadius: 4,
+                        shadowOffset: { width: 0, height: 1 },
+                      },
+                    ]}
+                  >
+                    <View style={[styles.shiftCardContent, isReference && { opacity: 0.75 }]}>
+                      <View
+                        style={[styles.colorIndicator, { backgroundColor: shift.color }]}
+                      />
+                      <View style={styles.shiftInfo}>
+                        <Text style={[styles.shiftCode, { color: theme.colors.textPrimary }]}>
+                          {shift.isDayOff
+                            ? (unifyDayOff && unifyDayOffSymbol
+                                ? unifyDayOffSymbol
+                                : (codeInfo?.meaning || t('common.dayOff')))
+                            : codeInfo?.meaning || t('home.shift', { code: shift.code })}
+                        </Text>
+                        {shift.personName && (
+                          <Text style={[styles.personName, { color: theme.colors.textSecondary }]}>
+                            {shift.personName}
+                          </Text>
+                        )}
+                        {!shift.isDayOff && shift.startTime && (
+                          <Text style={[styles.shiftTime, { color: theme.colors.textSecondary }]}>
+                            {shift.startTime}
+                            {shift.endTime && ` - ${shift.endTime}`}
+                          </Text>
+                        )}
+                        {isReference && (
+                          <Text style={[styles.referenceLabel, { color: theme.colors.textMuted }]}>
+                            {t('calendar.referenceShift')}
+                          </Text>
+                        )}
+                      </View>
+                      <TouchableOpacity style={styles.moreButton} onPress={() => handleEditShift(shift)}>
+                        <Ionicons
+                          name="ellipsis-horizontal"
+                          size={20}
+                          color={theme.colors.textMuted}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </Card>
+                );
+              })}
+            </>
+          )}
         </View>
 
         {/* Legend */}
@@ -423,23 +722,6 @@ export default function CalendarScreen() {
             {t('calendar.people')}
           </Text>
           <Card>
-            {/* Show shift codes toggle */}
-            <View style={[styles.legendItem, { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.colors.border, paddingBottom: 10, marginBottom: 4 }]}>
-              <Ionicons name="code-outline" size={16} color={theme.colors.textSecondary} style={{ marginRight: 8 }} />
-              <Text style={[styles.legendText, { color: theme.colors.textPrimary, flex: 1 }]}>
-                {t('calendar.showShiftCodes')}
-              </Text>
-              <Switch
-                value={showShiftCodes}
-                onValueChange={(val) => {
-                  setShowShiftCodes(val);
-                  AsyncStorage.setItem(SHOW_CODES_KEY, String(val));
-                }}
-                trackColor={{ false: theme.colors.border, true: theme.colors.primary + '80' }}
-                thumbColor={showShiftCodes ? theme.colors.primary : '#f4f3f4'}
-              />
-            </View>
-
             {/* My Schedule — with shift type color legend */}
             <View style={styles.legendItem}>
               <View style={styles.shiftTypeDotsRow}>
@@ -528,21 +810,51 @@ export default function CalendarScreen() {
             onStartShouldSetResponder={() => true}
           >
             <Text style={[styles.colorPickerTitle, { color: theme.colors.textPrimary }]}>
-              {t('calendar.editShift')}
+              {t('calendar.editShiftThisDay')}
               {editingShift ? ` — ${editingShift.code}` : ''}
             </Text>
-            <TimePickerInput
-              label={t('shifts.startTime')}
-              placeholder={t('shifts.startTimePlaceholder')}
-              value={editStartTime}
-              onChange={setEditStartTime}
-            />
-            <TimePickerInput
-              label={t('shifts.endTime')}
-              placeholder={t('shifts.endTimePlaceholder')}
-              value={editEndTime}
-              onChange={setEditEndTime}
-            />
+            {editingShift && (() => {
+              const codeInfo = getCodeInfo(editingShift.code);
+              const defaultStart = codeInfo?.start_time || '';
+              const defaultEnd = codeInfo?.end_time || '';
+              const hasDefault = defaultStart || defaultEnd;
+              const isOverridden = editingShift ? isShiftOverridden(editingShift) : false;
+              return (
+                <>
+                  {hasDefault && (
+                    <Text style={[styles.defaultTimesHint, { color: theme.colors.textMuted }]}>
+                      {t('calendar.defaultTimes', { start: defaultStart || '--:--', end: defaultEnd || '--:--' })}
+                    </Text>
+                  )}
+                  <TimePickerInput
+                    label={t('shifts.startTime')}
+                    placeholder={t('shifts.startTimePlaceholder')}
+                    value={editStartTime}
+                    onChange={setEditStartTime}
+                  />
+                  <TimePickerInput
+                    label={t('shifts.endTime')}
+                    placeholder={t('shifts.endTimePlaceholder')}
+                    value={editEndTime}
+                    onChange={setEditEndTime}
+                  />
+                  {isOverridden && hasDefault && (
+                    <TouchableOpacity
+                      style={[styles.resetDefaultButton, { borderColor: '#D97706' }]}
+                      onPress={() => {
+                        setEditStartTime(defaultStart);
+                        setEditEndTime(defaultEnd);
+                      }}
+                    >
+                      <Ionicons name="refresh" size={14} color="#D97706" />
+                      <Text style={styles.resetDefaultText}>
+                        {t('calendar.resetToDefault')}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </>
+              );
+            })()}
             <View style={styles.editModalActions}>
               <TouchableOpacity
                 style={[styles.editModalButton, { borderColor: theme.colors.border }]}
@@ -555,6 +867,61 @@ export default function CalendarScreen() {
               <TouchableOpacity
                 style={[styles.editModalButton, { borderColor: theme.colors.primary, backgroundColor: theme.colors.primary }]}
                 onPress={handleSaveShiftEdit}
+              >
+                <Text style={[styles.editModalButtonText, { color: theme.colors.white }]}>
+                  {t('common.save')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Note Edit Modal */}
+      <Modal visible={showNoteModal} transparent animationType="fade">
+        <TouchableOpacity
+          style={styles.colorPickerOverlay}
+          activeOpacity={1}
+          onPress={() => setShowNoteModal(false)}
+        >
+          <View
+            style={[styles.editModalContent, { backgroundColor: theme.colors.cardBackground }]}
+            onStartShouldSetResponder={() => true}
+          >
+            <Text style={[styles.colorPickerTitle, { color: theme.colors.textPrimary }]}>
+              {t('calendar.editNote')}
+            </Text>
+            <TextInput
+              style={[styles.noteInput, { color: theme.colors.textPrimary, borderColor: theme.colors.border, backgroundColor: theme.colors.warmWhite }]}
+              value={noteText}
+              onChangeText={setNoteText}
+              placeholder={t('calendar.noteHint')}
+              placeholderTextColor={theme.colors.textMuted}
+              multiline
+              autoFocus
+            />
+            <View style={styles.editModalActions}>
+              {notesByDate[selectedDate] && (
+                <TouchableOpacity
+                  style={[styles.editModalButton, { borderColor: '#EF4444' }]}
+                  onPress={handleDeleteNote}
+                >
+                  <Text style={[styles.editModalButtonText, { color: '#EF4444' }]}>
+                    {t('calendar.deleteNote')}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[styles.editModalButton, { borderColor: theme.colors.border }]}
+                onPress={() => setShowNoteModal(false)}
+              >
+                <Text style={[styles.editModalButtonText, { color: theme.colors.textSecondary }]}>
+                  {t('common.cancel')}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.editModalButton, { borderColor: theme.colors.primary, backgroundColor: theme.colors.primary }]}
+                onPress={handleSaveNote}
               >
                 <Text style={[styles.editModalButtonText, { color: theme.colors.white }]}>
                   {t('common.save')}
@@ -618,11 +985,17 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '700',
   },
-  filterButton: {
-    width: 40,
-    height: 40,
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  headerIconButton: {
+    width: 36,
+    height: 36,
     justifyContent: 'center',
     alignItems: 'center',
+    borderRadius: 18,
   },
   scrollContent: {
     padding: 16,
@@ -690,6 +1063,22 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     marginTop: 8,
+  },
+  coworkerExpandButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    marginTop: 4,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderRadius: 10,
+    borderStyle: 'dashed',
+  },
+  coworkerExpandText: {
+    fontSize: 13,
+    fontWeight: '500',
   },
   legendItem: {
     flexDirection: 'row',
@@ -785,10 +1174,86 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 4,
   },
+  noteCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 8,
+    gap: 8,
+  },
+  noteIndicator: {
+    width: 4,
+    height: 32,
+    borderRadius: 2,
+    backgroundColor: '#F97316',
+  },
+  noteText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  addNoteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 10,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderRadius: 10,
+    borderStyle: 'dashed',
+  },
+  addNoteText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  noteInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 15,
+    minHeight: 80,
+    textAlignVertical: 'top',
+    marginBottom: 12,
+  },
   editModalContent: {
     width: 300,
     borderRadius: 16,
     padding: 24,
+  },
+  defaultTimesHint: {
+    fontSize: 13,
+    marginBottom: 12,
+    marginTop: -12,
+  },
+  resetDefaultButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 8,
+    marginBottom: 4,
+  },
+  resetDefaultText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#D97706',
+  },
+  overriddenBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginTop: 3,
+  },
+  overriddenText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#D97706',
   },
   editModalActions: {
     flexDirection: 'row',

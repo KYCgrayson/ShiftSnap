@@ -170,6 +170,41 @@ export default function ScanScreen() {
     setCapturedImage(null);
   };
 
+  // Convert image URI to base64
+  const imageToBase64 = async (uri: string): Promise<string> => {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const dataUrl = reader.result as string;
+        resolve(dataUrl.split(',')[1]);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  };
+
+  // Upload image to storage for record keeping (non-blocking, best-effort)
+  const uploadToStorage = async (uri: string): Promise<string | null> => {
+    try {
+      const fileName = `schedule_${Date.now()}.jpg`;
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const { error } = await supabase.storage
+        .from('shift-images')
+        .upload(fileName, blob, { contentType: 'image/jpeg' });
+      if (error) {
+        console.warn('Storage upload failed (non-critical):', error.message);
+        return null;
+      }
+      return fileName;
+    } catch (e) {
+      console.warn('Storage upload error (non-critical):', e);
+      return null;
+    }
+  };
+
   const callOcrFunction = async (body: Record<string, unknown>): Promise<any> => {
     const MAX_RETRIES = 2;
     let lastError = '';
@@ -210,61 +245,24 @@ export default function ScanScreen() {
 
     setProcessing(true);
     try {
-      let imageUrlForReview: string;
-      let ocrData;
+      // Always convert to base64 and send directly to Edge Function
+      const base64 = await imageToBase64(capturedImage);
 
-      if (isGuest) {
-        // Guest mode: convert image to base64 and send directly to Edge Function
-        const response = await fetch(capturedImage);
-        const blob = await response.blob();
-        const base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const dataUrl = reader.result as string;
-            // Strip the data:image/...;base64, prefix
-            resolve(dataUrl.split(',')[1]);
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
+      // Start OCR and storage upload in parallel
+      const ocrPromise = callOcrFunction({
+        imageBase64: base64,
+        imageMimeType: 'image/jpeg',
+      });
 
-        ocrData = await callOcrFunction({
-          imageBase64: base64,
-          imageMimeType: 'image/jpeg',
-        });
+      // For authenticated users, upload to storage for record keeping (non-blocking)
+      const storagePromise = !isGuest
+        ? uploadToStorage(capturedImage)
+        : Promise.resolve(null);
 
-        imageUrlForReview = capturedImage; // Use local URI for review screen
-      } else {
-        // Authenticated mode: upload to storage, then call Edge Function with URL
-        const fileName = `schedule_${Date.now()}.jpg`;
-        const response = await fetch(capturedImage);
-        const blob = await response.blob();
+      const [ocrData, storagePath] = await Promise.all([ocrPromise, storagePromise]);
 
-        const { error: uploadError } = await supabase.storage
-          .from('shift-images')
-          .upload(fileName, blob, {
-            contentType: 'image/jpeg',
-          });
-
-        if (uploadError) {
-          throw new Error('Failed to upload image: ' + uploadError.message);
-        }
-
-        const { data: urlData, error: urlError } = await supabase.storage
-          .from('shift-images')
-          .createSignedUrl(fileName, 3600);
-
-        if (urlError || !urlData?.signedUrl) {
-          throw new Error('Failed to get image URL: ' + (urlError?.message || 'Unknown error'));
-        }
-
-        ocrData = await callOcrFunction({
-          imageUrl: urlData.signedUrl,
-        });
-
-        // Store the storage file path (not signed URL) so we can regenerate URLs later
-        imageUrlForReview = fileName;
-      }
+      // DB stores storage path for future access; immediate review uses local file (always reliable)
+      const imagePathForDb = storagePath || capturedImage;
 
       // Determine year-month from OCR or use current
       const yearMonth = ocrData.detected_year && ocrData.detected_month
@@ -274,30 +272,41 @@ export default function ScanScreen() {
       // Create schedule record (in-memory for guests, DB for authenticated)
       const scheduleId = await createScheduleFromOCR(
         user.id,
-        imageUrlForReview,
+        imagePathForDb,
         yearMonth,
         ocrData
       );
 
-      // Resolve the image URL for the review screen
-      const resolvedImageUrl = await getSignedImageUrl(imageUrlForReview);
-
-      // Navigate to review screen
+      // Navigate to review screen — use local file URI for immediate display
       router.push({
         pathname: '/review-schedule',
         params: {
           ocrResult: JSON.stringify(ocrData),
           scheduleId,
           yearMonth,
-          imageUrl: resolvedImageUrl,
+          imageUrl: capturedImage,
         },
       });
     } catch (error) {
-      console.error('Error processing schedule:', error);
-      Alert.alert(
-        t('scan.processingFailed'),
-        error instanceof Error ? error.message : t('scan.failedToProcess')
-      );
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error('Error processing schedule:', errorMsg);
+
+      // Show user-friendly message, but include technical details in dev
+      let userMessage = t('scan.failedToProcess');
+      if (errorMsg.includes('PARSE_FAILED')) {
+        userMessage = t('scan.failedToProcess') + '\n\n(Gemini 回應格式錯誤，請重試)';
+      } else if (errorMsg.includes('GEMINI_API_KEY')) {
+        userMessage = 'API 金鑰未設定，請聯繫管理員';
+      } else if (errorMsg.includes('Missing imageBase64')) {
+        userMessage = '圖片轉換失敗，請重新拍照';
+      }
+
+      // In development, append raw error for debugging
+      if (__DEV__) {
+        userMessage += '\n\n[DEV] ' + errorMsg.slice(0, 300);
+      }
+
+      Alert.alert(t('scan.processingFailed'), userMessage);
     } finally {
       setProcessing(false);
     }

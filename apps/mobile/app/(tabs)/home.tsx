@@ -18,7 +18,7 @@ import { useShiftStore } from '../../src/stores/shiftStore';
 import { useShiftCodeStore } from '../../src/stores/shiftCodeStore';
 import { Card, Button } from '../../src/components/ui';
 import { GuestUpgradeBanner } from '../../src/components/GuestUpgradeBanner';
-import { formatDate } from '@shiftsnap/shared';
+import { formatDate, getShortWeekday } from '@shiftsnap/shared';
 import { useLocaleStore } from '../../src/stores/localeStore';
 
 export default function HomeScreen() {
@@ -210,7 +210,7 @@ export default function HomeScreen() {
                         {shiftDate.getDate()}
                       </Text>
                       <Text style={[styles.dateMonth, { color: theme.colors.primary }]}>
-                        {shiftDate.toLocaleDateString(locale, { month: 'short' })}
+                        {getShortWeekday(shiftDate, locale)}
                       </Text>
                     </View>
                     <View style={styles.shiftCardInfo}>

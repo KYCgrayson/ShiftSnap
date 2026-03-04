@@ -8,9 +8,9 @@
     "scheme": "shiftsnap",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/ishift-logo.png",
       "resizeMode": "contain",
-      "backgroundColor": "#FFFBF7"
+      "backgroundColor": "#000000"
     },
     "assetBundlePatterns": [
       "**/*"

@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import { Button, Input } from '../../src/components/ui';
 import { useTheme } from '../../src/theme';
 import { useAuthStore } from '../../src/stores/authStore';
+import { resetPassword } from '../../src/services/supabase';
 import { isValidEmail } from '@shiftsnap/shared';
 
 export default function LoginScreen() {
@@ -128,7 +129,35 @@ export default function LoginScreen() {
 
             <TouchableOpacity
               style={styles.forgotPassword}
-              onPress={() => Alert.alert(t('auth.resetPasswordTitle'), t('auth.resetPasswordDesc'))}
+              onPress={async () => {
+                if (!email.trim()) {
+                  Alert.alert(
+                    t('auth.resetPasswordTitle'),
+                    t('auth.enterEmailFirst'),
+                  );
+                  return;
+                }
+                if (!isValidEmail(email)) {
+                  Alert.alert(
+                    t('auth.resetPasswordTitle'),
+                    t('auth.invalidEmail'),
+                  );
+                  return;
+                }
+                try {
+                  const { error: resetError } = await resetPassword(email.trim());
+                  if (resetError) {
+                    Alert.alert(t('common.error'), resetError.message);
+                  } else {
+                    Alert.alert(
+                      t('auth.resetPasswordTitle'),
+                      t('auth.resetPasswordSuccess'),
+                    );
+                  }
+                } catch {
+                  Alert.alert(t('common.error'), t('auth.resetPasswordFailed'));
+                }
+              }}
             >
               <Text style={[styles.forgotPasswordText, { color: theme.colors.primary }]}>
                 {t('auth.forgotPassword')}
@@ -159,7 +188,7 @@ export default function LoginScreen() {
               style={[
                 styles.socialButton,
                 {
-                  backgroundColor: theme.colors.white,
+                  backgroundColor: theme.colors.cardBackground,
                   borderColor: theme.colors.border,
                 },
               ]}
@@ -167,6 +196,8 @@ export default function LoginScreen() {
                 const result = await signInWithGoogle();
                 if (result.success) {
                   router.replace('/(tabs)/home');
+                } else if (result.error) {
+                  Alert.alert(t('common.error'), result.error);
                 }
               }}
             >
@@ -181,7 +212,7 @@ export default function LoginScreen() {
                 style={[
                   styles.socialButton,
                   {
-                    backgroundColor: theme.colors.white,
+                    backgroundColor: theme.colors.cardBackground,
                     borderColor: theme.colors.border,
                   },
                 ]}
@@ -189,6 +220,8 @@ export default function LoginScreen() {
                   const result = await signInWithApple();
                   if (result.success) {
                     router.replace('/(tabs)/home');
+                  } else if (result.error) {
+                    Alert.alert(t('common.error'), result.error);
                   }
                 }}
               >

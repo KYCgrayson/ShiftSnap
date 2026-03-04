@@ -149,6 +149,8 @@ export async function signInWithApple() {
 
 export async function signInWithGoogle() {
   try {
+    console.log('[GoogleAuth] redirect URI:', REDIRECT_URI);
+
     const { data: oauthData, error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
@@ -158,22 +160,38 @@ export async function signInWithGoogle() {
     });
 
     if (oauthError || !oauthData?.url) {
+      console.warn('[GoogleAuth] OAuth URL error:', oauthError);
       return { data: null, error: oauthError || { message: 'Failed to get OAuth URL' } };
     }
 
+    console.log('[GoogleAuth] opening browser...');
     const result = await WebBrowser.openAuthSessionAsync(oauthData.url, REDIRECT_URI);
+    console.log('[GoogleAuth] browser result type:', result.type);
 
     if (result.type !== 'success' || !result.url) {
       return { data: null, error: null }; // User cancelled
     }
 
     // Extract tokens from redirect URL
+    console.log('[GoogleAuth] callback URL:', result.url);
     const url = new URL(result.url);
-    const params = new URLSearchParams(url.hash.substring(1)); // Remove #
-    const accessToken = params.get('access_token');
-    const refreshToken = params.get('refresh_token');
+
+    // Tokens may be in hash fragment (#) or query params (?)
+    const hashParams = new URLSearchParams(url.hash.substring(1));
+    const queryParams = new URLSearchParams(url.search);
+    const accessToken = hashParams.get('access_token') || queryParams.get('access_token');
+    const refreshToken = hashParams.get('refresh_token') || queryParams.get('refresh_token');
+
+    // Check for error in callback
+    const errorParam = hashParams.get('error') || queryParams.get('error');
+    const errorDesc = hashParams.get('error_description') || queryParams.get('error_description');
+    if (errorParam) {
+      console.warn('[GoogleAuth] OAuth callback error:', errorParam, errorDesc);
+      return { data: null, error: { message: errorDesc || errorParam } };
+    }
 
     if (!accessToken || !refreshToken) {
+      console.warn('[GoogleAuth] No tokens in URL. Hash:', url.hash, 'Search:', url.search);
       return { data: null, error: { message: 'No tokens received from Google' } };
     }
 
@@ -182,8 +200,15 @@ export async function signInWithGoogle() {
       refresh_token: refreshToken,
     });
 
+    if (error) {
+      console.warn('[GoogleAuth] setSession error:', error.message);
+    } else {
+      console.log('[GoogleAuth] success, user:', data.user?.email);
+    }
+
     return { data, error };
   } catch (error: any) {
+    console.warn('[GoogleAuth] exception:', error);
     return { data: null, error: { message: error.message || 'Google Sign In failed' } };
   }
 }

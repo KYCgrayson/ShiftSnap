@@ -249,7 +249,7 @@ export default function RegisterScreen() {
               style={[
                 styles.socialButton,
                 {
-                  backgroundColor: theme.colors.white,
+                  backgroundColor: theme.colors.cardBackground,
                   borderColor: theme.colors.border,
                 },
               ]}
@@ -257,6 +257,8 @@ export default function RegisterScreen() {
                 const result = await signInWithGoogle();
                 if (result.success) {
                   router.replace('/(tabs)/home');
+                } else if (result.error) {
+                  Alert.alert(t('common.error'), result.error);
                 }
               }}
             >
@@ -271,7 +273,7 @@ export default function RegisterScreen() {
                 style={[
                   styles.socialButton,
                   {
-                    backgroundColor: theme.colors.white,
+                    backgroundColor: theme.colors.cardBackground,
                     borderColor: theme.colors.border,
                   },
                 ]}
@@ -279,6 +281,8 @@ export default function RegisterScreen() {
                   const result = await signInWithApple();
                   if (result.success) {
                     router.replace('/(tabs)/home');
+                  } else if (result.error) {
+                    Alert.alert(t('common.error'), result.error);
                   }
                 }}
               >

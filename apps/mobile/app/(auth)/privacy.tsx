@@ -11,7 +11,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme';
 
-export default function TermsScreen() {
+export default function PrivacyScreen() {
   const theme = useTheme();
 
   return (
@@ -22,71 +22,82 @@ export default function TermsScreen() {
           <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
-          Terms of Service
+          Privacy Policy
         </Text>
         <View style={{ width: 40 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        {/* Terms of Service */}
         <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
-          Terms of Service
+          Privacy Policy
         </Text>
         <Text style={[styles.lastUpdated, { color: theme.colors.textMuted }]}>
           Last updated: January 2026
         </Text>
 
         <Text style={[styles.paragraph, { color: theme.colors.textSecondary }]}>
-          Welcome to IShift. By using our application, you agree to be bound by these Terms of Service. Please read them carefully.
+          Your privacy is important to us. This Privacy Policy explains how IShift collects, uses, stores, and protects your information when you use our application.
         </Text>
 
         <Text style={[styles.heading, { color: theme.colors.textPrimary }]}>
-          1. Use of Service
+          1. Information We Collect
         </Text>
         <Text style={[styles.paragraph, { color: theme.colors.textSecondary }]}>
-          IShift provides a platform to digitize and manage work schedules. You agree to use the service only for lawful purposes and in accordance with these terms.
+          We collect the following types of information:{'\n\n'}
+          {'\u2022'} Account information: email address and display name when you create an account.{'\n'}
+          {'\u2022'} Schedule data: images of shift schedules you upload and the shift data extracted from them.{'\n'}
+          {'\u2022'} Usage data: how you interact with the app, including features used and actions taken.{'\n'}
+          {'\u2022'} Device information: device type, operating system version, and app version for troubleshooting purposes.
         </Text>
 
         <Text style={[styles.heading, { color: theme.colors.textPrimary }]}>
-          2. User Accounts
+          2. How We Use Your Information
         </Text>
         <Text style={[styles.paragraph, { color: theme.colors.textSecondary }]}>
-          You are responsible for maintaining the confidentiality of your account credentials and for all activities that occur under your account.
+          We use the information we collect to:{'\n\n'}
+          {'\u2022'} Provide and maintain the IShift service.{'\n'}
+          {'\u2022'} Process your schedule images using optical character recognition (OCR).{'\n'}
+          {'\u2022'} Sync shift data with your calendar.{'\n'}
+          {'\u2022'} Enable group sharing and collaboration features.{'\n'}
+          {'\u2022'} Send you notifications about your shifts and schedule updates.{'\n'}
+          {'\u2022'} Improve the app experience and fix issues.
         </Text>
 
         <Text style={[styles.heading, { color: theme.colors.textPrimary }]}>
-          3. Content
+          3. Data Storage
         </Text>
         <Text style={[styles.paragraph, { color: theme.colors.textSecondary }]}>
-          You retain ownership of the schedule images and data you upload. By using the service, you grant us a limited license to process your content for the purpose of providing the service.
+          Your data is stored securely using Supabase, a cloud database platform with enterprise-grade security. All data is encrypted in transit using TLS and at rest using AES-256 encryption. Schedule images and shift data are retained for 1 year from the date of upload. You can request deletion of your data at any time through the app settings.
         </Text>
 
         <Text style={[styles.heading, { color: theme.colors.textPrimary }]}>
-          4. Termination
+          4. Third-Party Services
         </Text>
         <Text style={[styles.paragraph, { color: theme.colors.textSecondary }]}>
-          We reserve the right to suspend or terminate your access to the service at any time for conduct that we believe violates these terms or is harmful to other users, us, or third parties.
+          IShift uses the following third-party services to deliver its functionality:{'\n\n'}
+          {'\u2022'} Supabase: provides authentication, database storage, and file storage for your account and schedule data.{'\n'}
+          {'\u2022'} Google Gemini: processes your uploaded schedule images using AI-powered OCR to extract shift information. Images are sent to Google's servers for processing and are not retained by Google after processing is complete.{'\n\n'}
+          These services have their own privacy policies, and we encourage you to review them.
         </Text>
 
         <Text style={[styles.heading, { color: theme.colors.textPrimary }]}>
-          5. Limitation of Liability
+          5. Your Rights
         </Text>
         <Text style={[styles.paragraph, { color: theme.colors.textSecondary }]}>
-          IShift is provided "as is" without warranties of any kind. We shall not be liable for any indirect, incidental, or consequential damages arising from your use of the service.
+          You have the right to:{'\n\n'}
+          {'\u2022'} Access the personal data we hold about you.{'\n'}
+          {'\u2022'} Correct any inaccurate or incomplete data.{'\n'}
+          {'\u2022'} Request deletion of your personal data and account.{'\n'}
+          {'\u2022'} Export your shift data at any time.{'\n'}
+          {'\u2022'} Withdraw consent for data processing by deleting your account.{'\n\n'}
+          To exercise any of these rights, you can use the account management options in the app settings or contact us directly.
         </Text>
 
         <Text style={[styles.heading, { color: theme.colors.textPrimary }]}>
-          6. Changes to Terms
+          6. Contact Us
         </Text>
         <Text style={[styles.paragraph, { color: theme.colors.textSecondary }]}>
-          We may update these terms from time to time. We will notify you of any material changes by posting the updated terms within the app. Your continued use of the service after changes are posted constitutes acceptance of the revised terms.
-        </Text>
-
-        <Text style={[styles.heading, { color: theme.colors.textPrimary }]}>
-          7. Contact Us
-        </Text>
-        <Text style={[styles.paragraph, { color: theme.colors.textSecondary }]}>
-          If you have any questions about these Terms of Service, please contact us at support@shiftsnap.app
+          If you have any questions or concerns about this Privacy Policy or our data practices, please contact us at support@shiftsnap.app
         </Text>
       </ScrollView>
     </SafeAreaView>

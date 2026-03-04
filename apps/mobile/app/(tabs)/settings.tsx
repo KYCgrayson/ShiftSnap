@@ -12,6 +12,7 @@ import {
   ActionSheetIOS,
   Platform,
   Modal,
+  Linking,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
@@ -24,9 +25,22 @@ import { useThemeStore } from '../../src/stores/themeStore';
 import { useCalendarStore } from '../../src/stores/calendarStore';
 import { useLocaleStore } from '../../src/stores/localeStore';
 import { usePersonStore } from '../../src/stores/personStore';
+import { useGroupStore } from '../../src/stores/groupStore';
 import { supabase } from '../../src/services/supabase';
-import { APP_VERSION, SUPPORTED_LOCALES, LOCALE_NAMES, PERSON_COLOR_HEX } from '@shiftsnap/shared';
+import * as Clipboard from 'expo-clipboard';
+import { APP_VERSION, SUPPORTED_LOCALES, LOCALE_NAMES, PERSON_COLOR_HEX, ALARM_OPTIONS, DEFAULT_ALARM_MINUTES } from '@shiftsnap/shared';
+import { useShiftStore } from '../../src/stores/shiftStore';
+import { useShiftCodeStore } from '../../src/stores/shiftCodeStore';
+import { useScheduleStore } from '../../src/stores/scheduleStore';
+import {
+  requestNotificationPermissions,
+  scheduleShiftReminder,
+  cancelAllReminders,
+} from '../../src/services/notifications';
+
 const MY_COLOR_KEY = 'shiftsnap_my_schedule_color';
+const NOTIFICATIONS_KEY = 'shiftsnap_notifications_enabled';
+const ALARM_MINUTES_KEY = 'shiftsnap_default_alarm_minutes';
 
 export default function SettingsScreen() {
   const theme = useTheme();
@@ -38,6 +52,11 @@ export default function SettingsScreen() {
   const { isConnected: calendarConnected, connectCalendar, disconnectCalendar, loading: calendarLoading } = useCalendarStore();
 
   const { persons, fetchPersons, createPerson, updatePerson, deletePerson } = usePersonStore();
+  const {
+    groups, currentGroup, members,
+    fetchMembers, switchGroup,
+    joinGroupByInvite, leaveGroup, updateGroupName,
+  } = useGroupStore();
 
   const [editingProfile, setEditingProfile] = useState(false);
   const [editName, setEditName] = useState('');
@@ -46,16 +65,39 @@ export default function SettingsScreen() {
   const [colorEditTarget, setColorEditTarget] = useState<{ type: 'self' } | { type: 'person'; personId: string } | null>(null);
   const [showAddCoworker, setShowAddCoworker] = useState(false);
   const [newCoworkerName, setNewCoworkerName] = useState('');
+  const [showJoinGroup, setShowJoinGroup] = useState(false);
+  const [joinInviteCode, setJoinInviteCode] = useState('');
+  const [showShareInvite, setShowShareInvite] = useState(false);
+  const [unsharedCount, setUnsharedCount] = useState(0);
+  const [sharingSchedules, setSharingSchedules] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [alarmMinutes, setAlarmMinutes] = useState(DEFAULT_ALARM_MINUTES);
+
+  const upcomingShifts = useShiftStore((s) => s.upcomingShifts);
+  const getCodeInfo = useShiftCodeStore((s) => s.getCodeInfo);
+  const { getUnsharedCount, shareSchedulesWithGroup } = useScheduleStore();
 
   useEffect(() => {
     AsyncStorage.getItem(MY_COLOR_KEY).then((color) => {
       if (color) setMyScheduleColor(color);
+    });
+    AsyncStorage.getItem(NOTIFICATIONS_KEY).then((val) => {
+      if (val !== null) setNotificationsEnabled(val === 'true');
+    });
+    AsyncStorage.getItem(ALARM_MINUTES_KEY).then((val) => {
+      if (val !== null) setAlarmMinutes(Number(val));
     });
   }, []);
 
   useEffect(() => {
     if (user?.id) fetchPersons(user.id);
   }, [user?.id]);
+
+  useEffect(() => {
+    if (currentGroup?.id && !isGuest) {
+      fetchMembers(currentGroup.id);
+    }
+  }, [currentGroup?.id, isGuest]);
 
   const saveColor = async (color: string) => {
     if (!colorEditTarget) return;
@@ -121,14 +163,28 @@ export default function SettingsScreen() {
   const handleDeleteAccount = () => {
     Alert.alert(
       t('settings.deleteAccount'),
-      t('settings.deleteAccountDesc'),
+      t('settings.deleteAccountConfirm'),
       [
         { text: t('common.cancel'), style: 'cancel' },
         {
-          text: t('common.delete'),
+          text: t('settings.deleteAndSignOut'),
           style: 'destructive',
           onPress: () => {
-            Alert.alert(t('settings.contactSupport'), t('settings.contactSupportDesc'));
+            Alert.alert(
+              t('settings.deleteAccountFinalTitle'),
+              t('settings.deleteAccountFinalDesc'),
+              [
+                { text: t('common.cancel'), style: 'cancel' },
+                {
+                  text: t('common.delete'),
+                  style: 'destructive',
+                  onPress: async () => {
+                    await signOut();
+                    router.replace('/(auth)/welcome');
+                  },
+                },
+              ]
+            );
           },
         },
       ]
@@ -215,6 +271,196 @@ export default function SettingsScreen() {
       if (success) {
         Alert.alert(t('settings.connected'), t('settings.calendarConnected'));
       }
+    }
+  };
+
+  const scheduleAllReminders = async (minutes: number) => {
+    await cancelAllReminders();
+    for (const shift of upcomingShifts) {
+      if (shift.is_day_off || !shift.start_time) continue;
+      const codeInfo = getCodeInfo(shift.shift_code);
+      await scheduleShiftReminder(shift, codeInfo ? { meaning: codeInfo.meaning } : undefined, minutes);
+    }
+  };
+
+  const handleToggleNotifications = async () => {
+    if (notificationsEnabled) {
+      // Disable
+      setNotificationsEnabled(false);
+      await AsyncStorage.setItem(NOTIFICATIONS_KEY, 'false');
+      await cancelAllReminders();
+    } else {
+      // Enable — request permission first
+      const granted = await requestNotificationPermissions();
+      if (!granted) {
+        Alert.alert(t('common.error'), t('settings.notificationsPermDenied'));
+        return;
+      }
+      setNotificationsEnabled(true);
+      await AsyncStorage.setItem(NOTIFICATIONS_KEY, 'true');
+      await scheduleAllReminders(alarmMinutes);
+    }
+  };
+
+  const handleAlarmChange = () => {
+    const labels = ALARM_OPTIONS.map((opt) => opt.label);
+
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          title: t('settings.selectAlarm'),
+          options: [...labels, t('common.cancel')],
+          cancelButtonIndex: labels.length,
+        },
+        async (buttonIndex) => {
+          if (buttonIndex < ALARM_OPTIONS.length) {
+            const selected = ALARM_OPTIONS[buttonIndex].value;
+            setAlarmMinutes(selected);
+            await AsyncStorage.setItem(ALARM_MINUTES_KEY, String(selected));
+            if (notificationsEnabled) {
+              await scheduleAllReminders(selected);
+            }
+          }
+        }
+      );
+    } else {
+      const buttons = ALARM_OPTIONS.map((opt) => ({
+        text: opt.label,
+        onPress: async () => {
+          setAlarmMinutes(opt.value);
+          await AsyncStorage.setItem(ALARM_MINUTES_KEY, String(opt.value));
+          if (notificationsEnabled) {
+            await scheduleAllReminders(opt.value);
+          }
+        },
+      }));
+      buttons.push({ text: t('common.cancel'), onPress: () => {} });
+      Alert.alert(t('settings.selectAlarm'), undefined, buttons);
+    }
+  };
+
+  const getAlarmLabel = (minutes: number): string => {
+    const option = ALARM_OPTIONS.find((opt) => opt.value === minutes);
+    return option ? option.label : `${minutes} min`;
+  };
+
+  const handleCopyInviteCode = async () => {
+    if (!currentGroup?.invite_code) return;
+    await Clipboard.setStringAsync(currentGroup.invite_code);
+    Alert.alert(t('settings.copied'), t('settings.inviteCodeCopied'));
+  };
+
+  const handleOpenShareInvite = async () => {
+    if (!currentGroup || !user?.id) return;
+    setShowShareInvite(true);
+    const count = await getUnsharedCount(user.id, currentGroup.id);
+    setUnsharedCount(count);
+  };
+
+  const handleShareAllSchedules = async () => {
+    if (!currentGroup || !user?.id) return;
+    setSharingSchedules(true);
+    try {
+      const count = await shareSchedulesWithGroup(user.id, currentGroup.id);
+      setUnsharedCount(0);
+      setSharingSchedules(false);
+      Alert.alert(
+        t('settings.shareExistingSchedules'),
+        count === 1
+          ? t('settings.schedulesSharedOne')
+          : t('settings.schedulesShared', { count })
+      );
+    } catch {
+      setSharingSchedules(false);
+      Alert.alert(t('common.error'), t('settings.shareFailed'));
+    }
+  };
+
+  const handleEditGroupName = () => {
+    if (!currentGroup) return;
+    // Check if user is admin
+    const myMembership = members.find((m) => m.user_id === user?.id);
+    if (myMembership?.role !== 'admin') {
+      Alert.alert(t('settings.editGroupName'), t('settings.onlyAdminCanEdit'));
+      return;
+    }
+    if (Platform.OS === 'ios') {
+      Alert.prompt(
+        t('settings.editGroupName'),
+        undefined,
+        [
+          { text: t('common.cancel'), style: 'cancel' },
+          {
+            text: t('common.save'),
+            onPress: (name: string | undefined) => {
+              if (name?.trim() && currentGroup) {
+                updateGroupName(currentGroup.id, name.trim());
+              }
+            },
+          },
+        ],
+        'plain-text',
+        currentGroup.name
+      );
+    } else {
+      // Android: simple alert (prompt not available)
+      Alert.alert(t('settings.editGroupName'), t('settings.onlyAdminCanEdit'));
+    }
+  };
+
+  const handleJoinGroup = async () => {
+    const code = joinInviteCode.trim().toUpperCase();
+    if (code.length < 4 || !user?.id) return;
+    try {
+      await joinGroupByInvite(user.id, code);
+      setShowJoinGroup(false);
+      setJoinInviteCode('');
+      Alert.alert(t('settings.groupJoined'), t('settings.groupJoinedDesc'));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      if (message === 'ALREADY_MEMBER') {
+        Alert.alert(t('common.error'), t('settings.alreadyMember'));
+      } else {
+        Alert.alert(t('common.error'), t('settings.joinFailed'));
+      }
+    }
+  };
+
+  const handleLeaveGroup = (groupId: string) => {
+    if (!user?.id) return;
+    Alert.alert(t('settings.leaveGroup'), t('settings.leaveGroupConfirm'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('settings.leave'),
+        style: 'destructive',
+        onPress: () => leaveGroup(user.id, groupId),
+      },
+    ]);
+  };
+
+  const handleSwitchGroup = () => {
+    if (groups.length <= 1) return;
+    const options = groups.map((g) => g.name);
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          title: t('settings.switchGroup'),
+          options: [...options, t('common.cancel')],
+          cancelButtonIndex: options.length,
+        },
+        (buttonIndex) => {
+          if (buttonIndex < groups.length) {
+            switchGroup(groups[buttonIndex].id);
+          }
+        }
+      );
+    } else {
+      const buttons = groups.map((g) => ({
+        text: g.name,
+        onPress: () => switchGroup(g.id),
+      }));
+      buttons.push({ text: t('common.cancel'), onPress: () => {} });
+      Alert.alert(t('settings.switchGroup'), undefined, buttons);
     }
   };
 
@@ -430,15 +676,22 @@ export default function SettingsScreen() {
             <SettingsItem
               icon="notifications-outline"
               title={t('settings.notifications')}
-              subtitle={t('settings.notificationsDesc')}
-              onPress={() => {}}
+              subtitle={notificationsEnabled ? t('settings.notificationsEnabled') : t('settings.notificationsDisabled')}
+              rightElement={
+                <Switch
+                  value={notificationsEnabled}
+                  onValueChange={handleToggleNotifications}
+                  trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+                  thumbColor={theme.colors.white}
+                />
+              }
             />
             <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
             <SettingsItem
               icon="alarm-outline"
               title={t('settings.defaultAlarm')}
-              subtitle={t('settings.defaultAlarmDesc')}
-              onPress={() => {}}
+              subtitle={t('settings.alarmBeforeShift', { time: getAlarmLabel(alarmMinutes) })}
+              onPress={handleAlarmChange}
             />
             <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
             <SettingsItem
@@ -488,6 +741,86 @@ export default function SettingsScreen() {
             />
           </Card>
         </View>
+
+        {/* Group Management (authenticated users only) */}
+        {!isGuest && currentGroup && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
+              {t('settings.groupSection')}
+            </Text>
+            <Card padding="none">
+              {/* Group name */}
+              <SettingsItem
+                icon="people-outline"
+                title={currentGroup.name}
+                subtitle={groups.length > 1 ? t('settings.switchGroup') : t('settings.groupNameHint')}
+                onPress={groups.length > 1 ? handleSwitchGroup : handleEditGroupName}
+              />
+              <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
+              {/* Invite code */}
+              <SettingsItem
+                icon="key-outline"
+                title={t('settings.shareInvite')}
+                subtitle={currentGroup.invite_code}
+                onPress={handleOpenShareInvite}
+                rightElement={
+                  <TouchableOpacity onPress={handleOpenShareInvite}>
+                    <Ionicons name="share-outline" size={20} color={theme.colors.primary} />
+                  </TouchableOpacity>
+                }
+              />
+              <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
+              {/* Members */}
+              <View style={styles.settingsItem}>
+                <View style={[styles.settingsIcon, { backgroundColor: theme.colors.primary + '15' }]}>
+                  <Ionicons name="person-outline" size={20} color={theme.colors.primary} />
+                </View>
+                <View style={styles.settingsContent}>
+                  <Text style={[styles.settingsTitle, { color: theme.colors.textPrimary }]}>
+                    {t('settings.members')} ({members.length})
+                  </Text>
+                </View>
+              </View>
+              {members.map((member) => (
+                <View key={member.id} style={[styles.settingsItem, { paddingVertical: 8, paddingLeft: 64 }]}>
+                  <View style={styles.settingsContent}>
+                    <Text style={[styles.settingsTitle, { color: theme.colors.textPrimary }]}>
+                      {member.display_name || member.nickname || '—'}
+                      {member.user_id === user?.id ? ` ${t('settings.you')}` : ''}
+                    </Text>
+                    <Text style={[styles.settingsSubtitle, { color: theme.colors.textSecondary }]}>
+                      {member.role === 'admin' ? t('settings.admin') : t('settings.member')}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+              <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
+              {/* Join another group */}
+              <TouchableOpacity style={styles.settingsItem} onPress={() => setShowJoinGroup(true)}>
+                <View style={[styles.settingsIcon, { backgroundColor: theme.colors.primary + '15' }]}>
+                  <Ionicons name="enter-outline" size={20} color={theme.colors.primary} />
+                </View>
+                <View style={styles.settingsContent}>
+                  <Text style={[styles.settingsTitle, { color: theme.colors.primary }]}>
+                    {t('settings.joinGroup')}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              {/* Leave group (only if more than 1 group) */}
+              {groups.length > 1 && (
+                <>
+                  <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
+                  <SettingsItem
+                    icon="exit-outline"
+                    title={t('settings.leaveGroup')}
+                    onPress={() => handleLeaveGroup(currentGroup.id)}
+                    destructive
+                  />
+                </>
+              )}
+            </Card>
+          </View>
+        )}
 
         {/* Coworkers & Colors */}
         <View style={styles.section}>
@@ -587,13 +920,13 @@ export default function SettingsScreen() {
             <SettingsItem
               icon="shield-outline"
               title={t('settings.privacyPolicy')}
-              onPress={() => router.push('/(auth)/terms')}
+              onPress={() => router.push('/(auth)/privacy')}
             />
             <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
             <SettingsItem
               icon="help-circle-outline"
               title={t('settings.helpSupport')}
-              onPress={() => {}}
+              onPress={() => Linking.openURL('mailto:support@shiftsnap.app')}
             />
             <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
             <SettingsItem
@@ -678,6 +1011,68 @@ export default function SettingsScreen() {
         </TouchableOpacity>
       </Modal>
 
+      {/* Join Group Modal */}
+      <Modal visible={showJoinGroup} transparent animationType="fade">
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => { setShowJoinGroup(false); setJoinInviteCode(''); }}
+        >
+          <View
+            style={[styles.modalContent, { backgroundColor: theme.colors.cardBackground }]}
+            onStartShouldSetResponder={() => true}
+          >
+            <Text style={[styles.modalTitle, { color: theme.colors.textPrimary }]}>
+              {t('settings.joinGroup')}
+            </Text>
+            <TextInput
+              style={[styles.modalInput, {
+                color: theme.colors.textPrimary,
+                borderColor: theme.colors.border,
+                backgroundColor: theme.colors.warmWhite,
+                textAlign: 'center',
+                fontSize: 20,
+                letterSpacing: 4,
+                textTransform: 'uppercase',
+              }]}
+              placeholder={t('settings.enterInviteCode')}
+              placeholderTextColor={theme.colors.textMuted}
+              value={joinInviteCode}
+              onChangeText={(text) => setJoinInviteCode(text.toUpperCase().slice(0, 8))}
+              autoFocus
+              autoCapitalize="characters"
+              returnKeyType="done"
+              onSubmitEditing={handleJoinGroup}
+              maxLength={8}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, { borderColor: theme.colors.border }]}
+                onPress={() => { setShowJoinGroup(false); setJoinInviteCode(''); }}
+              >
+                <Text style={[styles.modalButtonText, { color: theme.colors.textSecondary }]}>
+                  {t('common.cancel')}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, {
+                  borderColor: theme.colors.primary,
+                  backgroundColor: joinInviteCode.trim().length >= 4 ? theme.colors.primary : theme.colors.border,
+                }]}
+                onPress={handleJoinGroup}
+                disabled={joinInviteCode.trim().length < 4}
+              >
+                <Text style={[styles.modalButtonText, {
+                  color: joinInviteCode.trim().length >= 4 ? theme.colors.white : theme.colors.textMuted,
+                }]}>
+                  {t('settings.join')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Add Coworker Modal (Android) */}
       <Modal visible={showAddCoworker} transparent animationType="fade">
         <TouchableOpacity
@@ -724,6 +1119,79 @@ export default function SettingsScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Share Invite Code Modal */}
+      <Modal visible={showShareInvite} transparent animationType="fade">
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowShareInvite(false)}
+        >
+          <View
+            style={[styles.modalContent, { backgroundColor: theme.colors.cardBackground }]}
+            onStartShouldSetResponder={() => true}
+          >
+            <Text style={[styles.modalTitle, { color: theme.colors.textPrimary }]}>
+              {t('settings.shareInvite')}
+            </Text>
+
+            {/* Invite code display */}
+            <View style={[styles.inviteCodeDisplay, { backgroundColor: theme.colors.warmWhite, borderColor: theme.colors.border }]}>
+              <Text style={[styles.inviteCodeText, { color: theme.colors.textPrimary }]}>
+                {currentGroup?.invite_code}
+              </Text>
+              <TouchableOpacity onPress={handleCopyInviteCode}>
+                <Ionicons name="copy-outline" size={22} color={theme.colors.primary} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.shareHint, { color: theme.colors.textSecondary }]}>
+              {t('settings.shareHint')}
+            </Text>
+
+            {/* Unshared schedules section */}
+            <View style={[styles.shareSection, { borderTopColor: theme.colors.borderLight }]}>
+              <View style={styles.shareSectionHeader}>
+                <Ionicons
+                  name={unsharedCount > 0 ? 'alert-circle-outline' : 'checkmark-circle-outline'}
+                  size={20}
+                  color={unsharedCount > 0 ? theme.colors.warning : theme.colors.success}
+                />
+                <Text style={[styles.shareSectionText, { color: theme.colors.textPrimary }]}>
+                  {unsharedCount > 0
+                    ? (unsharedCount === 1
+                      ? t('settings.unsharedCountOne')
+                      : t('settings.unsharedCount', { count: unsharedCount }))
+                    : t('settings.allShared')}
+                </Text>
+              </View>
+
+              {unsharedCount > 0 && (
+                <TouchableOpacity
+                  style={[styles.shareAllButton, { backgroundColor: theme.colors.primary }]}
+                  onPress={handleShareAllSchedules}
+                  disabled={sharingSchedules}
+                >
+                  <Ionicons name="share-outline" size={18} color={theme.colors.white} />
+                  <Text style={[styles.shareAllButtonText, { color: theme.colors.white }]}>
+                    {sharingSchedules ? t('settings.sharing') : t('settings.shareAll')}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Close button */}
+            <TouchableOpacity
+              style={[styles.modalButton, { borderColor: theme.colors.border, marginTop: 12, alignSelf: 'stretch' }]}
+              onPress={() => setShowShareInvite(false)}
+            >
+              <Text style={[styles.modalButtonText, { color: theme.colors.textSecondary }]}>
+                {t('common.ok')}
+              </Text>
+            </TouchableOpacity>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -914,6 +1382,53 @@ const styles = StyleSheet.create({
   },
   modalButtonText: {
     fontSize: 14,
+    fontWeight: '600',
+  },
+  inviteCodeDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 8,
+  },
+  inviteCodeText: {
+    fontSize: 22,
+    fontWeight: '700',
+    letterSpacing: 4,
+  },
+  shareHint: {
+    fontSize: 13,
+    marginBottom: 16,
+  },
+  shareSection: {
+    borderTopWidth: 1,
+    paddingTop: 16,
+    width: '100%',
+  },
+  shareSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  shareSectionText: {
+    fontSize: 14,
+    flex: 1,
+  },
+  shareAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginBottom: 4,
+  },
+  shareAllButtonText: {
+    fontSize: 15,
     fontWeight: '600',
   },
 });

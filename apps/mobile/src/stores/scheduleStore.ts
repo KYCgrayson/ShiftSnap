@@ -35,6 +35,8 @@ interface ScheduleState {
   ) => Promise<string>;
   updateScheduleStatus: (scheduleId: string, status: 'draft' | 'published' | 'archived') => Promise<void>;
   updateScheduleYearMonth: (scheduleId: string, yearMonth: string) => Promise<void>;
+  getUnsharedCount: (userId: string, groupId: string) => Promise<number>;
+  shareSchedulesWithGroup: (userId: string, groupId: string) => Promise<number>;
   reset: () => void;
 }
 
@@ -67,11 +69,18 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     }
     set({ loading: true, error: null });
     try {
-      const { data, error } = await supabase
+      const currentGroup = useGroupStore.getState().currentGroup;
+      let query = supabase
         .from('schedules')
-        .select('*')
-        .eq('owner_id', userId)
-        .order('created_at', { ascending: false });
+        .select('*');
+
+      if (currentGroup && currentGroup.id !== 'guest-group') {
+        query = query.or(`owner_id.eq.${userId},group_id.eq.${currentGroup.id}`);
+      } else {
+        query = query.eq('owner_id', userId);
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) throw error;
 
@@ -224,6 +233,47 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
       set({ error: message });
       throw error;
     }
+  },
+
+  getUnsharedCount: async (userId: string, groupId: string) => {
+    if (getIsGuest()) return 0;
+    const { count, error } = await supabase
+      .from('schedules')
+      .select('*', { count: 'exact', head: true })
+      .eq('owner_id', userId)
+      .or(`group_id.is.null,group_id.neq.${groupId}`);
+    if (error) {
+      console.warn('Failed to get unshared count:', error);
+      return 0;
+    }
+    return count ?? 0;
+  },
+
+  shareSchedulesWithGroup: async (userId: string, groupId: string) => {
+    if (getIsGuest()) return 0;
+    // Get unshared schedules
+    const { data, error: fetchError } = await supabase
+      .from('schedules')
+      .select('id')
+      .eq('owner_id', userId)
+      .or(`group_id.is.null,group_id.neq.${groupId}`);
+    if (fetchError) throw fetchError;
+    if (!data || data.length === 0) return 0;
+
+    const ids = data.map((s) => s.id);
+    const { error: updateError } = await supabase
+      .from('schedules')
+      .update({ group_id: groupId })
+      .in('id', ids);
+    if (updateError) throw updateError;
+
+    // Update local state
+    set((state) => ({
+      schedules: state.schedules.map((s) =>
+        ids.includes(s.id) ? { ...s, group_id: groupId } : s
+      ),
+    }));
+    return ids.length;
   },
 
   reset: () => {

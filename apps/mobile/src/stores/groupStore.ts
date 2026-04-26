@@ -191,40 +191,26 @@ export const useGroupStore = create<GroupState>((set, get) => ({
     if (getIsGuest()) return;
     set({ loading: true, error: null });
     try {
-      // Find group by invite code
-      const { data: group, error: findError } = await supabase
-        .from('groups')
-        .select('*')
-        .eq('invite_code', inviteCode.toUpperCase())
-        .maybeSingle();
+      // RPC bypasses the groups_select RLS policy, which only lets
+      // members read their groups, so a fresh user with just the invite
+      // code can still find and join the group atomically server-side.
+      const { data: gid, error: rpcError } = await supabase.rpc(
+        'join_group_by_invite_code',
+        { code: inviteCode.toUpperCase() }
+      );
 
-      if (findError) throw findError;
-      if (!group) throw new Error('INVALID_CODE');
-
-      // Check if already a member
-      const { data: existing } = await supabase
-        .from('group_members')
-        .select('id')
-        .eq('group_id', group.id)
-        .eq('user_id', userId)
-        .maybeSingle();
-
-      if (existing) throw new Error('ALREADY_MEMBER');
-
-      // Insert as member
-      const { error: joinError } = await supabase
-        .from('group_members')
-        .insert({
-          group_id: group.id,
-          user_id: userId,
-          role: 'member',
-        });
-
-      if (joinError) throw joinError;
+      if (rpcError) {
+        // Surface the structured errors the RPC raises.
+        if (rpcError.message.includes('ALREADY_MEMBER')) {
+          throw new Error('ALREADY_MEMBER');
+        }
+        throw rpcError;
+      }
+      if (!gid) throw new Error('INVALID_CODE');
 
       // Refresh groups and switch to the new one
       await get().fetchGroups(userId);
-      get().switchGroup(group.id);
+      get().switchGroup(gid as string);
       set({ loading: false });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to join group';

@@ -36,7 +36,10 @@ interface LocalShiftCode {
   endTime: string | null;
   isDayOff: boolean;
   isConfirmed: boolean;
+  groupId: string | null;
 }
+
+const COLLAPSED_GROUPS_KEY = 'shiftsnap_collapsed_code_groups';
 
 export default function ShiftsScreen() {
   const theme = useTheme();
@@ -83,7 +86,60 @@ export default function ShiftsScreen() {
     endTime: sc.end_time,
     isDayOff: sc.is_day_off,
     isConfirmed: sc.is_confirmed,
+    groupId: sc.group_id,
   }));
+
+  const groups = useGroupStore((s) => s.groups);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    AsyncStorage.getItem(COLLAPSED_GROUPS_KEY).then((val) => {
+      if (val) {
+        try {
+          setCollapsedGroups(new Set(JSON.parse(val) as string[]));
+        } catch { /* ignore */ }
+      }
+    });
+  }, []);
+
+  const toggleGroupCollapsed = (key: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      AsyncStorage.setItem(COLLAPSED_GROUPS_KEY, JSON.stringify([...next])).catch(() => {});
+      return next;
+    });
+  };
+
+  // Group codes by source: 'private' (no group_id) or specific group id.
+  const codeSections = (() => {
+    const buckets = new Map<string, LocalShiftCode[]>();
+    for (const code of shiftCodes) {
+      const key = code.groupId ?? 'private';
+      const arr = buckets.get(key) ?? [];
+      arr.push(code);
+      buckets.set(key, arr);
+    }
+    const sections: Array<{ key: string; title: string; data: LocalShiftCode[] }> = [];
+    if (buckets.has('private')) {
+      sections.push({
+        key: 'private',
+        title: t('shifts.privateCodes'),
+        data: buckets.get('private')!,
+      });
+    }
+    for (const g of groups) {
+      if (buckets.has(g.id)) {
+        sections.push({
+          key: g.id,
+          title: t('shifts.groupCodes', { name: g.name }),
+          data: buckets.get(g.id)!,
+        });
+      }
+    }
+    return sections;
+  })();
 
   const dayOffCodes = shiftCodes
     .filter((sc) => sc.isDayOff)
@@ -478,18 +534,49 @@ export default function ShiftsScreen() {
           </View>
         )}
 
-        {/* Saved Codes Section */}
+        {/* Saved Codes Section, grouped by source */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
             {t('shifts.yourShiftCodes')}
           </Text>
           {shiftCodes.length > 0 ? (
-            <FlatList
-              data={shiftCodes}
-              renderItem={renderShiftCodeItem}
-              keyExtractor={(item) => item.id}
-              scrollEnabled={false}
-            />
+            codeSections.map((section) => {
+              const collapsed = collapsedGroups.has(section.key);
+              return (
+                <View key={section.key} style={{ marginBottom: 12 }}>
+                  <TouchableOpacity
+                    onPress={() => toggleGroupCollapsed(section.key)}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      paddingVertical: 8,
+                      paddingHorizontal: 4,
+                      gap: 6,
+                    }}
+                  >
+                    <Ionicons
+                      name={collapsed ? 'chevron-forward' : 'chevron-down'}
+                      size={16}
+                      color={theme.colors.textSecondary}
+                    />
+                    <Text
+                      style={{
+                        fontSize: 14,
+                        fontWeight: '600',
+                        color: theme.colors.textSecondary,
+                        flex: 1,
+                      }}
+                    >
+                      {section.title} ({section.data.length})
+                    </Text>
+                  </TouchableOpacity>
+                  {!collapsed &&
+                    section.data.map((item) => (
+                      <View key={item.id}>{renderShiftCodeItem({ item })}</View>
+                    ))}
+                </View>
+              );
+            })
           ) : (
             <Card style={styles.emptyCard}>
               <Ionicons name="code-outline" size={48} color={theme.colors.textMuted} />

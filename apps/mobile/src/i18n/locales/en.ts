@@ -245,6 +245,8 @@ export default {
     endTimePlaceholder: 'e.g., 17:00',
     meaningRequired: 'Please enter a meaning for this code',
     yourShiftCodes: 'Your Shift Codes',
+    privateCodes: 'Private',
+    groupCodes: '{{name}} (group)',
     noShiftCodesYet: 'No shift codes yet',
     noShiftCodesDesc: 'Scan a schedule or add codes manually',
     commonCodes: 'Common Codes',

@@ -245,6 +245,8 @@ export default {
     endTimePlaceholder: '例如：17:00',
     meaningRequired: '請輸入此代碼的含義',
     yourShiftCodes: '你的班別代碼',
+    privateCodes: '私人代碼',
+    groupCodes: '{{name}} 群組',
     noShiftCodesYet: '尚無班別代碼',
     noShiftCodesDesc: '掃描班表或手動新增代碼',
     commonCodes: '常用代碼',

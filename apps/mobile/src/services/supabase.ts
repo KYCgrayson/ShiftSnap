@@ -100,13 +100,20 @@ export async function getCurrentSession() {
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
-import * as Crypto from 'expo-crypto';
 
-WebBrowser.maybeCompleteAuthSession();
-
-const REDIRECT_URI = AuthSession.makeRedirectUri({
-  scheme: 'shiftsnap',
-});
+// Lazy-initialized redirect URI (avoid calling native modules at import time)
+let _redirectUri: string | null = null;
+function getRedirectUri(): string {
+  if (!_redirectUri) {
+    try {
+      _redirectUri = AuthSession.makeRedirectUri({ scheme: 'shiftsnap' });
+    } catch (e) {
+      console.warn('[OAuth] Failed to create redirect URI:', e);
+      _redirectUri = 'shiftsnap://';
+    }
+  }
+  return _redirectUri;
+}
 
 export async function signInWithApple() {
   try {
@@ -149,12 +156,20 @@ export async function signInWithApple() {
 
 export async function signInWithGoogle() {
   try {
-    console.log('[GoogleAuth] redirect URI:', REDIRECT_URI);
+    // Complete any pending auth session (must run before opening a new one)
+    try {
+      WebBrowser.maybeCompleteAuthSession();
+    } catch (e) {
+      console.warn('[GoogleAuth] maybeCompleteAuthSession failed:', e);
+    }
+
+    const redirectUri = getRedirectUri();
+    console.log('[GoogleAuth] redirect URI:', redirectUri);
 
     const { data: oauthData, error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: REDIRECT_URI,
+        redirectTo: redirectUri,
         skipBrowserRedirect: true,
       },
     });
@@ -165,7 +180,7 @@ export async function signInWithGoogle() {
     }
 
     console.log('[GoogleAuth] opening browser...');
-    const result = await WebBrowser.openAuthSessionAsync(oauthData.url, REDIRECT_URI);
+    const result = await WebBrowser.openAuthSessionAsync(oauthData.url, redirectUri);
     console.log('[GoogleAuth] browser result type:', result.type);
 
     if (result.type !== 'success' || !result.url) {

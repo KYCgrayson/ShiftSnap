@@ -24,7 +24,7 @@
   "submit": {
     "production": {
       "ios": {
-        "appleId": "",
+        "appleId": "grayson@chefchef.app",
         "ascAppId": "6760009299",
         "appleTeamId": "R9CKAABL8D"
       }

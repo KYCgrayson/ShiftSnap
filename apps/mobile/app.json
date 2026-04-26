@@ -22,7 +22,8 @@
       "infoPlist": {
         "NSCameraUsageDescription": "IShift needs camera access to scan your work schedule",
         "NSPhotoLibraryUsageDescription": "IShift needs photo library access to select schedule images",
-        "NSCalendarsFullAccessUsageDescription": "IShift needs access to your calendar to sync shift schedules"
+        "NSCalendarsFullAccessUsageDescription": "IShift needs access to your calendar to sync shift schedules",
+        "ITSAppUsesNonExemptEncryption": false
       },
       "appleTeamId": "R9CKAABL8D"
     },
@@ -80,6 +81,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "abd14e6d-ee87-4a71-a31a-dec97ce3e3b2"
+      }
     }
   }
 }

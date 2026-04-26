@@ -43,6 +43,7 @@ LocaleConfig.locales['zh-TW'] = {
 };
 
 const SHOW_CODES_KEY = 'shiftsnap_show_shift_codes';
+const SHOW_COWORKERS_KEY = 'shiftsnap_show_coworker_shifts';
 const UNIFY_DAYOFF_KEY = 'shiftsnap_unify_dayoff';
 const UNIFY_DAYOFF_SYMBOL_KEY = 'shiftsnap_unify_dayoff_symbol';
 
@@ -112,6 +113,9 @@ export default function CalendarScreen() {
   useEffect(() => {
     AsyncStorage.getItem(SHOW_CODES_KEY).then((val) => {
       if (val !== null) setShowShiftCodes(val === 'true');
+    });
+    AsyncStorage.getItem(SHOW_COWORKERS_KEY).then((val) => {
+      if (val !== null) setShowCoworkerShifts(val === 'true');
     });
   }, []);
 
@@ -486,6 +490,7 @@ export default function CalendarScreen() {
             onPress={() => {
               const val = !showCoworkerShifts;
               setShowCoworkerShifts(val);
+              AsyncStorage.setItem(SHOW_COWORKERS_KEY, String(val));
               toast(val ? t('calendar.toastCoworkersOn') : t('calendar.toastCoworkersOff'));
             }}
           >

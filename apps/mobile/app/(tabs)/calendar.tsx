@@ -96,6 +96,7 @@ export default function CalendarScreen() {
   const [editingShift, setEditingShift] = useState<ShiftEvent | null>(null);
   const [editStartTime, setEditStartTime] = useState('');
   const [editEndTime, setEditEndTime] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
 
   // Note modal state
   const [showNoteModal, setShowNoteModal] = useState(false);
@@ -354,9 +355,11 @@ export default function CalendarScreen() {
     setShowEditModal(true);
   };
 
-  // Save shift edit
+  // Save shift edit. Guard against concurrent taps so a slow network
+  // can't queue duplicate UPDATEs that race each other.
   const handleSaveShiftEdit = async () => {
-    if (!editingShift) return;
+    if (!editingShift || savingEdit) return;
+    setSavingEdit(true);
     try {
       await updateShift(editingShift.id, {
         start_time: editStartTime || null,
@@ -378,8 +381,14 @@ export default function CalendarScreen() {
       }
       setShowEditModal(false);
       setEditingShift(null);
-    } catch {
-      Alert.alert(t('common.error'), t('calendar.editFailed'));
+    } catch (e) {
+      const reason = e instanceof Error ? e.message : '';
+      Alert.alert(
+        t('common.error'),
+        reason ? `${t('calendar.editFailed')}\n${reason}` : t('calendar.editFailed'),
+      );
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -625,6 +634,25 @@ export default function CalendarScreen() {
                         </Text>
                       )}
                     </View>
+                    {/* Note button: lives inside the shift pill so it
+                        does not eat a whole row when no note is set yet.
+                        Filled icon when a note exists, outline + plus
+                        when not. Same modal as the standalone button. */}
+                    <TouchableOpacity
+                      style={styles.moreButton}
+                      onPress={openNoteModal}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    >
+                      <Ionicons
+                        name={notesByDate[selectedDate] ? 'document-text' : 'add'}
+                        size={notesByDate[selectedDate] ? 18 : 20}
+                        color={
+                          notesByDate[selectedDate]
+                            ? '#EA580C'
+                            : theme.colors.textMuted
+                        }
+                      />
+                    </TouchableOpacity>
                     <TouchableOpacity style={styles.moreButton} onPress={() => handleEditShift(shift)}>
                       <Ionicons
                         name="ellipsis-horizontal"
@@ -664,7 +692,11 @@ export default function CalendarScreen() {
             </Card>
           )}
 
-          {/* Daily note */}
+          {/* Daily note: existing note still gets the orange card so its
+              content is visible. The empty "+ Add note" pill only shows
+              when there are no shifts on this day, otherwise the pill
+              eats a whole row — when shifts exist, the note icon lives
+              inside the shift pill next to "..." instead. */}
           {notesByDate[selectedDate] ? (
             <TouchableOpacity
               style={[styles.noteCard, { backgroundColor: '#FFF7ED', borderColor: '#FDBA74' }]}
@@ -681,7 +713,7 @@ export default function CalendarScreen() {
               </Text>
               <Ionicons name="pencil-outline" size={14} color="#F97316" />
             </TouchableOpacity>
-          ) : (
+          ) : myDateShifts.length === 0 ? (
             <TouchableOpacity
               style={[styles.addNoteButton, { borderColor: theme.colors.border }]}
               onPress={openNoteModal}
@@ -692,7 +724,7 @@ export default function CalendarScreen() {
                 {t('calendar.addNote')}
               </Text>
             </TouchableOpacity>
-          )}
+          ) : null}
 
           {/* Coworker shifts — expandable */}
           {coworkerDateShifts.length > 0 && (
@@ -758,13 +790,12 @@ export default function CalendarScreen() {
                           </Text>
                         )}
                       </View>
-                      <TouchableOpacity style={styles.moreButton} onPress={() => handleEditShift(shift)}>
-                        <Ionicons
-                          name="ellipsis-horizontal"
-                          size={20}
-                          color={theme.colors.textMuted}
-                        />
-                      </TouchableOpacity>
+                      {/* No "..." for coworker shifts: shifts_update RLS
+                          only allows the shift's owner (or a group
+                          admin) to update, and tapping it produced a
+                          generic "更新班次失敗" before. View-only is the
+                          right model here — coworker shifts come from
+                          their own scans. */}
                     </View>
                   </Card>
                 );
@@ -922,11 +953,19 @@ export default function CalendarScreen() {
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.editModalButton, { borderColor: theme.colors.primary, backgroundColor: theme.colors.primary }]}
+                style={[
+                  styles.editModalButton,
+                  {
+                    borderColor: theme.colors.primary,
+                    backgroundColor: theme.colors.primary,
+                    opacity: savingEdit ? 0.6 : 1,
+                  },
+                ]}
                 onPress={handleSaveShiftEdit}
+                disabled={savingEdit}
               >
                 <Text style={[styles.editModalButtonText, { color: theme.colors.white }]}>
-                  {t('common.save')}
+                  {savingEdit ? t('settings.sharing') : t('common.save')}
                 </Text>
               </TouchableOpacity>
             </View>

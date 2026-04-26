@@ -12,6 +12,7 @@ import { useGroupStore } from '../src/stores/groupStore';
 import { useTheme, Colors, DarkColors } from '../src/theme';
 import { useInviteLinkHandler } from '../src/hooks/useInviteLinkHandler';
 import { useMissedShiftNotifications } from '../src/hooks/useMissedShiftNotifications';
+import { useRealtimeNotifications } from '../src/hooks/useRealtimeNotifications';
 import { ToastProvider } from '../src/components/ui';
 import { NotificationBanner } from '../src/components/NotificationBanner';
 import i18n from '../src/i18n';
@@ -27,6 +28,7 @@ function RootLayoutInner() {
 
   useInviteLinkHandler();
   useMissedShiftNotifications(user?.id, initialized);
+  useRealtimeNotifications(user?.id);
 
   useEffect(() => {
     initViewScope();

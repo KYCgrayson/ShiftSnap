@@ -45,7 +45,7 @@ export default function HomeScreen() {
       fetchUpcomingShifts(userId),
       fetchShiftCodes(userId),
     ]);
-  }, [userId]);
+  }, [userId, viewScope]);
 
   useEffect(() => {
     loadData();

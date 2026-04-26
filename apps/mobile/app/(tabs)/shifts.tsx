@@ -21,6 +21,7 @@ import { useShiftCodeStore } from '../../src/stores/shiftCodeStore';
 import { useShiftStore } from '../../src/stores/shiftStore';
 import { useScheduleStore } from '../../src/stores/scheduleStore';
 import { useCalendarStore } from '../../src/stores/calendarStore';
+import { useGroupStore } from '../../src/stores/groupStore';
 import { COMMON_SHIFT_CODES } from '@shiftsnap/shared';
 import { GuestUpgradeBanner } from '../../src/components/GuestUpgradeBanner';
 
@@ -55,6 +56,7 @@ export default function ShiftsScreen() {
   const { createShiftsFromOCR } = useShiftStore();
   const { updateScheduleStatus } = useScheduleStore();
   const { isConnected, syncShift } = useCalendarStore();
+  const viewScope = useGroupStore((s) => s.viewScope);
 
   const [pendingCodes, setPendingCodes] = useState<string[]>([]);
   const [ocrResult, setOcrResult] = useState<any>(null);
@@ -88,12 +90,13 @@ export default function ShiftsScreen() {
     .map((sc) => sc.code)
     .sort((a, b) => a.length - b.length || a.localeCompare(b));
 
-  // Load shift codes
+  // Load shift codes — also refetch when group view scope changes so
+  // codes shared into the active scope appear immediately.
   useEffect(() => {
     if (user?.id) {
       fetchShiftCodes(user.id);
     }
-  }, [user?.id]);
+  }, [user?.id, viewScope]);
 
   // Load unify day-off settings
   useEffect(() => {

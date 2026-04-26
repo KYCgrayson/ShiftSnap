@@ -50,16 +50,32 @@ export const useShiftCodeStore = create<ShiftCodeState>((set, get) => ({
     }
     set({ loading: true, error: null });
     try {
-      const currentGroup = useGroupStore.getState().currentGroup;
+      // Resolve which group_ids worth of shared codes to include based
+      // on the user's viewScope:
+      //   'all'     -> shared codes from every group the user is in
+      //   <groupId> -> shared codes from that specific group only
+      const { groups, viewScope } = useGroupStore.getState();
+      const realGroupIds = groups
+        .map((g) => g.id)
+        .filter((id) => id !== 'guest-group');
+      const sharedGroupIds =
+        viewScope === 'all'
+          ? realGroupIds
+          : realGroupIds.includes(viewScope)
+            ? [viewScope]
+            : [];
 
-      // Fetch user's own codes + group-shared codes
+      // Fetch user's own codes + group-shared codes from selected scope.
       let query = supabase
         .from('shift_codes')
         .select('*')
         .order('code');
 
-      if (currentGroup) {
-        query = query.or(`user_id.eq.${userId},and(group_id.eq.${currentGroup.id},is_group_shared.eq.true)`);
+      if (sharedGroupIds.length > 0) {
+        const idList = sharedGroupIds.join(',');
+        query = query.or(
+          `user_id.eq.${userId},and(group_id.in.(${idList}),is_group_shared.eq.true)`,
+        );
       } else {
         query = query.eq('user_id', userId);
       }

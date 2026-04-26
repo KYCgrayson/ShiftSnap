@@ -3,14 +3,18 @@ import { supabase } from '../services/supabase';
 import { useShiftStore } from '../stores/shiftStore';
 import { getIsGuest } from '../stores/authStore';
 
-export function useRealtimeShifts(userId: string | undefined, yearMonth: string) {
+export function useRealtimeShifts(
+  userId: string | undefined,
+  yearMonth: string,
+  groupId: string | undefined,
+) {
   const fetchShiftsForMonth = useShiftStore((s) => s.fetchShiftsForMonth);
 
   useEffect(() => {
     if (!userId || getIsGuest()) return;
 
     const channel = supabase
-      .channel(`shifts-realtime-${userId}`)
+      .channel(`shifts-realtime-${userId}-${groupId ?? 'none'}`)
       .on(
         'postgres_changes',
         {
@@ -19,7 +23,6 @@ export function useRealtimeShifts(userId: string | undefined, yearMonth: string)
           table: 'shifts',
         },
         () => {
-          // Refetch month shifts when any change occurs (RLS handles group visibility)
           fetchShiftsForMonth(userId, yearMonth);
         }
       )
@@ -28,5 +31,5 @@ export function useRealtimeShifts(userId: string | undefined, yearMonth: string)
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userId, yearMonth]);
+  }, [userId, yearMonth, groupId]);
 }

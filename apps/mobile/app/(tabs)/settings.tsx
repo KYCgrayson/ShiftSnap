@@ -13,6 +13,7 @@ import {
   Platform,
   Modal,
   Linking,
+  Share,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
@@ -337,6 +338,18 @@ export default function SettingsScreen() {
     if (!currentGroup?.invite_code) return;
     await Clipboard.setStringAsync(currentGroup.invite_code);
     Alert.alert(t('settings.copied'), t('settings.inviteCodeCopied'));
+  };
+
+  const handleShareViaSystem = async () => {
+    if (!currentGroup?.invite_code) return;
+    const code = currentGroup.invite_code;
+    const url = `shiftsnap://invite/${code}`;
+    const message = t('settings.shareMessageTemplate', { code, url });
+    try {
+      await Share.share({ message });
+    } catch (e) {
+      console.warn('Share failed:', e);
+    }
   };
 
   const handleOpenShareInvite = async () => {
@@ -1197,8 +1210,19 @@ export default function SettingsScreen() {
             </View>
 
             <Text style={[styles.shareHint, { color: theme.colors.textSecondary }]}>
-              {t('settings.shareHint')}
+              {t('settings.shareInstructions')}
             </Text>
+
+            {/* System share button */}
+            <TouchableOpacity
+              style={[styles.shareAllButton, { backgroundColor: theme.colors.primary, marginTop: 12, alignSelf: 'stretch' }]}
+              onPress={handleShareViaSystem}
+            >
+              <Ionicons name="share-social-outline" size={18} color={theme.colors.white} />
+              <Text style={[styles.shareAllButtonText, { color: theme.colors.white }]}>
+                {t('settings.shareViaSystem')}
+              </Text>
+            </TouchableOpacity>
 
             {/* Unshared schedules section */}
             <View style={[styles.shareSection, { borderTopColor: theme.colors.borderLight }]}>

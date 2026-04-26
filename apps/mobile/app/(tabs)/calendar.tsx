@@ -22,6 +22,7 @@ import { useShiftStore } from '../../src/stores/shiftStore';
 import { useShiftCodeStore } from '../../src/stores/shiftCodeStore';
 import { usePersonStore } from '../../src/stores/personStore';
 import { useCalendarStore } from '../../src/stores/calendarStore';
+import { useGroupStore } from '../../src/stores/groupStore';
 import { Card, TimePickerInput } from '../../src/components/ui';
 import { GuestUpgradeBanner } from '../../src/components/GuestUpgradeBanner';
 import { CalendarDayWithBars } from '../../src/components/CalendarDayWithBars';
@@ -70,6 +71,7 @@ export default function CalendarScreen() {
   const { persons, fetchPersons, updatePerson } = usePersonStore();
   const { isConnected: calendarConnected, syncShift } = useCalendarStore();
   const { notesByDate, fetchNotesForMonth, saveNote } = useDailyNoteStore();
+  const currentGroupId = useGroupStore((s) => s.currentGroup?.id);
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
@@ -99,7 +101,7 @@ export default function CalendarScreen() {
   LocaleConfig.defaultLocale = locale === 'zh-TW' ? 'zh-TW' : '';
 
   // Realtime shifts subscription
-  useRealtimeShifts(userId, currentMonth);
+  useRealtimeShifts(userId, currentMonth, currentGroupId);
 
   // Load saved preferences
   useEffect(() => {
@@ -148,7 +150,7 @@ export default function CalendarScreen() {
       loadMonth(currentMonth);
       fetchNotesForMonth(userId, currentMonth);
     }
-  }, [userId, currentMonth]);
+  }, [userId, currentMonth, currentGroupId]);
 
   const onRefresh = async () => {
     setRefreshing(true);

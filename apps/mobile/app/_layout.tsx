@@ -10,6 +10,7 @@ import { useCalendarStore } from '../src/stores/calendarStore';
 import { useLocaleStore } from '../src/stores/localeStore';
 import { useGroupStore } from '../src/stores/groupStore';
 import { useTheme, Colors, DarkColors } from '../src/theme';
+import { useInviteLinkHandler } from '../src/hooks/useInviteLinkHandler';
 import i18n from '../src/i18n';
 
 // Keep the splash screen visible while we fetch resources
@@ -19,6 +20,8 @@ function RootLayoutInner() {
   const theme = useTheme();
   const { initialized, initialize, user } = useAuthStore();
   const fetchOrCreateDefaultGroup = useGroupStore((s) => s.fetchOrCreateDefaultGroup);
+
+  useInviteLinkHandler();
 
   useEffect(() => {
     initialize().finally(() => {

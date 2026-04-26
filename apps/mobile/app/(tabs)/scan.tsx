@@ -22,6 +22,7 @@ import { supabase } from '../../src/services/supabase';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useScheduleStore } from '../../src/stores/scheduleStore';
 import { useLocaleStore } from '../../src/stores/localeStore';
+import { useGroupStore } from '../../src/stores/groupStore';
 import { formatYearMonth } from '@shiftsnap/shared';
 
 // Generate a fresh signed URL from a storage path
@@ -51,6 +52,7 @@ export default function ScanScreen() {
   const locale = useLocaleStore((s) => s.locale);
   const { user, isGuest } = useAuthStore();
   const { createScheduleFromOCR, schedules, fetchSchedules } = useScheduleStore();
+  const currentGroupId = useGroupStore((s) => s.currentGroup?.id);
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
 
   // Pulse animation for processing overlay
@@ -67,12 +69,12 @@ export default function ScanScreen() {
     }
   }, [processing]);
 
-  // Load scan history on mount
+  // Load scan history on mount and when group changes
   useEffect(() => {
     if (user?.id) {
       fetchSchedules(user.id);
     }
-  }, [user?.id]);
+  }, [user?.id, currentGroupId]);
 
   // Auto-request camera permission on mount (triggers native iOS dialog)
   useEffect(() => {

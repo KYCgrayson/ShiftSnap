@@ -34,6 +34,8 @@ export default {
     getStarted: 'Get Started',
     alreadyHaveAccount: 'Already have an account?',
     tryWithoutAccount: 'Try without an account',
+    loginAsDemo: 'Log in as Demo Account',
+    demoFailed: 'Could not sign in to the demo account. Please try again later.',
     termsAgreement: 'By continuing, you agree to our ',
     termsOfService: 'Terms of Service',
     and: ' and ',

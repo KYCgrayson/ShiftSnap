@@ -34,6 +34,8 @@ export default {
     getStarted: '開始使用',
     alreadyHaveAccount: '已經有帳號了？',
     tryWithoutAccount: '不建立帳號試用',
+    loginAsDemo: '使用 Demo 帳號登入',
+    demoFailed: '無法登入 Demo 帳號，請稍後再試。',
     termsAgreement: '繼續即表示您同意我們的',
     termsOfService: '服務條款',
     and: '和',

@@ -13,6 +13,11 @@ import {
 
 const GUEST_MODE_KEY = 'shiftsnap:guest-mode';
 
+// Shared demo account — credentials are intentionally public.
+// The account is for exploration only; do not put real PII into it.
+const DEMO_EMAIL = 'demo@ishift.app';
+const DEMO_PASSWORD = 'DemoIShift2026!';
+
 interface AuthState {
   user: User | null;
   session: Session | null;
@@ -26,6 +31,7 @@ interface AuthState {
   signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   signUp: (email: string, password: string, displayName?: string) => Promise<{ success: boolean; error?: string }>;
   signInAsGuest: () => void;
+  signInAsDemo: () => Promise<{ success: boolean; error?: string }>;
   signInWithGoogle: () => Promise<{ success: boolean; error?: string }>;
   signInWithApple: () => Promise<{ success: boolean; error?: string }>;
   signOut: () => Promise<void>;
@@ -175,6 +181,50 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     AsyncStorage.setItem(GUEST_MODE_KEY, 'true').catch(
       (e) => console.warn('Failed to persist guest mode:', e)
     );
+  },
+
+  signInAsDemo: async () => {
+    set({ loading: true, error: null });
+    try {
+      let user: User | null = null;
+      let session: Session | null = null;
+
+      // Try sign in first; on first run the account may not exist yet,
+      // in which case we sign it up and then sign in.
+      const first = await signInWithEmail(DEMO_EMAIL, DEMO_PASSWORD);
+      if (first.data?.session) {
+        user = first.data.user;
+        session = first.data.session;
+      } else {
+        const signup = await signUpWithEmail(DEMO_EMAIL, DEMO_PASSWORD, 'Demo User');
+        if (signup.error) {
+          set({ loading: false, error: signup.error.message });
+          return { success: false, error: signup.error.message };
+        }
+        if (signup.data?.session) {
+          user = signup.data.user;
+          session = signup.data.session;
+        } else {
+          // Email-confirmation flow: try sign in once more in case it's auto-confirmed.
+          const retry = await signInWithEmail(DEMO_EMAIL, DEMO_PASSWORD);
+          if (retry.error || !retry.data?.session) {
+            const msg = retry.error?.message ?? 'Demo account unavailable';
+            set({ loading: false, error: msg });
+            return { success: false, error: msg };
+          }
+          user = retry.data.user;
+          session = retry.data.session;
+        }
+      }
+
+      await AsyncStorage.removeItem(GUEST_MODE_KEY).catch(() => {});
+      set({ user, session, isGuest: false, loading: false, error: null });
+      return { success: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Demo sign in failed';
+      set({ loading: false, error: message });
+      return { success: false, error: message };
+    }
   },
 
   signInWithGoogle: async () => {

@@ -49,31 +49,38 @@ function BannerItem({ item }: { item: InAppNotification }) {
     dismiss(item.id);
   };
 
+  // High-contrast palette: invert against the page background so the
+  // banner pops in both light and dark mode. In light mode it's near-
+  // black on warm white; in dark mode it's bright surface on near-black.
+  const bg = theme.isDark ? '#F5F5F5' : '#1F1F1F';
+  const fg = theme.isDark ? '#1F1F1F' : '#FFFFFF';
+  const accent = theme.colors.primary;
+
   return (
     <Animated.View
       style={[
         styles.banner,
         {
-          backgroundColor: theme.colors.cardBackground,
-          borderColor: theme.colors.borderLight,
-          shadowColor: theme.colors.textPrimary,
+          backgroundColor: bg,
+          borderColor: bg,
+          shadowColor: '#000',
           opacity,
           transform: [{ translateY }],
         },
       ]}
     >
       <TouchableOpacity onPress={handlePress} style={styles.row} activeOpacity={0.8}>
-        <View style={[styles.iconBg, { backgroundColor: theme.colors.primary + '20' }]}>
-          <Ionicons name="notifications-outline" size={18} color={theme.colors.primary} />
+        <View style={[styles.iconBg, { backgroundColor: accent + '33' }]}>
+          <Ionicons name="notifications" size={18} color={accent} />
         </View>
-        <Text style={[styles.message, { color: theme.colors.textPrimary }]} numberOfLines={2}>
+        <Text style={[styles.message, { color: fg }]} numberOfLines={2}>
           {item.message}
         </Text>
         <TouchableOpacity
           onPress={() => dismiss(item.id)}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Ionicons name="close" size={18} color={theme.colors.textMuted} />
+          <Ionicons name="close" size={18} color={fg} />
         </TouchableOpacity>
       </TouchableOpacity>
     </Animated.View>

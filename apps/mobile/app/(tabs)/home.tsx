@@ -107,7 +107,7 @@ export default function HomeScreen() {
                 <Ionicons
                   name={viewScope === 'all' ? 'globe-outline' : 'people-circle-outline'}
                   size={22}
-                  color={viewScope === 'all' ? theme.colors.textMuted : theme.colors.primary}
+                  color={viewScope === 'all' ? theme.colors.textSecondary : theme.colors.primary}
                 />
               </TouchableOpacity>
             )}

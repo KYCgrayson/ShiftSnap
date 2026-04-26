@@ -508,7 +508,7 @@ export default function CalendarScreen() {
             <Text style={{
               fontSize: 14,
               fontWeight: '800',
-              color: showShiftCodes ? theme.colors.primary : theme.colors.textMuted,
+              color: showShiftCodes ? theme.colors.primary : theme.colors.textSecondary,
             }}>
               {shiftCodes.find((sc) => !sc.is_day_off)?.code || 'A'}
             </Text>
@@ -531,7 +531,7 @@ export default function CalendarScreen() {
               <Text style={{
                 fontSize: 14,
                 fontWeight: '800',
-                color: unifyDayOff ? theme.colors.primary : theme.colors.textMuted,
+                color: unifyDayOff ? theme.colors.primary : theme.colors.textSecondary,
               }}>
                 {unifyDayOffSymbol}
               </Text>
@@ -550,7 +550,7 @@ export default function CalendarScreen() {
             <Ionicons
               name={showCoworkerShifts ? 'people' : 'people-outline'}
               size={20}
-              color={showCoworkerShifts ? theme.colors.primary : theme.colors.textMuted}
+              color={showCoworkerShifts ? theme.colors.primary : theme.colors.textSecondary}
             />
           </TouchableOpacity>
           {/* Cycle group view scope */}
@@ -569,7 +569,7 @@ export default function CalendarScreen() {
               <Ionicons
                 name={viewScope === 'all' ? 'globe-outline' : 'people-circle-outline'}
                 size={22}
-                color={viewScope === 'all' ? theme.colors.textMuted : theme.colors.primary}
+                color={viewScope === 'all' ? theme.colors.textSecondary : theme.colors.primary}
               />
             </TouchableOpacity>
           )}

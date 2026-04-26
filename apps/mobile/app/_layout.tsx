@@ -23,6 +23,7 @@ SplashScreen.preventAutoHideAsync();
 function RootLayoutInner() {
   const theme = useTheme();
   const { initialized, initialize, user } = useAuthStore();
+  const themeInitialized = useThemeStore((s) => s.initialized);
   const fetchOrCreateDefaultGroup = useGroupStore((s) => s.fetchOrCreateDefaultGroup);
   const initViewScope = useGroupStore((s) => s.initViewScope);
 
@@ -44,7 +45,10 @@ function RootLayoutInner() {
     }
   }, [initialized, user?.id]);
 
-  if (!initialized) {
+  // Wait for both auth and theme to load before rendering UI, otherwise
+  // the theme briefly flashes the OS default before the persisted user
+  // preference takes effect.
+  if (!initialized || !themeInitialized) {
     return (
       <View style={[styles.loading, { backgroundColor: theme.colors.warmWhite }]}>
         <ActivityIndicator size="large" color={theme.colors.primary} />

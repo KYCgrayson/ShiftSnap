@@ -666,6 +666,23 @@ export default function CalendarScreen() {
             })
           ) : (
             <Card style={styles.emptyCard}>
+              {/* The note entry lives in the top-right corner so the
+                  "no shifts" card mirrors the layout of an actual
+                  shift pill: same affordance in the same spot whether
+                  the day has a shift or not. */}
+              <TouchableOpacity
+                onPress={openNoteModal}
+                style={{ position: 'absolute', top: 12, right: 12, padding: 6 }}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              >
+                <Ionicons
+                  name={notesByDate[selectedDate] ? 'document-text' : 'add'}
+                  size={notesByDate[selectedDate] ? 18 : 20}
+                  color={
+                    notesByDate[selectedDate] ? '#EA580C' : theme.colors.textMuted
+                  }
+                />
+              </TouchableOpacity>
               <Ionicons
                 name="sunny-outline"
                 size={40}
@@ -712,17 +729,6 @@ export default function CalendarScreen() {
                 {notesByDate[selectedDate].content}
               </Text>
               <Ionicons name="pencil-outline" size={14} color="#F97316" />
-            </TouchableOpacity>
-          ) : myDateShifts.length === 0 ? (
-            <TouchableOpacity
-              style={[styles.addNoteButton, { borderColor: theme.colors.border }]}
-              onPress={openNoteModal}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="add" size={16} color={theme.colors.textMuted} />
-              <Text style={[styles.addNoteText, { color: theme.colors.textMuted }]}>
-                {t('calendar.addNote')}
-              </Text>
             </TouchableOpacity>
           ) : null}
 

@@ -56,6 +56,7 @@ export function useInviteLinkHandler() {
   const user = useAuthStore((s) => s.user);
   const isGuest = useAuthStore((s) => s.isGuest);
   const initialized = useAuthStore((s) => s.initialized);
+  const signInAsDemo = useAuthStore((s) => s.signInAsDemo);
   const joinGroupByInvite = useGroupStore((s) => s.joinGroupByInvite);
 
   // Refs guard against re-processing the same URL across re-renders / cold start.
@@ -63,20 +64,37 @@ export function useInviteLinkHandler() {
   const inFlightRef = useRef(false);
 
   // Latest values for use inside Linking listener (avoid stale closures).
-  const stateRef = useRef({ user, isGuest, initialized, joinGroupByInvite, t });
-  stateRef.current = { user, isGuest, initialized, joinGroupByInvite, t };
+  const stateRef = useRef({ user, isGuest, initialized, signInAsDemo, joinGroupByInvite, t });
+  stateRef.current = { user, isGuest, initialized, signInAsDemo, joinGroupByInvite, t };
 
   const processCode = async (code: string) => {
     if (inFlightRef.current) return;
     inFlightRef.current = true;
     try {
-      const { user, isGuest, initialized, joinGroupByInvite, t } = stateRef.current;
+      const { user, isGuest, initialized, signInAsDemo, joinGroupByInvite, t } = stateRef.current;
 
       if (!initialized) {
         await setPendingInviteCode(code);
         return;
       }
-      if (!user || isGuest) {
+
+      // Guest mode can't write to Supabase (no auth.uid for RLS), so
+      // auto-promote to the shared demo account before joining. The
+      // pending code drains automatically once the new session lands.
+      if (isGuest) {
+        await setPendingInviteCode(code);
+        const result = await signInAsDemo();
+        if (!result.success) {
+          const raw = result.error ?? '';
+          const friendly = /email.*not.*confirm/i.test(raw)
+            ? t('welcome.demoEmailUnconfirmed')
+            : raw || t('welcome.demoFailed');
+          Alert.alert(t('common.error'), friendly);
+        }
+        return;
+      }
+
+      if (!user) {
         await setPendingInviteCode(code);
         Alert.alert(
           t('settings.inviteSignInRequired'),

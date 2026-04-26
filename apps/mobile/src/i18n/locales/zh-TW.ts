@@ -35,6 +35,7 @@ export default {
     alreadyHaveAccount: '已經有帳號了？',
     tryWithoutAccount: '不建立帳號試用',
     loginAsDemo: '使用 Demo 帳號登入',
+    demoEmailUnconfirmed: 'Demo 帳號已建立，但 email 尚未驗證。請在 Supabase 後台確認 demo@ishift.app，或關閉此專案的 email 驗證需求。',
     demoFailed: '無法登入 Demo 帳號，請稍後再試。',
     termsAgreement: '繼續即表示您同意我們的',
     termsOfService: '服務條款',

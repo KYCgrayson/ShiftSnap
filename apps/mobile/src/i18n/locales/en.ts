@@ -36,6 +36,7 @@ export default {
     tryWithoutAccount: 'Try without an account',
     loginAsDemo: 'Log in as Demo Account',
     demoFailed: 'Could not sign in to the demo account. Please try again later.',
+    demoEmailUnconfirmed: 'The demo account exists but its email is not confirmed yet. Ask an admin to confirm demo@ishift.app in Supabase, or disable email confirmation for this project.',
     termsAgreement: 'By continuing, you agree to our ',
     termsOfService: 'Terms of Service',
     and: ' and ',

@@ -92,9 +92,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       // Listen for auth changes
       supabase.auth.onAuthStateChange((_event, session) => {
+        // Don't let Supabase events without a session (e.g. a signup that
+        // requires email confirmation) wipe out an active guest session.
+        const current = get();
+        if (current.isGuest && !session) return;
         set({
           user: session?.user ?? null,
           session,
+          isGuest: session ? false : current.isGuest,
         });
       });
     } catch (error) {

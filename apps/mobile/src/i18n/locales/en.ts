@@ -2,6 +2,7 @@ export default {
   // Common
   common: {
     appName: 'IShift',
+    someone: 'Someone',
     save: 'Save',
     cancel: 'Cancel',
     delete: 'Delete',
@@ -224,6 +225,13 @@ export default {
     inviteSignInRequiredDesc: 'Sign in and we will join you to the group automatically.',
     sharing: 'Sharing...',
     shareFailed: 'Failed to share schedules',
+  },
+
+  notifications: {
+    added: 'added',
+    updated: 'updated',
+    removed: 'removed',
+    shiftChange: '{{name}} {{verb}} a shift on {{date}}',
   },
 
   // Shifts screen

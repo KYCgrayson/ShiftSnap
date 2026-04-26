@@ -2,6 +2,7 @@ export default {
   // Common
   common: {
     appName: 'IShift',
+    someone: '有人',
     save: '儲存',
     cancel: '取消',
     delete: '刪除',
@@ -224,6 +225,13 @@ export default {
     inviteSignInRequiredDesc: '登入後我們會自動帶你加入這個群組。',
     sharing: '分享中...',
     shareFailed: '分享班表失敗',
+  },
+
+  notifications: {
+    added: '新增了',
+    updated: '更新了',
+    removed: '刪除了',
+    shiftChange: '{{name}} {{verb}} {{date}} 的班次',
   },
 
   // Shifts screen

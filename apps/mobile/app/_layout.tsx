@@ -12,6 +12,7 @@ import { useGroupStore } from '../src/stores/groupStore';
 import { useTheme, Colors, DarkColors } from '../src/theme';
 import { useInviteLinkHandler } from '../src/hooks/useInviteLinkHandler';
 import { ToastProvider } from '../src/components/ui';
+import { NotificationBanner } from '../src/components/NotificationBanner';
 import i18n from '../src/i18n';
 
 // Keep the splash screen visible while we fetch resources
@@ -65,6 +66,7 @@ function RootLayoutInner() {
           options={{ animation: 'slide_from_bottom', gestureEnabled: false }}
         />
       </Stack>
+      <NotificationBanner />
     </>
   );
 }

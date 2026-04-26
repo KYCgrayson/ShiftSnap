@@ -11,8 +11,12 @@ import {
   Switch,
   Alert,
   TextInput,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
+import { uploadNoteImage, deleteNoteImage } from '../../src/services/noteImages';
 import { Ionicons } from '@expo/vector-icons';
 import { Calendar, DateData, LocaleConfig } from 'react-native-calendars';
 import { useTranslation } from 'react-i18next';
@@ -101,6 +105,9 @@ export default function CalendarScreen() {
   // Note modal state
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [noteText, setNoteText] = useState('');
+  const [noteImageUrls, setNoteImageUrls] = useState<string[]>([]);
+  const [noteImageUploading, setNoteImageUploading] = useState(false);
+  const [savingNote, setSavingNote] = useState(false);
 
   const userId = user?.id;
 
@@ -396,27 +403,64 @@ export default function CalendarScreen() {
   const openNoteModal = () => {
     const existing = notesByDate[selectedDate];
     setNoteText(existing?.content || '');
+    setNoteImageUrls(existing?.image_urls || []);
     setShowNoteModal(true);
   };
 
   const handleSaveNote = async () => {
-    if (!userId) return;
+    if (!userId || savingNote) return;
+    setSavingNote(true);
     try {
-      await saveNote(userId, selectedDate, noteText);
+      await saveNote(userId, selectedDate, noteText, noteImageUrls);
       setShowNoteModal(false);
-    } catch {
-      Alert.alert(t('common.error'));
+    } catch (e) {
+      const reason = e instanceof Error ? e.message : '';
+      Alert.alert(t('common.error'), reason || undefined);
+    } finally {
+      setSavingNote(false);
     }
   };
 
   const handleDeleteNote = async () => {
     if (!userId) return;
     try {
-      await saveNote(userId, selectedDate, '');
+      await saveNote(userId, selectedDate, '', []);
+      setNoteImageUrls([]);
       setShowNoteModal(false);
     } catch {
       Alert.alert(t('common.error'));
     }
+  };
+
+  // Pick from photo library, compress, upload, append URL to local list.
+  const handleAddNotePhoto = async () => {
+    if (!userId || noteImageUploading) return;
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert(t('common.error'), t('calendar.photoPermissionDenied'));
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 1,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      setNoteImageUploading(true);
+      const url = await uploadNoteImage(userId, result.assets[0].uri);
+      setNoteImageUrls((prev) => [...prev, url]);
+    } catch (e) {
+      const reason = e instanceof Error ? e.message : '';
+      Alert.alert(t('common.error'), reason || t('calendar.photoUploadFailed'));
+    } finally {
+      setNoteImageUploading(false);
+    }
+  };
+
+  const handleRemoveNotePhoto = (url: string) => {
+    setNoteImageUrls((prev) => prev.filter((u) => u !== url));
+    // Best-effort delete from storage; safe to retry on next save.
+    void deleteNoteImage(url);
   };
 
   // Coworker entries: persons excluding the demo "Me"
@@ -726,8 +770,16 @@ export default function CalendarScreen() {
                 style={[styles.noteText, { color: theme.colors.textPrimary }]}
                 numberOfLines={2}
               >
-                {notesByDate[selectedDate].content}
+                {notesByDate[selectedDate].content || t('calendar.notePhotoOnly')}
               </Text>
+              {(notesByDate[selectedDate].image_urls?.length ?? 0) > 0 && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                  <Ionicons name="image-outline" size={14} color="#F97316" />
+                  <Text style={{ color: '#F97316', fontSize: 12 }}>
+                    {notesByDate[selectedDate].image_urls.length}
+                  </Text>
+                </View>
+              )}
               <Ionicons name="pencil-outline" size={14} color="#F97316" />
             </TouchableOpacity>
           ) : null}
@@ -1002,6 +1054,61 @@ export default function CalendarScreen() {
               multiline
               autoFocus
             />
+
+            {/* Photo strip: thumbnails + add-button */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={{ marginTop: 8 }}
+              contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
+            >
+              {noteImageUrls.map((url) => (
+                <View key={url} style={{ width: 72, height: 72, position: 'relative' }}>
+                  <Image
+                    source={{ uri: url }}
+                    style={{ width: 72, height: 72, borderRadius: 8 }}
+                  />
+                  <TouchableOpacity
+                    onPress={() => handleRemoveNotePhoto(url)}
+                    style={{
+                      position: 'absolute',
+                      top: -6,
+                      right: -6,
+                      backgroundColor: '#000',
+                      borderRadius: 10,
+                      width: 20,
+                      height: 20,
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Ionicons name="close" size={14} color="#FFF" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+              <TouchableOpacity
+                onPress={handleAddNotePhoto}
+                disabled={noteImageUploading}
+                style={{
+                  width: 72,
+                  height: 72,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderStyle: 'dashed',
+                  borderColor: theme.colors.border,
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  opacity: noteImageUploading ? 0.5 : 1,
+                }}
+              >
+                {noteImageUploading ? (
+                  <ActivityIndicator size="small" color={theme.colors.primary} />
+                ) : (
+                  <Ionicons name="camera-outline" size={28} color={theme.colors.textMuted} />
+                )}
+              </TouchableOpacity>
+            </ScrollView>
+
             <View style={styles.editModalActions}>
               {notesByDate[selectedDate] && (
                 <TouchableOpacity
@@ -1022,11 +1129,19 @@ export default function CalendarScreen() {
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.editModalButton, { borderColor: theme.colors.primary, backgroundColor: theme.colors.primary }]}
+                style={[
+                  styles.editModalButton,
+                  {
+                    borderColor: theme.colors.primary,
+                    backgroundColor: theme.colors.primary,
+                    opacity: savingNote ? 0.6 : 1,
+                  },
+                ]}
                 onPress={handleSaveNote}
+                disabled={savingNote}
               >
                 <Text style={[styles.editModalButtonText, { color: theme.colors.white }]}>
-                  {t('common.save')}
+                  {savingNote ? t('settings.sharing') : t('common.save')}
                 </Text>
               </TouchableOpacity>
             </View>

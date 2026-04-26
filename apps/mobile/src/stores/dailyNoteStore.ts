@@ -11,7 +11,12 @@ interface DailyNoteState {
   loading: boolean;
 
   fetchNotesForMonth: (userId: string, yearMonth: string) => Promise<void>;
-  saveNote: (userId: string, date: string, content: string) => Promise<void>;
+  saveNote: (
+    userId: string,
+    date: string,
+    content: string,
+    imageUrls?: string[],
+  ) => Promise<void>;
   reset: () => void;
 }
 
@@ -69,12 +74,14 @@ export const useDailyNoteStore = create<DailyNoteState>((set, get) => ({
     }
   },
 
-  saveNote: async (userId: string, date: string, content: string) => {
+  saveNote: async (userId: string, date: string, content: string, imageUrls: string[] = []) => {
     const trimmed = content.trim();
+    // Note is meaningful if it has either text or images.
+    const hasContent = trimmed.length > 0 || imageUrls.length > 0;
 
     if (getIsGuest()) {
       const all = await loadGuestNotes();
-      if (!trimmed) {
+      if (!hasContent) {
         delete all[date];
       } else {
         const existing = all[date];
@@ -83,6 +90,7 @@ export const useDailyNoteStore = create<DailyNoteState>((set, get) => ({
           user_id: userId,
           date,
           content: trimmed,
+          image_urls: imageUrls,
           created_at: existing?.created_at || new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };
@@ -101,7 +109,7 @@ export const useDailyNoteStore = create<DailyNoteState>((set, get) => ({
     }
 
     try {
-      if (!trimmed) {
+      if (!hasContent) {
         // Delete note
         await supabase
           .from('daily_notes')
@@ -119,7 +127,13 @@ export const useDailyNoteStore = create<DailyNoteState>((set, get) => ({
         const { data, error } = await supabase
           .from('daily_notes')
           .upsert(
-            { user_id: userId, date, content: trimmed, updated_at: new Date().toISOString() },
+            {
+              user_id: userId,
+              date,
+              content: trimmed,
+              image_urls: imageUrls,
+              updated_at: new Date().toISOString(),
+            },
             { onConflict: 'user_id,date' }
           )
           .select()

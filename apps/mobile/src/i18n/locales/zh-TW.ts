@@ -96,6 +96,9 @@ export default {
     toastScopeAll: '顯示中：所有群組',
     toastScopeGroup: '顯示中：{{name}}',
     emptyGroupShifts: '群組裡還沒人上傳班表，邀請朋友先掃描一張吧。',
+    photoPermissionDenied: '需要照片庫權限才能附加圖片。',
+    photoUploadFailed: '照片上傳失敗，請再試一次。',
+    notePhotoOnly: '照片備註',
   },
 
   // Scan screen

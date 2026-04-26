@@ -173,6 +173,7 @@ export interface DailyNote {
   user_id: string;
   date: string;
   content: string;
+  image_urls: string[];
   created_at: string;
   updated_at: string;
 }

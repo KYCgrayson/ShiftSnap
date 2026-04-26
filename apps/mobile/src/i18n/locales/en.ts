@@ -96,6 +96,9 @@ export default {
     toastScopeAll: 'Showing: All groups',
     toastScopeGroup: 'Showing: {{name}}',
     emptyGroupShifts: 'No one in this group has uploaded a schedule yet. Invite them to scan one.',
+    photoPermissionDenied: 'Photo library permission is required to attach images.',
+    photoUploadFailed: 'Failed to upload photo. Please try again.',
+    notePhotoOnly: 'Photo note',
   },
 
   // Scan screen

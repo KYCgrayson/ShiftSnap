@@ -11,6 +11,7 @@ import { useLocaleStore } from '../src/stores/localeStore';
 import { useGroupStore } from '../src/stores/groupStore';
 import { useTheme, Colors, DarkColors } from '../src/theme';
 import { useInviteLinkHandler } from '../src/hooks/useInviteLinkHandler';
+import { useMissedShiftNotifications } from '../src/hooks/useMissedShiftNotifications';
 import { ToastProvider } from '../src/components/ui';
 import { NotificationBanner } from '../src/components/NotificationBanner';
 import i18n from '../src/i18n';
@@ -25,6 +26,7 @@ function RootLayoutInner() {
   const initViewScope = useGroupStore((s) => s.initViewScope);
 
   useInviteLinkHandler();
+  useMissedShiftNotifications(user?.id, initialized);
 
   useEffect(() => {
     initViewScope();

@@ -11,6 +11,7 @@ import { useLocaleStore } from '../src/stores/localeStore';
 import { useGroupStore } from '../src/stores/groupStore';
 import { useTheme, Colors, DarkColors } from '../src/theme';
 import { useInviteLinkHandler } from '../src/hooks/useInviteLinkHandler';
+import { ToastProvider } from '../src/components/ui';
 import i18n from '../src/i18n';
 
 // Keep the splash screen visible while we fetch resources
@@ -20,10 +21,12 @@ function RootLayoutInner() {
   const theme = useTheme();
   const { initialized, initialize, user } = useAuthStore();
   const fetchOrCreateDefaultGroup = useGroupStore((s) => s.fetchOrCreateDefaultGroup);
+  const initViewScope = useGroupStore((s) => s.initViewScope);
 
   useInviteLinkHandler();
 
   useEffect(() => {
+    initViewScope();
     initialize().finally(() => {
       SplashScreen.hideAsync();
     });
@@ -87,7 +90,9 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <RootLayoutInner />
+      <ToastProvider>
+        <RootLayoutInner />
+      </ToastProvider>
     </GestureHandlerRootView>
   );
 }

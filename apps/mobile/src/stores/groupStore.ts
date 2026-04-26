@@ -1,6 +1,11 @@
 import { create } from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../services/supabase';
 import { getIsGuest } from './authStore';
+
+const VIEW_SCOPE_KEY = 'shiftsnap:group-view-scope';
+
+export type GroupViewScope = 'all' | string;
 
 interface GroupItem {
   id: string;
@@ -30,6 +35,11 @@ interface GroupState {
   loading: boolean;
   error: string | null;
 
+  // viewScope is the user's chosen calendar/home filter and is independent
+  // of currentGroup, which is the active context for new schedules and
+  // settings actions. 'all' means "show shifts across all my groups".
+  viewScope: GroupViewScope;
+
   fetchGroups: (userId: string) => Promise<void>;
   fetchOrCreateDefaultGroup: (userId: string) => Promise<void>;
   switchGroup: (groupId: string) => void;
@@ -37,6 +47,9 @@ interface GroupState {
   joinGroupByInvite: (userId: string, inviteCode: string) => Promise<void>;
   leaveGroup: (userId: string, groupId: string) => Promise<void>;
   updateGroupName: (groupId: string, name: string) => Promise<void>;
+  removeMember: (groupId: string, targetUserId: string) => Promise<void>;
+  initViewScope: () => Promise<void>;
+  cycleViewScope: () => { scope: GroupViewScope; label: string };
   reset: () => void;
 }
 
@@ -46,6 +59,7 @@ export const useGroupStore = create<GroupState>((set, get) => ({
   members: [],
   loading: false,
   error: null,
+  viewScope: 'all',
 
   fetchGroups: async (userId: string) => {
     if (getIsGuest()) {
@@ -170,16 +184,20 @@ export const useGroupStore = create<GroupState>((set, get) => ({
       return;
     }
     try {
-      const { data, error } = await supabase
-        .from('group_members')
-        .select('*, users(display_name, email)')
-        .eq('group_id', groupId);
-
+      // RPC bypasses the users_select RLS that hides other users'
+      // profiles, so admin/member name + email are populated correctly.
+      const { data, error } = await supabase.rpc('get_group_member_profiles', { gid: groupId });
       if (error) throw error;
       const members: GroupMemberItem[] = (data || []).map((m: any) => ({
-        ...m,
-        display_name: m.users?.display_name || m.users?.email?.split('@')[0] || undefined,
-        users: undefined,
+        id: m.membership_id,
+        group_id: groupId,
+        user_id: m.user_id,
+        role: m.role,
+        nickname: m.nickname,
+        color: m.color,
+        is_visible: m.is_visible,
+        joined_at: m.joined_at,
+        display_name: m.display_name || m.email?.split('@')[0] || undefined,
       }));
       set({ members });
     } catch (error) {
@@ -270,7 +288,51 @@ export const useGroupStore = create<GroupState>((set, get) => ({
     }
   },
 
+  removeMember: async (groupId: string, targetUserId: string) => {
+    if (getIsGuest()) return;
+    const { error } = await supabase.rpc('remove_group_member', {
+      gid: groupId,
+      target_user_id: targetUserId,
+    });
+    if (error) {
+      const msg = error.message || '';
+      if (msg.includes('NOT_AUTHORIZED')) throw new Error('NOT_AUTHORIZED');
+      if (msg.includes('CANNOT_REMOVE_ADMIN')) throw new Error('CANNOT_REMOVE_ADMIN');
+      if (msg.includes('CANNOT_REMOVE_SELF')) throw new Error('CANNOT_REMOVE_SELF');
+      throw error;
+    }
+    // Refresh members locally; caller may also fetchMembers.
+    set((state) => ({
+      members: state.members.filter((m) => m.user_id !== targetUserId),
+    }));
+  },
+
+  initViewScope: async () => {
+    try {
+      const stored = await AsyncStorage.getItem(VIEW_SCOPE_KEY);
+      if (stored) set({ viewScope: stored });
+    } catch (e) {
+      console.warn('Failed to load viewScope:', e);
+    }
+  },
+
+  cycleViewScope: () => {
+    const { groups, viewScope } = get();
+    // Cycle: 'all' -> groups[0].id -> groups[1].id -> ... -> 'all'
+    const order: GroupViewScope[] = ['all', ...groups.map((g) => g.id)];
+    const idx = order.indexOf(viewScope);
+    const next = order[(idx + 1) % order.length] ?? 'all';
+    set({ viewScope: next });
+    AsyncStorage.setItem(VIEW_SCOPE_KEY, next).catch(() => {});
+    const label =
+      next === 'all'
+        ? 'all'
+        : groups.find((g) => g.id === next)?.name ?? 'unknown';
+    return { scope: next, label };
+  },
+
   reset: () => {
-    set({ groups: [], currentGroup: null, members: [], loading: false, error: null });
+    set({ groups: [], currentGroup: null, members: [], loading: false, error: null, viewScope: 'all' });
+    AsyncStorage.removeItem(VIEW_SCOPE_KEY).catch(() => {});
   },
 }));

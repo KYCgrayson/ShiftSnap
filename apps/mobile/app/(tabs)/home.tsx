@@ -16,7 +16,8 @@ import { useTheme } from '../../src/theme';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useShiftStore } from '../../src/stores/shiftStore';
 import { useShiftCodeStore } from '../../src/stores/shiftCodeStore';
-import { Card, Button } from '../../src/components/ui';
+import { useGroupStore } from '../../src/stores/groupStore';
+import { Card, Button, useToast } from '../../src/components/ui';
 import { GuestUpgradeBanner } from '../../src/components/GuestUpgradeBanner';
 import { formatDate, getShortWeekday } from '@shiftsnap/shared';
 import { useLocaleStore } from '../../src/stores/localeStore';
@@ -28,6 +29,10 @@ export default function HomeScreen() {
   const locale = useLocaleStore((s) => s.locale);
   const { todayShift, upcomingShifts, fetchTodayShift, fetchUpcomingShifts } = useShiftStore();
   const { shiftCodes, fetchShiftCodes, getCodeInfo } = useShiftCodeStore();
+  const groups = useGroupStore((s) => s.groups);
+  const viewScope = useGroupStore((s) => s.viewScope);
+  const cycleViewScope = useGroupStore((s) => s.cycleViewScope);
+  const toast = useToast();
   const [refreshing, setRefreshing] = useState(false);
 
   const displayName = user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'User';
@@ -83,17 +88,41 @@ export default function HomeScreen() {
               {displayName}
             </Text>
           </View>
-          <TouchableOpacity
-            style={[
-              styles.avatarButton,
-              { backgroundColor: theme.colors.primary + '15' },
-            ]}
-            onPress={() => router.push('/(tabs)/settings')}
-          >
-            <Text style={[styles.avatarText, { color: theme.colors.primary }]}>
-              {displayName.charAt(0).toUpperCase()}
-            </Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {groups.length > 0 && (
+              <TouchableOpacity
+                style={[
+                  styles.avatarButton,
+                  { backgroundColor: theme.colors.primary + '15' },
+                ]}
+                onPress={() => {
+                  const { scope, label } = cycleViewScope();
+                  toast(
+                    scope === 'all'
+                      ? t('calendar.toastScopeAll')
+                      : t('calendar.toastScopeGroup', { name: label }),
+                  );
+                }}
+              >
+                <Ionicons
+                  name={viewScope === 'all' ? 'globe-outline' : 'people-circle-outline'}
+                  size={22}
+                  color={viewScope === 'all' ? theme.colors.textMuted : theme.colors.primary}
+                />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={[
+                styles.avatarButton,
+                { backgroundColor: theme.colors.primary + '15' },
+              ]}
+              onPress={() => router.push('/(tabs)/settings')}
+            >
+              <Text style={[styles.avatarText, { color: theme.colors.primary }]}>
+                {displayName.charAt(0).toUpperCase()}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <GuestUpgradeBanner />

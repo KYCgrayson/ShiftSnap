@@ -56,7 +56,7 @@ export default function SettingsScreen() {
   const {
     groups, currentGroup, members,
     fetchMembers, switchGroup,
-    joinGroupByInvite, leaveGroup, updateGroupName,
+    joinGroupByInvite, leaveGroup, updateGroupName, removeMember,
   } = useGroupStore();
 
   const [editingProfile, setEditingProfile] = useState(false);
@@ -783,19 +783,66 @@ export default function SettingsScreen() {
                   </Text>
                 </View>
               </View>
-              {members.map((member) => (
-                <View key={member.id} style={[styles.settingsItem, { paddingVertical: 8, paddingLeft: 64 }]}>
-                  <View style={styles.settingsContent}>
-                    <Text style={[styles.settingsTitle, { color: theme.colors.textPrimary }]}>
-                      {member.display_name || member.nickname || '—'}
-                      {member.user_id === user?.id ? ` ${t('settings.you')}` : ''}
-                    </Text>
-                    <Text style={[styles.settingsSubtitle, { color: theme.colors.textSecondary }]}>
-                      {member.role === 'admin' ? t('settings.admin') : t('settings.member')}
-                    </Text>
+              {members.map((member) => {
+                const isSelf = member.user_id === user?.id;
+                const myMembership = members.find((m) => m.user_id === user?.id);
+                const iAmAdmin =
+                  myMembership?.role === 'admin' || myMembership?.role === 'site_manager';
+                const canRemove = iAmAdmin && !isSelf && member.role !== 'admin';
+                return (
+                  <View
+                    key={member.id}
+                    style={[styles.settingsItem, { paddingVertical: 8, paddingLeft: 64 }]}
+                  >
+                    <View style={styles.settingsContent}>
+                      <Text style={[styles.settingsTitle, { color: theme.colors.textPrimary }]}>
+                        {member.display_name || member.nickname || '—'}
+                        {isSelf ? ` ${t('settings.you')}` : ''}
+                      </Text>
+                      <Text style={[styles.settingsSubtitle, { color: theme.colors.textSecondary }]}>
+                        {member.role === 'admin' ? t('settings.admin') : t('settings.member')}
+                      </Text>
+                    </View>
+                    {canRemove && (
+                      <TouchableOpacity
+                        onPress={() => {
+                          Alert.alert(
+                            t('settings.removeMember'),
+                            t('settings.removeMemberConfirm', {
+                              name: member.display_name || member.nickname || '—',
+                            }),
+                            [
+                              { text: t('common.cancel'), style: 'cancel' },
+                              {
+                                text: t('common.delete'),
+                                style: 'destructive',
+                                onPress: async () => {
+                                  if (!currentGroup) return;
+                                  try {
+                                    await removeMember(currentGroup.id, member.user_id);
+                                    fetchMembers(currentGroup.id);
+                                  } catch (e) {
+                                    const msg = e instanceof Error ? e.message : '';
+                                    const text =
+                                      msg === 'NOT_AUTHORIZED'
+                                        ? t('settings.removeNotAuthorized')
+                                        : msg === 'CANNOT_REMOVE_ADMIN'
+                                          ? t('settings.removeCannotAdmin')
+                                          : t('settings.removeFailed');
+                                    Alert.alert(t('common.error'), text);
+                                  }
+                                },
+                              },
+                            ],
+                          );
+                        }}
+                      >
+                        <Ionicons name="person-remove-outline" size={20} color={theme.colors.error} />
+                      </TouchableOpacity>
+                    )}
                   </View>
-                </View>
-              ))}
+                );
+              })}
               <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
               {/* Join another group */}
               <TouchableOpacity style={styles.settingsItem} onPress={() => setShowJoinGroup(true)}>

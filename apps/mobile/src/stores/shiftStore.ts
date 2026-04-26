@@ -182,14 +182,26 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
 
       if (error) throw error;
 
-      // Fetch group members' shifts if in a group
+      // Fetch other members' shifts based on the user's view scope:
+      //   'all'     -> shifts from every group the user belongs to
+      //   <groupId> -> shifts from that specific group only
       let allShifts = ownShifts || [];
-      const currentGroup = useGroupStore.getState().currentGroup;
-      if (currentGroup && currentGroup.id !== 'guest-group') {
+      const { groups, viewScope } = useGroupStore.getState();
+      const realGroupIds = groups
+        .map((g) => g.id)
+        .filter((id) => id !== 'guest-group');
+      const targetGroupIds =
+        viewScope === 'all'
+          ? realGroupIds
+          : realGroupIds.includes(viewScope)
+            ? [viewScope]
+            : [];
+
+      if (targetGroupIds.length > 0) {
         const { data: groupShifts, error: groupError } = await supabase
           .from('shifts')
           .select('*, schedules!inner(group_id)')
-          .eq('schedules.group_id', currentGroup.id)
+          .in('schedules.group_id', targetGroupIds)
           .neq('user_id', userId)
           .gte('date', startDate)
           .lte('date', endDate)

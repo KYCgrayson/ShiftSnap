@@ -23,6 +23,7 @@ import { useShiftCodeStore } from '../../src/stores/shiftCodeStore';
 import { usePersonStore } from '../../src/stores/personStore';
 import { useCalendarStore } from '../../src/stores/calendarStore';
 import { useGroupStore } from '../../src/stores/groupStore';
+import { useToast } from '../../src/components/ui';
 import { Card, TimePickerInput } from '../../src/components/ui';
 import { GuestUpgradeBanner } from '../../src/components/GuestUpgradeBanner';
 import { CalendarDayWithBars } from '../../src/components/CalendarDayWithBars';
@@ -72,6 +73,10 @@ export default function CalendarScreen() {
   const { isConnected: calendarConnected, syncShift } = useCalendarStore();
   const { notesByDate, fetchNotesForMonth, saveNote } = useDailyNoteStore();
   const currentGroupId = useGroupStore((s) => s.currentGroup?.id);
+  const groups = useGroupStore((s) => s.groups);
+  const viewScope = useGroupStore((s) => s.viewScope);
+  const cycleViewScope = useGroupStore((s) => s.cycleViewScope);
+  const toast = useToast();
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
@@ -150,7 +155,7 @@ export default function CalendarScreen() {
       loadMonth(currentMonth);
       fetchNotesForMonth(userId, currentMonth);
     }
-  }, [userId, currentMonth, currentGroupId]);
+  }, [userId, currentMonth, currentGroupId, viewScope]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -440,6 +445,7 @@ export default function CalendarScreen() {
               const val = !showShiftCodes;
               setShowShiftCodes(val);
               AsyncStorage.setItem(SHOW_CODES_KEY, String(val));
+              toast(val ? t('calendar.toastCodesOn') : t('calendar.toastCodesOff'));
             }}
           >
             <Text style={{
@@ -458,6 +464,11 @@ export default function CalendarScreen() {
                 const val = !unifyDayOff;
                 setUnifyDayOff(val);
                 AsyncStorage.setItem(UNIFY_DAYOFF_KEY, String(val));
+                toast(
+                  val
+                    ? t('calendar.toastUnifyOn', { symbol: unifyDayOffSymbol })
+                    : t('calendar.toastUnifyOff'),
+                );
               }}
             >
               <Text style={{
@@ -469,10 +480,14 @@ export default function CalendarScreen() {
               </Text>
             </TouchableOpacity>
           )}
-          {/* Toggle coworker shifts */}
+          {/* Toggle coworker shifts visibility */}
           <TouchableOpacity
             style={styles.headerIconButton}
-            onPress={() => setShowCoworkerShifts(!showCoworkerShifts)}
+            onPress={() => {
+              const val = !showCoworkerShifts;
+              setShowCoworkerShifts(val);
+              toast(val ? t('calendar.toastCoworkersOn') : t('calendar.toastCoworkersOff'));
+            }}
           >
             <Ionicons
               name={showCoworkerShifts ? 'people' : 'people-outline'}
@@ -480,6 +495,26 @@ export default function CalendarScreen() {
               color={showCoworkerShifts ? theme.colors.primary : theme.colors.textMuted}
             />
           </TouchableOpacity>
+          {/* Cycle group view scope */}
+          {groups.length > 0 && (
+            <TouchableOpacity
+              style={styles.headerIconButton}
+              onPress={() => {
+                const { scope, label } = cycleViewScope();
+                toast(
+                  scope === 'all'
+                    ? t('calendar.toastScopeAll')
+                    : t('calendar.toastScopeGroup', { name: label }),
+                );
+              }}
+            >
+              <Ionicons
+                name={viewScope === 'all' ? 'globe-outline' : 'people-circle-outline'}
+                size={22}
+                color={viewScope === 'all' ? theme.colors.textMuted : theme.colors.primary}
+              />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -606,6 +641,21 @@ export default function CalendarScreen() {
               <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
                 {t('calendar.noShiftsOnDay')}
               </Text>
+              {/* When the user is in a group, has the coworker view on,
+                  but the entire month has no group shifts at all, point
+                  them at the actual cause instead of an empty page. */}
+              {showCoworkerShifts &&
+                groups.length > 0 &&
+                monthShifts.filter((s) => s.user_id !== userId).length === 0 && (
+                  <Text
+                    style={[
+                      styles.emptyText,
+                      { color: theme.colors.textMuted, fontSize: 13, marginTop: 4 },
+                    ]}
+                  >
+                    {t('calendar.emptyGroupShifts')}
+                  </Text>
+                )}
             </Card>
           )}
 

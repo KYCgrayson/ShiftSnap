@@ -1173,7 +1173,13 @@ export default function CalendarScreen() {
                     style={[
                       styles.colorOption,
                       { backgroundColor: color },
-                      currentColor === color && styles.colorOptionSelected,
+                      currentColor === color && [
+                        styles.colorOptionSelected,
+                        // White ring is invisible against light card; flip
+                        // to the theme's primary text color so the
+                        // selected swatch is obvious in either mode.
+                        { borderColor: theme.colors.textPrimary },
+                      ],
                     ]}
                     onPress={() => saveColor(color)}
                   />

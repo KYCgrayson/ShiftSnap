@@ -1049,7 +1049,10 @@ export default function SettingsScreen() {
                     style={[
                       styles.colorOption,
                       { backgroundColor: color },
-                      currentColor === color && styles.colorOptionSelected,
+                      currentColor === color && [
+                        styles.colorOptionSelected,
+                        { borderColor: theme.colors.textPrimary },
+                      ],
                     ]}
                     onPress={() => saveColor(color)}
                   />

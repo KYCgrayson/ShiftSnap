@@ -99,12 +99,18 @@ export function TimePickerInput({ label, value, onChange, placeholder }: TimePic
                   <Text style={[styles.iosPickerDone, { color: theme.colors.primary }]}>Done</Text>
                 </TouchableOpacity>
               </View>
+              {/* themeVariant + textColor force the iOS spinner to follow
+                  the app's theme. Without these the wheel uses the OS
+                  appearance and goes invisible when the app is dark
+                  but the OS is light (or vice versa). */}
               <DateTimePicker
                 value={parseTime(value)}
                 mode="time"
                 display="spinner"
                 onChange={handleChange}
                 is24Hour
+                themeVariant={theme.isDark ? 'dark' : 'light'}
+                textColor={theme.colors.textPrimary}
               />
             </View>
           </View>

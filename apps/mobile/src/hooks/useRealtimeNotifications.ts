@@ -13,26 +13,18 @@ import i18n from '../i18n';
 // for its own state; this hook only pushes the banner.
 export function useRealtimeNotifications(userId: string | undefined) {
   useEffect(() => {
-    if (!userId || getIsGuest()) {
-      console.log('[NOTIFY] skipped subscribe', { userId, isGuest: getIsGuest() });
-      return;
-    }
+    if (!userId || getIsGuest()) return;
 
-    console.log('[NOTIFY] subscribing channel for', userId);
     const channel = supabase
       .channel(`shifts-notify-${userId}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'shifts' },
         (payload) => {
-          console.log('[NOTIFY] event received', payload.eventType, (payload.new as any)?.user_id);
           const row: any = payload.new ?? payload.old ?? {};
           // Skip our own edits — the user doesn't need to be told they
           // just saved something.
-          if (!row || row.user_id === userId) {
-            console.log('[NOTIFY] skipped own change');
-            return;
-          }
+          if (!row || row.user_id === userId) return;
 
           const members = useGroupStore.getState().members;
           const member = members.find((m) => m.user_id === row.user_id);
@@ -54,12 +46,9 @@ export function useRealtimeNotifications(userId: string | undefined) {
           });
         },
       )
-      .subscribe((status) => {
-        console.log('[NOTIFY] subscribe status:', status);
-      });
+      .subscribe();
 
     return () => {
-      console.log('[NOTIFY] removing channel');
       supabase.removeChannel(channel);
     };
   }, [userId]);

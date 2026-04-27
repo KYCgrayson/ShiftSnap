@@ -57,6 +57,7 @@ export default function SettingsScreen() {
     groups, currentGroup, members,
     fetchMembers, switchGroup,
     joinGroupByInvite, leaveGroup, updateGroupName, removeMember,
+    claimPersonInSchedule,
   } = useGroupStore();
 
   const [editingProfile, setEditingProfile] = useState(false);
@@ -75,6 +76,15 @@ export default function SettingsScreen() {
   const [sharingSchedules, setSharingSchedules] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [alarmMinutes, setAlarmMinutes] = useState(DEFAULT_ALARM_MINUTES);
+
+  // Claim-my-schedule modal state. claimRows lists the distinct name +
+  // shift count tuples extracted from the latest group schedule, so the
+  // user can pick which row of the imported sheet is them.
+  const [showClaimModal, setShowClaimModal] = useState(false);
+  const [claimLoading, setClaimLoading] = useState(false);
+  const [claimScheduleId, setClaimScheduleId] = useState<string | null>(null);
+  const [claimYearMonth, setClaimYearMonth] = useState<string | null>(null);
+  const [claimRows, setClaimRows] = useState<Array<{ name: string; shiftCount: number }>>([]);
 
   const upcomingShifts = useShiftStore((s) => s.upcomingShifts);
   const getCodeInfo = useShiftCodeStore((s) => s.getCodeInfo);
@@ -428,6 +438,88 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleOpenClaimModal = async () => {
+    if (!currentGroup?.id) return;
+    setClaimLoading(true);
+    setShowClaimModal(true);
+    setClaimRows([]);
+    setClaimScheduleId(null);
+    setClaimYearMonth(null);
+    try {
+      // Pull the latest schedule for this group, then derive distinct
+      // (name_on_schedule, shift_count) tuples from its shifts. Names
+      // are listed in descending shift count to put the "main" rows
+      // first, since OCR sometimes detects empty header rows that we
+      // don't want to push to the top.
+      const { data: schedule, error: sErr } = await supabase
+        .from('schedules')
+        .select('id, year_month')
+        .eq('group_id', currentGroup.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (sErr) throw sErr;
+      if (!schedule) {
+        setClaimRows([]);
+        return;
+      }
+      setClaimScheduleId(schedule.id);
+      setClaimYearMonth(schedule.year_month);
+
+      const { data: shifts, error: shErr } = await supabase
+        .from('shifts')
+        .select('name_on_schedule')
+        .eq('schedule_id', schedule.id);
+      if (shErr) throw shErr;
+
+      const counts = new Map<string, number>();
+      (shifts ?? []).forEach((s: any) => {
+        const name = (s.name_on_schedule || '').trim();
+        if (!name) return;
+        counts.set(name, (counts.get(name) ?? 0) + 1);
+      });
+      const rows = Array.from(counts.entries())
+        .map(([name, shiftCount]) => ({ name, shiftCount }))
+        .sort((a, b) => b.shiftCount - a.shiftCount);
+      setClaimRows(rows);
+    } catch (e) {
+      Alert.alert(t('common.error'), e instanceof Error ? e.message : '');
+    } finally {
+      setClaimLoading(false);
+    }
+  };
+
+  const handleConfirmClaim = async (name: string) => {
+    if (!claimScheduleId || !user?.id) return;
+    try {
+      const updated = await claimPersonInSchedule(claimScheduleId, name);
+      setShowClaimModal(false);
+      // Refresh members so the new claimed_person_id flows back into the
+      // member row, and refresh shifts so the calendar/today view picks
+      // up the now-self_scan rows attributed to this user.
+      if (currentGroup?.id) await fetchMembers(currentGroup.id);
+      if (claimYearMonth) {
+        await useShiftStore.getState().fetchShiftsForMonth(user.id, claimYearMonth);
+      }
+      await useShiftStore.getState().fetchTodayShift(user.id);
+      await useShiftStore.getState().fetchUpcomingShifts(user.id);
+      Alert.alert(
+        t('settings.claimSuccessTitle'),
+        t('settings.claimSuccessBody', { count: updated, name }),
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '';
+      Alert.alert(
+        t('common.error'),
+        msg === 'NOT_GROUP_MEMBER'
+          ? t('settings.claimNotMember')
+          : msg === 'SCHEDULE_NOT_IN_GROUP'
+            ? t('settings.claimScheduleMissing')
+            : t('settings.claimFailed'),
+      );
+    }
+  };
+
   const handleLeaveGroup = (groupId: string) => {
     if (!user?.id) return;
     Alert.alert(t('settings.leaveGroup'), t('settings.leaveGroupConfirm'), [
@@ -771,6 +863,26 @@ export default function SettingsScreen() {
                   </TouchableOpacity>
                 }
               />
+              <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
+              {/* Claim my schedule */}
+              {(() => {
+                const myMembership = members.find((m) => m.user_id === user?.id);
+                const claimedName = myMembership?.claimed_person_id
+                  ? persons.find((p) => p.id === myMembership.claimed_person_id)?.name
+                  : null;
+                return (
+                  <SettingsItem
+                    icon="bookmark-outline"
+                    title={
+                      claimedName
+                        ? t('settings.claimedAs', { name: claimedName })
+                        : t('settings.claimMySchedule')
+                    }
+                    subtitle={t('settings.claimMyScheduleHint')}
+                    onPress={handleOpenClaimModal}
+                  />
+                );
+              })()}
               <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
               {/* Members */}
               <View style={styles.settingsItem}>
@@ -1312,6 +1424,78 @@ export default function SettingsScreen() {
             >
               <Text style={[styles.modalButtonText, { color: theme.colors.textSecondary }]}>
                 {t('common.ok')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Claim my schedule modal */}
+      <Modal visible={showClaimModal} transparent animationType="fade">
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowClaimModal(false)}
+        >
+          <View
+            style={[styles.modalContent, { backgroundColor: theme.colors.cardBackground }]}
+            onStartShouldSetResponder={() => true}
+          >
+            <Text style={[styles.modalTitle, { color: theme.colors.textPrimary }]}>
+              {t('settings.claimMySchedule')}
+            </Text>
+            <Text style={[styles.shareHint, { color: theme.colors.textSecondary, marginBottom: 12 }]}>
+              {claimYearMonth
+                ? t('settings.claimModalHint', { yearMonth: claimYearMonth })
+                : t('settings.claimMyScheduleHint')}
+            </Text>
+
+            {claimLoading ? (
+              <Text style={{ color: theme.colors.textSecondary, paddingVertical: 24, textAlign: 'center' }}>
+                {t('common.loading')}
+              </Text>
+            ) : claimRows.length === 0 ? (
+              <Text style={{ color: theme.colors.textSecondary, paddingVertical: 24, textAlign: 'center' }}>
+                {t('settings.claimNoSchedules')}
+              </Text>
+            ) : (
+              <ScrollView style={{ maxHeight: 320, alignSelf: 'stretch' }}>
+                {claimRows.map((row) => (
+                  <TouchableOpacity
+                    key={row.name}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      paddingVertical: 12,
+                      paddingHorizontal: 12,
+                      borderRadius: 12,
+                      borderWidth: StyleSheet.hairlineWidth,
+                      borderColor: theme.colors.border,
+                      marginBottom: 8,
+                    }}
+                    onPress={() => handleConfirmClaim(row.name)}
+                  >
+                    <Ionicons name="person-outline" size={20} color={theme.colors.primary} style={{ marginRight: 12 }} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: theme.colors.textPrimary, fontSize: 15, fontWeight: '600' }}>
+                        {row.name}
+                      </Text>
+                      <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
+                        {t('settings.claimRowShifts', { count: row.shiftCount })}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+
+            <TouchableOpacity
+              style={[styles.modalButton, { borderColor: theme.colors.border, marginTop: 12, alignSelf: 'stretch' }]}
+              onPress={() => setShowClaimModal(false)}
+            >
+              <Text style={[styles.modalButtonText, { color: theme.colors.textSecondary }]}>
+                {t('common.cancel')}
               </Text>
             </TouchableOpacity>
           </View>

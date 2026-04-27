@@ -463,12 +463,22 @@ export default function CalendarScreen() {
     void deleteNoteImage(url);
   };
 
-  // Coworker entries: persons excluding the demo "Me"
+  // Coworker entries: only persons that appear in the currently-viewed
+  // month, excluding the demo "Me" person and any shifts the user has
+  // claimed as their own (those render under "My schedule"). Scoping to
+  // the visible month keeps the toggle list short — uploading 5 months
+  // of schedules with 5 coworkers no longer produces 25 toggles, just
+  // the persons relevant to whatever month is on screen.
   const coworkerEntries = useMemo(() => {
+    const personIds = new Set<string>();
+    monthShifts.forEach((s) => {
+      if (s.user_id === userId) return; // not a coworker of this user
+      if (s.person_id) personIds.add(s.person_id);
+    });
     return persons
-      .filter((p) => p.id !== 'g-person-1') // exclude the demo "Me" person
+      .filter((p) => p.id !== 'g-person-1' && personIds.has(p.id))
       .map((p) => ({ name: p.name, color: p.color, personId: p.id }));
-  }, [persons]);
+  }, [persons, monthShifts, userId]);
 
   // Toggle all coworkers on/off
   const allCoworkersVisible = useMemo(() => {

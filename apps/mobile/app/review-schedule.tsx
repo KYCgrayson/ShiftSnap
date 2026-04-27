@@ -37,6 +37,7 @@ import { useShiftStore } from '../src/stores/shiftStore';
 import { useScheduleStore } from '../src/stores/scheduleStore';
 import { useCalendarStore } from '../src/stores/calendarStore';
 import { usePersonStore } from '../src/stores/personStore';
+import { useGroupStore } from '../src/stores/groupStore';
 import { COMMON_SHIFT_CODES, PERSON_COLOR_HEX } from '@shiftsnap/shared';
 import type { OCRResult, OCRShift } from '@shiftsnap/shared';
 const MY_COLOR_KEY = 'shiftsnap_my_schedule_color';
@@ -60,6 +61,7 @@ export default function ReviewScheduleScreen() {
   const { updateScheduleStatus, updateScheduleYearMonth } = useScheduleStore();
   const { isConnected, syncShift } = useCalendarStore();
   const { persons, createPerson, fetchPersons } = usePersonStore();
+  const { currentGroup, members, fetchMembers } = useGroupStore();
 
   // Wizard state
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
@@ -90,6 +92,16 @@ export default function ReviewScheduleScreen() {
   const [coworkerColors, setCoworkerColors] = useState<Map<number, string>>(new Map());
   const [selfColor, setSelfColor] = useState('#4F6BFF');
   const [showColorPickerForRow, setShowColorPickerForRow] = useState<number | null>(null);
+
+  // Step 4: Optional per-row "this row is group member X" tag. When set,
+  // the row's shifts are written with that member's user_id and source
+  // self_scan, so the member sees the schedule as their own without
+  // having to claim it later. null means "uploader-owned coworker row"
+  // (legacy reference_scan behaviour).
+  const [coworkerAssignedUser, setCoworkerAssignedUser] = useState<Map<number, string>>(new Map());
+  const [memberPickerForRow, setMemberPickerForRow] = useState<number | null>(null);
+  const [selfAssignedUser, setSelfAssignedUser] = useState<string | null>(null);
+  const [showSelfPicker, setShowSelfPicker] = useState(false);
 
   // Step 1: Re-analyze
   const [reanalyzing, setReanalyzing] = useState(false);
@@ -153,6 +165,13 @@ export default function ReviewScheduleScreen() {
       fetchShiftCodes(user.id);
     }
   }, [user?.id]);
+
+  // Pull group members so the "tag this row as ..." picker lists them.
+  // Refetches on group switch so the dropdown always reflects the group
+  // the schedule is actually being uploaded into.
+  useEffect(() => {
+    if (currentGroup?.id) fetchMembers(currentGroup.id);
+  }, [currentGroup?.id]);
 
   // Load saved self color
   useEffect(() => {
@@ -608,7 +627,33 @@ export default function ReviewScheduleScreen() {
         })),
       ];
 
-      await createShiftsFromOCR(scheduleId, user.id, ocrData, codeMap, yearMonth, selectedPersonIndex, personMap);
+      // userMap: rowIndex → target user_id for any row the uploader has
+      // tagged as "this is <group member>". Self row may also be tagged
+      // (e.g. husband uploading wife's schedule and tagging the primary
+      // row as wife). Untagged rows stay as the uploader / reference.
+      const userMap = new Map<number, string>();
+      coworkerAssignedUser.forEach((uid, rowIndex) => {
+        if (uid && rowIndex !== selectedPersonIndex) userMap.set(rowIndex, uid);
+      });
+      if (selfAssignedUser && selfAssignedUser !== user.id) {
+        userMap.set(selectedPersonIndex, selfAssignedUser);
+        // The tagged self row should render as a coworker bar on the
+        // uploader's own calendar — give it a Person record so the
+        // legend shows the row's color and name. Without this, the
+        // wife's shifts would fall through to the "self" toggle on
+        // the husband's calendar.
+        const row = ocrData.rows[selectedPersonIndex];
+        const taggedName = row?.name || `Person ${selectedPersonIndex + 1}`;
+        const existing = persons.find((p) => p.name === taggedName);
+        if (existing) {
+          personMap.set(selectedPersonIndex, existing.id);
+        } else {
+          const newId = await createPerson(user.id, taggedName, undefined, selfColor);
+          personMap.set(selectedPersonIndex, newId);
+        }
+      }
+
+      await createShiftsFromOCR(scheduleId, user.id, ocrData, codeMap, yearMonth, selectedPersonIndex, personMap, userMap);
       // Persist the (possibly user-edited) year-month back to the schedule
       if (yearMonth !== params.yearMonth) {
         await updateScheduleYearMonth(scheduleId, yearMonth);
@@ -1158,9 +1203,25 @@ export default function ReviewScheduleScreen() {
                   {ocrData?.rows[selectedPersonIndex!]?.name || '?'}
                 </Text>
                 <Text style={[styles.coworkerHint, { color: theme.colors.success }]}>
-                  {t('review.yourRow')}
+                  {selfAssignedUser && selfAssignedUser !== user?.id
+                    ? t('review.assignedTo', {
+                        name: members.find((m) => m.user_id === selfAssignedUser)?.display_name
+                          || t('review.assignMember'),
+                      })
+                    : t('review.yourRow')}
                 </Text>
               </View>
+              {/* Tag this row to a different group member, e.g. when
+                  uploading the wife's schedule under your own account.
+                  Hidden in single-member groups (no one to tag). */}
+              {members.length > 1 && (
+                <TouchableOpacity
+                  style={[styles.assignButton, { borderColor: theme.colors.border }]}
+                  onPress={() => setShowSelfPicker(true)}
+                >
+                  <Ionicons name="person-circle-outline" size={16} color={theme.colors.primary} />
+                </TouchableOpacity>
+              )}
               <Text style={[styles.coworkerShiftCount, { color: theme.colors.textSecondary }]}>
                 {selectedRow?.shifts.length ?? 0}
               </Text>
@@ -1171,6 +1232,8 @@ export default function ReviewScheduleScreen() {
               if (idx === selectedPersonIndex) return null;
               const isSelected = selectedCoworkers.get(idx) ?? false;
               const color = coworkerColors.get(idx) || PERSON_COLOR_HEX[0];
+              const assignedUid = coworkerAssignedUser.get(idx);
+              const assignedMember = assignedUid ? members.find((m) => m.user_id === assignedUid) : null;
               return (
                 <View key={idx} style={[styles.coworkerRow, { borderColor: theme.colors.border, opacity: isSelected ? 1 : 0.5 }]}>
                   <TouchableOpacity
@@ -1182,9 +1245,26 @@ export default function ReviewScheduleScreen() {
                       {row.name || `Person ${idx + 1}`}
                     </Text>
                     <Text style={[styles.coworkerHint, { color: theme.colors.textSecondary }]}>
-                      {t('review.shiftsCount', { count: row.shifts.length })}
+                      {assignedMember
+                        ? t('review.assignedTo', { name: assignedMember.display_name || '?' })
+                        : t('review.shiftsCount', { count: row.shifts.length })}
                     </Text>
                   </View>
+                  {/* Per-row "this is <member>" tag picker. Only meaningful
+                      when the row is selected, since unselected rows don't
+                      get imported at all. */}
+                  {isSelected && members.length > 1 && (
+                    <TouchableOpacity
+                      style={[styles.assignButton, { borderColor: theme.colors.border }]}
+                      onPress={() => setMemberPickerForRow(idx)}
+                    >
+                      <Ionicons
+                        name={assignedMember ? 'person-circle' : 'person-circle-outline'}
+                        size={16}
+                        color={assignedMember ? theme.colors.primary : theme.colors.textSecondary}
+                      />
+                    </TouchableOpacity>
+                  )}
                   <Switch
                     value={isSelected}
                     onValueChange={(val) => {
@@ -1193,6 +1273,13 @@ export default function ReviewScheduleScreen() {
                         next.set(idx, val);
                         return next;
                       });
+                      if (!val) {
+                        setCoworkerAssignedUser((prev) => {
+                          const next = new Map(prev);
+                          next.delete(idx);
+                          return next;
+                        });
+                      }
                     }}
                     trackColor={{ false: theme.colors.border, true: theme.colors.primary + '60' }}
                     thumbColor={isSelected ? theme.colors.primary : theme.colors.textMuted}
@@ -1296,6 +1383,101 @@ export default function ReviewScheduleScreen() {
       {step === 4 && renderStep4()}
 
       {/* Color Picker Modal */}
+      {/* Member picker for tagging a row to "this is <member>" */}
+      <Modal
+        visible={memberPickerForRow !== null || showSelfPicker}
+        transparent
+        animationType="fade"
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => {
+            setMemberPickerForRow(null);
+            setShowSelfPicker(false);
+          }}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={[styles.modalContent, { backgroundColor: theme.colors.cardBackground }]}
+          >
+            <Text style={[styles.modalTitle, { color: theme.colors.textPrimary }]}>
+              {t('review.assignMember')}
+            </Text>
+            <Text style={[styles.stepHint, { color: theme.colors.textSecondary, marginBottom: 12 }]}>
+              {t('review.assignMemberHint')}
+            </Text>
+            <ScrollView style={{ maxHeight: 300, alignSelf: 'stretch' }}>
+              {/* Clear option */}
+              <TouchableOpacity
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingVertical: 12,
+                  paddingHorizontal: 12,
+                  borderRadius: 10,
+                  borderWidth: StyleSheet.hairlineWidth,
+                  borderColor: theme.colors.border,
+                  marginBottom: 8,
+                }}
+                onPress={() => {
+                  if (showSelfPicker) {
+                    setSelfAssignedUser(null);
+                    setShowSelfPicker(false);
+                  } else if (memberPickerForRow !== null) {
+                    setCoworkerAssignedUser((prev) => {
+                      const next = new Map(prev);
+                      next.delete(memberPickerForRow);
+                      return next;
+                    });
+                    setMemberPickerForRow(null);
+                  }
+                }}
+              >
+                <Ionicons name="close-circle-outline" size={20} color={theme.colors.textSecondary} style={{ marginRight: 12 }} />
+                <Text style={{ color: theme.colors.textSecondary, fontSize: 15 }}>
+                  {t('review.assignNone')}
+                </Text>
+              </TouchableOpacity>
+              {members.map((m) => (
+                <TouchableOpacity
+                  key={m.user_id}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingVertical: 12,
+                    paddingHorizontal: 12,
+                    borderRadius: 10,
+                    borderWidth: StyleSheet.hairlineWidth,
+                    borderColor: theme.colors.border,
+                    marginBottom: 8,
+                  }}
+                  onPress={() => {
+                    if (showSelfPicker) {
+                      setSelfAssignedUser(m.user_id);
+                      setShowSelfPicker(false);
+                    } else if (memberPickerForRow !== null) {
+                      setCoworkerAssignedUser((prev) => {
+                        const next = new Map(prev);
+                        next.set(memberPickerForRow, m.user_id);
+                        return next;
+                      });
+                      setMemberPickerForRow(null);
+                    }
+                  }}
+                >
+                  <Ionicons name="person-circle-outline" size={20} color={theme.colors.primary} style={{ marginRight: 12 }} />
+                  <Text style={{ color: theme.colors.textPrimary, fontSize: 15, flex: 1 }}>
+                    {m.display_name || m.nickname || '?'}
+                    {m.user_id === user?.id ? ` ${t('settings.you')}` : ''}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
       <Modal visible={showColorPickerForRow !== null} transparent animationType="fade">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowColorPickerForRow(null)}>
           <TouchableOpacity activeOpacity={1} style={[styles.modalContent, { backgroundColor: theme.colors.cardBackground }]}>
@@ -1969,6 +2151,14 @@ const styles = StyleSheet.create({
   },
   coworkerShiftCount: {
     fontSize: 13,
+  },
+  assignButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   coworkerSummary: {
     fontSize: 13,

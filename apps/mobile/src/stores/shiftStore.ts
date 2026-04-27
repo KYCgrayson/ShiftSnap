@@ -45,7 +45,8 @@ interface ShiftState {
     shiftCodes: Array<{ code: string; start_time: string | null; end_time: string | null; is_day_off: boolean }>,
     yearMonth: string,
     selectedPersonIndex: number,
-    personMap?: Map<number, string>
+    personMap?: Map<number, string>,
+    userMap?: Map<number, string>
   ) => Promise<void>;
   updateShift: (shiftId: string, updates: Partial<Pick<ShiftItem, 'start_time' | 'end_time' | 'is_day_off' | 'shift_code'>>) => Promise<void>;
   updateShiftCalendarSync: (shiftId: string, calendarEventId: string) => Promise<void>;
@@ -89,12 +90,16 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
     }
     try {
       const today = formatDateISO(new Date());
+      // Note: no person_id IS NULL filter. After claim_person_in_schedule
+      // a wife's claimed shifts have user_id = her id and source = self_scan;
+      // the older filter would have hidden them. The createShiftsFromOCR
+      // flow deletes existing shifts in the date range before insert, so
+      // (user_id, date) stays unique within a single self_scan source.
       const { data, error } = await supabase
         .from('shifts')
         .select('*')
         .eq('user_id', userId)
         .eq('date', today)
-        .is('person_id', null)
         .eq('source', 'self_scan')
         .maybeSingle();
 
@@ -125,7 +130,6 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
         .from('shifts')
         .select('*')
         .eq('user_id', userId)
-        .is('person_id', null)
         .eq('source', 'self_scan')
         .gte('date', today)
         .order('date', { ascending: true })
@@ -234,7 +238,8 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
     shiftCodes: Array<{ code: string; start_time: string | null; end_time: string | null; is_day_off: boolean }>,
     yearMonth: string,
     selectedPersonIndex: number,
-    personMap?: Map<number, string>
+    personMap?: Map<number, string>,
+    userMap?: Map<number, string>
   ) => {
     set({ loading: true, error: null });
 
@@ -248,6 +253,24 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
       // If personMap is provided and this row is not self and not in the map, skip it
       if (personMap && !isSelf && !personMap.has(rowIndex)) return;
 
+      // Resolve target user_id. Tag applies to BOTH self and coworker
+      // rows: when a husband uploads his wife's schedule he typically
+      // picks her row as "self" in step 1, then re-tags that same row
+      // to wife in step 4 — so the resulting shifts land on wife's
+      // user_id and become her self_scan instead of his.
+      const taggedUserId = userMap?.get(rowIndex);
+      const rowUserId = taggedUserId ?? userId;
+      const rowSource: 'self_scan' | 'reference_scan' =
+        isSelf || taggedUserId ? 'self_scan' : 'reference_scan';
+      // person_id stays null only when the row really belongs to the
+      // uploader (untagged self). Whenever the row's user_id differs
+      // from the uploader's, attach the row's Person record so the
+      // uploader still sees a coworker bar with the right color in
+      // their own calendar — including the wife-uploaded-by-husband
+      // case where the tagged "self" row should render as wife on
+      // husband's calendar.
+      const rowPersonId = rowUserId === userId ? null : (personMap?.get(rowIndex) ?? null);
+
       for (const ocrShift of row.shifts) {
         const codeInfo = shiftCodes.find((sc) => sc.code === ocrShift.code);
         const date = `${yearMonth}-${String(ocrShift.date).padStart(2, '0')}`;
@@ -259,14 +282,14 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
         newShifts.push({
           id: getIsGuest() ? `g-shift-ocr-${Date.now()}-${date}-${rowIndex}` : '',
           schedule_id: scheduleId,
-          user_id: userId,
-          person_id: isSelf ? null : (personMap?.get(rowIndex) ?? null),
+          user_id: rowUserId,
+          person_id: rowPersonId,
           date,
           shift_code: ocrShift.code,
           start_time: codeInfo?.start_time || null,
           end_time: codeInfo?.end_time || null,
           is_day_off: codeInfo?.is_day_off ?? false,
-          source: isSelf ? 'self_scan' : 'reference_scan',
+          source: rowSource,
           name_on_schedule: personName,
           comparison_status: 'pending',
           calendar_event_id: null,
@@ -307,15 +330,22 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
     }
 
     try {
-      // Delete ALL existing shifts for this user in the target month (clean slate on re-scan)
+      // Delete existing shifts for the uploader AND any tagged group
+      // members in the target month, so a re-upload (e.g. correcting
+      // the wife's row) replaces both her old shifts and the uploader's
+      // own. RLS allows this for the uploader: they own the schedule, so
+      // the schedule-owner branch of shifts_delete grants access.
       const [yr, mo] = yearMonth.split('-').map(Number);
       const startDate = `${yearMonth}-01`;
       const lastDay = new Date(yr, mo, 0).getDate();
       const endDate = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
+      const affectedUserIds = Array.from(
+        new Set<string>([userId, ...Array.from(userMap?.values() ?? [])]),
+      );
       const { error: deleteError } = await supabase
         .from('shifts')
         .delete()
-        .eq('user_id', userId)
+        .in('user_id', affectedUserIds)
         .gte('date', startDate)
         .lte('date', endDate);
       if (deleteError) throw deleteError;

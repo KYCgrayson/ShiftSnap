@@ -26,6 +26,7 @@ interface GroupMemberItem {
   is_visible: boolean;
   joined_at: string;
   display_name?: string;
+  claimed_person_id?: string | null;
 }
 
 interface GroupState {
@@ -48,6 +49,7 @@ interface GroupState {
   leaveGroup: (userId: string, groupId: string) => Promise<void>;
   updateGroupName: (groupId: string, name: string) => Promise<void>;
   removeMember: (groupId: string, targetUserId: string) => Promise<void>;
+  claimPersonInSchedule: (scheduleId: string, nameOnSchedule: string) => Promise<number>;
   initViewScope: () => Promise<void>;
   cycleViewScope: () => { scope: GroupViewScope; label: string };
   reset: () => void;
@@ -198,6 +200,7 @@ export const useGroupStore = create<GroupState>((set, get) => ({
         is_visible: m.is_visible,
         joined_at: m.joined_at,
         display_name: m.display_name || m.email?.split('@')[0] || undefined,
+        claimed_person_id: m.claimed_person_id ?? null,
       }));
       set({ members });
     } catch (error) {
@@ -305,6 +308,22 @@ export const useGroupStore = create<GroupState>((set, get) => ({
     set((state) => ({
       members: state.members.filter((m) => m.user_id !== targetUserId),
     }));
+  },
+
+  claimPersonInSchedule: async (scheduleId: string, nameOnSchedule: string) => {
+    if (getIsGuest()) return 0;
+    const { data, error } = await supabase.rpc('claim_person_in_schedule', {
+      p_schedule_id: scheduleId,
+      p_name_on_schedule: nameOnSchedule,
+    });
+    if (error) {
+      const msg = error.message || '';
+      if (msg.includes('NOT_AUTHENTICATED')) throw new Error('NOT_AUTHENTICATED');
+      if (msg.includes('NOT_GROUP_MEMBER')) throw new Error('NOT_GROUP_MEMBER');
+      if (msg.includes('SCHEDULE_NOT_IN_GROUP')) throw new Error('SCHEDULE_NOT_IN_GROUP');
+      throw error;
+    }
+    return (data as number) ?? 0;
   },
 
   initViewScope: async () => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -43,7 +43,7 @@ import type { OCRResult, OCRShift } from '@shiftsnap/shared';
 const MY_COLOR_KEY = 'shiftsnap_my_schedule_color';
 
 const STEPS = [1, 2, 3, 4] as const;
-const IMAGE_STRIP_HEIGHT = 150;
+const IMAGE_STRIP_HEIGHT = 180;
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
 export default function ReviewScheduleScreen() {
@@ -86,6 +86,7 @@ export default function ReviewScheduleScreen() {
   // Cell editing modal (Step 2)
   const [editingCell, setEditingCell] = useState<{ date: number; code: string } | null>(null);
   const [editCode, setEditCode] = useState('');
+  const [showOtherCodeInput, setShowOtherCodeInput] = useState(false);
 
   // Step 3: Coworker selection
   const [selectedCoworkers, setSelectedCoworkers] = useState<Map<number, boolean>>(new Map());
@@ -276,6 +277,21 @@ export default function ReviewScheduleScreen() {
     ],
   }));
 
+  // Keep the reference image following the date-cell strip. Without this,
+  // scrolling the date list right to compare later days leaves the image
+  // showing whatever columns were visible before — the exact "can't line
+  // them up after moving right" complaint. The user still pinch/pans to
+  // align the image by eye once; from then on horizontal date-strip
+  // scrolling shifts the image by the same pixel delta to preserve it.
+  const lastDateScrollX = useRef(0);
+  const handleDateStripScroll = useCallback((e: any) => {
+    const x = e.nativeEvent.contentOffset.x;
+    const delta = x - lastDateScrollX.current;
+    lastDateScrollX.current = x;
+    translateX.value -= delta;
+    savedTranslateX.value = translateX.value;
+  }, []);
+
   // Initialize coworker selections when OCR data and selected person are set
   useEffect(() => {
     if (!ocrData || selectedPersonIndex === null) return;
@@ -409,9 +425,22 @@ export default function ReviewScheduleScreen() {
   };
 
   // --- Step 2: Cell editing ---
+  // Candidate codes for the picker: codes already seen on this person's row,
+  // plus the user's own confirmed shift codes — covers both "codes OCR
+  // found this month" and "codes the user has used before but this month
+  // happens not to show". Sorted so the picker order is stable.
+  const cellCodeCandidates = useMemo(() => {
+    const codes = new Set<string>(myUniqueCodes);
+    shiftCodes.forEach((sc) => codes.add(sc.code));
+    return Array.from(codes).sort();
+  }, [myUniqueCodes, shiftCodes]);
+
   const handleCellPress = (day: number, currentCode: string) => {
     setEditingCell({ date: day, code: currentCode });
     setEditCode(currentCode);
+    // If the current code isn't a known candidate, open straight into
+    // manual entry so an existing custom value isn't hidden behind "Other".
+    setShowOtherCodeInput(!!currentCode && !cellCodeCandidates.includes(currentCode));
   };
 
   const handleCellSave = () => {
@@ -996,7 +1025,7 @@ export default function ReviewScheduleScreen() {
                 </View>
                 <View style={[styles.imageStripCrop, {
                   height: IMAGE_STRIP_HEIGHT,
-                  borderColor: theme.colors.primary + '40',
+                  borderColor: theme.colors.primary,
                 }]}>
                   <GestureDetector gesture={composedGesture}>
                     <Animated.Image
@@ -1019,8 +1048,16 @@ export default function ReviewScheduleScreen() {
               </View>
             )}
 
-            {/* Date cells — still in horizontal ScrollView */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dateStrip}>
+            {/* Date cells — horizontal ScrollView, synced to the image
+                strip above so scrolling right keeps the reference photo
+                aligned with whichever dates are on screen. */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.dateStrip}
+              onScroll={handleDateStripScroll}
+              scrollEventThrottle={16}
+            >
               <View>
                 <View style={{ flexDirection: 'row', gap: 6 }}>
                   {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
@@ -1530,20 +1567,69 @@ export default function ReviewScheduleScreen() {
               <Text style={[styles.modalTitle, { color: theme.colors.textPrimary }]}>
                 {t('review.editDay', { day: editingCell?.date })}
               </Text>
-              <TextInput
-                style={[styles.modalInput, {
-                  color: theme.colors.textPrimary,
-                  borderColor: theme.colors.primary,
-                  backgroundColor: theme.colors.warmWhite,
-                }]}
-                value={editCode}
-                onChangeText={setEditCode}
-                autoFocus
-                placeholder={t('review.shiftCodePlaceholder')}
-                placeholderTextColor={theme.colors.textMuted}
-                returnKeyType="done"
-                onSubmitEditing={handleCellSave}
-              />
+              {!showOtherCodeInput ? (
+                <>
+                  <View style={styles.cellCodeGrid}>
+                    {cellCodeCandidates.map((code) => {
+                      const selected = editCode === code;
+                      return (
+                        <TouchableOpacity
+                          key={code}
+                          style={[
+                            styles.cellCodeChip,
+                            {
+                              borderColor: selected ? theme.colors.primary : theme.colors.border,
+                              backgroundColor: selected ? theme.colors.primary + '18' : 'transparent',
+                            },
+                          ]}
+                          onPress={() => setEditCode(code)}
+                        >
+                          <Text
+                            style={[
+                              styles.cellCodeChipText,
+                              { color: selected ? theme.colors.primary : theme.colors.textPrimary },
+                            ]}
+                          >
+                            {code}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                    <TouchableOpacity
+                      style={[styles.cellCodeChip, { borderColor: theme.colors.border, borderStyle: 'dashed' }]}
+                      onPress={() => { setEditCode(''); setShowOtherCodeInput(true); }}
+                    >
+                      <Text style={[styles.cellCodeChipText, { color: theme.colors.textSecondary }]}>
+                        {t('review.otherCode')}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <TextInput
+                    style={[styles.modalInput, {
+                      color: theme.colors.textPrimary,
+                      borderColor: theme.colors.primary,
+                      backgroundColor: theme.colors.warmWhite,
+                    }]}
+                    value={editCode}
+                    onChangeText={setEditCode}
+                    autoFocus
+                    placeholder={t('review.shiftCodePlaceholder')}
+                    placeholderTextColor={theme.colors.textMuted}
+                    returnKeyType="done"
+                    onSubmitEditing={handleCellSave}
+                  />
+                  {cellCodeCandidates.length > 0 && (
+                    <TouchableOpacity onPress={() => setShowOtherCodeInput(false)} style={{ marginBottom: 4 }}>
+                      <Text style={{ color: theme.colors.primary, fontSize: 13 }}>
+                        {t('review.backToCodeList')}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </>
+              )}
               <View style={styles.modalActions}>
                 <Button title={t('review.remove')} onPress={handleDeleteCell} variant="ghost" style={{ flex: 1 }} />
                 <Button title={t('common.save')} onPress={handleCellSave} style={{ flex: 1 }} />
@@ -1895,7 +1981,7 @@ const styles = StyleSheet.create({
   imageStripCrop: {
     overflow: 'hidden',
     borderRadius: 8,
-    borderWidth: 1,
+    borderWidth: 3,
     position: 'relative',
   },
   dateCell: {
@@ -2083,6 +2169,25 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 16,
     textAlign: 'center',
+  },
+  cellCodeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  cellCodeChip: {
+    minWidth: 48,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cellCodeChipText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   modalInput: {
     fontSize: 20,

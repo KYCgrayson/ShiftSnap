@@ -8,7 +8,7 @@ export function useRealtimeShifts(
   yearMonth: string,
   groupId: string | undefined,
 ) {
-  const fetchShiftsForMonth = useShiftStore((s) => s.fetchShiftsForMonth);
+  const fetchShiftsWindow = useShiftStore((s) => s.fetchShiftsWindow);
 
   useEffect(() => {
     if (!userId || getIsGuest()) return;
@@ -24,9 +24,9 @@ export function useRealtimeShifts(
         },
         () => {
           // Notification banner is owned by useRealtimeNotifications at
-          // the root layout; this listener only refetches the calendar
-          // view's month.
-          fetchShiftsForMonth(userId, yearMonth);
+          // the root layout; this listener refetches the calendar's
+          // cached 3-month window so any adjacent-month bars stay fresh.
+          fetchShiftsWindow(userId, yearMonth);
         }
       )
       .subscribe();

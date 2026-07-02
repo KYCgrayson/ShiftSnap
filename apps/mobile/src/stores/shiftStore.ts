@@ -26,10 +26,74 @@ interface ShiftItem {
   synced_at: string | null;
 }
 
+// Adjacent-months window used by the calendar screen: last month, the
+// month being viewed, and next month. Keeping all three cached means
+// paging across a month boundary shows data instantly instead of a
+// blank flash while a fresh fetch is in flight — the complaint that
+// showed up right at month-end when a new schedule had just landed.
+function getAdjacentMonths(yearMonth: string): [string, string, string] {
+  const [y, m] = yearMonth.split('-').map(Number);
+  const base = new Date(y, m - 1, 1);
+  const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  const prev = new Date(base);
+  prev.setMonth(prev.getMonth() - 1);
+  const next = new Date(base);
+  next.setMonth(next.getMonth() + 1);
+  return [fmt(prev), yearMonth, fmt(next)];
+}
+
+async function fetchAuthedMonthShifts(userId: string, yearMonth: string): Promise<ShiftItem[]> {
+  const [year, month] = yearMonth.split('-').map(Number);
+  const startDate = `${yearMonth}-01`;
+  const lastDay = new Date(year, month, 0).getDate();
+  const endDate = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
+
+  const { data: ownShifts, error } = await supabase
+    .from('shifts')
+    .select('*')
+    .eq('user_id', userId)
+    .gte('date', startDate)
+    .lte('date', endDate)
+    .order('date', { ascending: true });
+
+  if (error) throw error;
+
+  let allShifts = ownShifts || [];
+  const { groups, viewScope } = useGroupStore.getState();
+  const realGroupIds = groups.map((g) => g.id).filter((id) => id !== 'guest-group');
+  const targetGroupIds =
+    viewScope === 'all' ? realGroupIds : realGroupIds.includes(viewScope) ? [viewScope] : [];
+
+  if (targetGroupIds.length > 0) {
+    const { data: groupShifts, error: groupError } = await supabase
+      .from('shifts')
+      .select('*, schedules!inner(group_id)')
+      .in('schedules.group_id', targetGroupIds)
+      .neq('user_id', userId)
+      .gte('date', startDate)
+      .lte('date', endDate)
+      .order('date', { ascending: true });
+
+    if (!groupError && groupShifts) {
+      const ownIds = new Set(allShifts.map((s) => s.id));
+      const uniqueGroupShifts = groupShifts
+        .filter((s: any) => !ownIds.has(s.id))
+        .map((s: any) => {
+          const { schedules, ...shift } = s;
+          return shift;
+        });
+      allShifts = [...allShifts, ...uniqueGroupShifts];
+    }
+  }
+
+  return allShifts;
+}
+
 interface ShiftState {
   todayShift: ShiftItem | null;
   upcomingShifts: ShiftItem[];
   monthShifts: ShiftItem[];
+  shiftsByMonth: Record<string, ShiftItem[]>;
   allOcrShifts: ShiftItem[];
   hasOcrData: boolean;
   loading: boolean;
@@ -38,6 +102,7 @@ interface ShiftState {
   fetchTodayShift: (userId: string) => Promise<void>;
   fetchUpcomingShifts: (userId: string, limit?: number) => Promise<void>;
   fetchShiftsForMonth: (userId: string, yearMonth: string) => Promise<void>;
+  fetchShiftsWindow: (userId: string, centerYearMonth: string) => Promise<void>;
   createShiftsFromOCR: (
     scheduleId: string,
     userId: string,
@@ -57,6 +122,7 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
   todayShift: null,
   upcomingShifts: [],
   monthShifts: [],
+  shiftsByMonth: {},
   allOcrShifts: [],
   hasOcrData: false,
   loading: false,
@@ -170,63 +236,53 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
     }
     set({ loading: true });
     try {
-      const [year, month] = yearMonth.split('-').map(Number);
-      const startDate = `${yearMonth}-01`;
-      const lastDay = new Date(year, month, 0).getDate();
-      const endDate = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
-
-      // Fetch own shifts
-      const { data: ownShifts, error } = await supabase
-        .from('shifts')
-        .select('*')
-        .eq('user_id', userId)
-        .gte('date', startDate)
-        .lte('date', endDate)
-        .order('date', { ascending: true });
-
-      if (error) throw error;
-
-      // Fetch other members' shifts based on the user's view scope:
-      //   'all'     -> shifts from every group the user belongs to
-      //   <groupId> -> shifts from that specific group only
-      let allShifts = ownShifts || [];
-      const { groups, viewScope } = useGroupStore.getState();
-      const realGroupIds = groups
-        .map((g) => g.id)
-        .filter((id) => id !== 'guest-group');
-      const targetGroupIds =
-        viewScope === 'all'
-          ? realGroupIds
-          : realGroupIds.includes(viewScope)
-            ? [viewScope]
-            : [];
-
-      if (targetGroupIds.length > 0) {
-        const { data: groupShifts, error: groupError } = await supabase
-          .from('shifts')
-          .select('*, schedules!inner(group_id)')
-          .in('schedules.group_id', targetGroupIds)
-          .neq('user_id', userId)
-          .gte('date', startDate)
-          .lte('date', endDate)
-          .order('date', { ascending: true });
-
-        if (!groupError && groupShifts) {
-          // Merge and deduplicate by id
-          const ownIds = new Set(allShifts.map((s) => s.id));
-          const uniqueGroupShifts = groupShifts
-            .filter((s: any) => !ownIds.has(s.id))
-            .map((s: any) => {
-              const { schedules, ...shift } = s;
-              return shift;
-            });
-          allShifts = [...allShifts, ...uniqueGroupShifts];
-        }
-      }
-
-      set({ monthShifts: allShifts, loading: false });
+      const allShifts = await fetchAuthedMonthShifts(userId, yearMonth);
+      set((state) => ({
+        monthShifts: allShifts,
+        shiftsByMonth: { ...state.shiftsByMonth, [yearMonth]: allShifts },
+        loading: false,
+      }));
     } catch (error) {
       console.error('Error fetching month shifts:', error);
+      set({ loading: false });
+    }
+  },
+
+  // Fetches [prevMonth, centerMonth, nextMonth] in parallel and caches all
+  // three by yearMonth key. The calendar screen reads from this cache so
+  // paging one month in either direction renders instantly from memory,
+  // then this gets called again to slide the cached window forward.
+  fetchShiftsWindow: async (userId: string, centerYearMonth: string) => {
+    const months = getAdjacentMonths(centerYearMonth);
+
+    if (getIsGuest()) {
+      await get().fetchShiftsForMonth(userId, centerYearMonth);
+      const { allOcrShifts, hasOcrData } = get();
+      const byMonth: Record<string, ShiftItem[]> = {};
+      months.forEach((ym) => {
+        byMonth[ym] = hasOcrData
+          ? allOcrShifts.filter((s) => s.date.startsWith(ym))
+          : generateGuestShiftsForMonth(ym);
+      });
+      set((state) => ({
+        shiftsByMonth: { ...state.shiftsByMonth, ...byMonth },
+        monthShifts: byMonth[centerYearMonth] || [],
+      }));
+      return;
+    }
+
+    set({ loading: true });
+    try {
+      const results = await Promise.all(
+        months.map((ym) => fetchAuthedMonthShifts(userId, ym))
+      );
+      set((state) => {
+        const byMonth = { ...state.shiftsByMonth };
+        months.forEach((ym, i) => { byMonth[ym] = results[i]; });
+        return { shiftsByMonth: byMonth, monthShifts: byMonth[centerYearMonth] || [], loading: false };
+      });
+    } catch (error) {
+      console.error('Error fetching shift window:', error);
       set({ loading: false });
     }
   },
@@ -403,6 +459,9 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
       set((state) => ({
         allOcrShifts: updatedAll,
         monthShifts: applyUpdates(state.monthShifts),
+        shiftsByMonth: Object.fromEntries(
+          Object.entries(state.shiftsByMonth).map(([ym, shifts]) => [ym, applyUpdates(shifts)])
+        ),
         todayShift: state.todayShift?.id === shiftId ? { ...state.todayShift, ...updates } : state.todayShift,
         upcomingShifts: applyUpdates(state.upcomingShifts),
       }));
@@ -423,6 +482,9 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
         shifts.map((s) => (s.id === shiftId ? { ...s, ...updates } : s));
       set((state) => ({
         monthShifts: applyUpdates(state.monthShifts),
+        shiftsByMonth: Object.fromEntries(
+          Object.entries(state.shiftsByMonth).map(([ym, shifts]) => [ym, applyUpdates(shifts)])
+        ),
         todayShift: state.todayShift?.id === shiftId ? { ...state.todayShift, ...updates } : state.todayShift,
         upcomingShifts: applyUpdates(state.upcomingShifts),
       }));
@@ -449,7 +511,7 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
   },
 
   reset: () => {
-    set({ todayShift: null, upcomingShifts: [], monthShifts: [], allOcrShifts: [], hasOcrData: false, loading: false, error: null });
+    set({ todayShift: null, upcomingShifts: [], monthShifts: [], shiftsByMonth: {}, allOcrShifts: [], hasOcrData: false, loading: false, error: null });
     AsyncStorage.removeItem(GUEST_SHIFTS_KEY).catch(() => {});
   },
 }));

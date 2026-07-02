@@ -270,6 +270,25 @@ export default function SettingsScreen() {
       const success = await connectCalendar();
       if (success) {
         Alert.alert(t('settings.connected'), t('settings.calendarConnected'));
+        return;
+      }
+      // Surface the failure — a silent no-op here left users unsure
+      // whether the tap even registered. Permission denial is the common
+      // case (iOS never re-prompts once denied), so offer a jump to the
+      // system settings screen where it can be re-enabled.
+      const reason = useCalendarStore.getState().error || '';
+      if (reason.includes('permission')) {
+        Alert.alert(t('common.error'), t('settings.calendarPermDenied'), [
+          { text: t('common.cancel'), style: 'cancel' },
+          { text: t('settings.openSystemSettings'), onPress: () => Linking.openSettings() },
+        ]);
+      } else {
+        Alert.alert(
+          t('common.error'),
+          reason
+            ? `${t('settings.calendarConnectFailed')}\n${reason}`
+            : t('settings.calendarConnectFailed'),
+        );
       }
     }
   };
@@ -324,7 +343,7 @@ export default function SettingsScreen() {
         }
       );
     } else {
-      const buttons = ALARM_OPTIONS.map((opt) => ({
+      const buttons: import('react-native').AlertButton[] = ALARM_OPTIONS.map((opt) => ({
         text: opt.label,
         onPress: async () => {
           setAlarmMinutes(opt.value);

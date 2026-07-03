@@ -27,6 +27,7 @@ import { GuestUpgradeBanner } from '../../src/components/GuestUpgradeBanner';
 
 const UNIFY_DAYOFF_KEY = 'shiftsnap_unify_dayoff';
 const UNIFY_DAYOFF_SYMBOL_KEY = 'shiftsnap_unify_dayoff_symbol';
+const SHOW_ALL_CODES_KEY = 'shiftsnap_show_all_shift_codes';
 
 interface LocalShiftCode {
   id: string;
@@ -52,7 +53,9 @@ export default function ShiftsScreen() {
   const { user } = useAuthStore();
   const {
     shiftCodes: storeShiftCodes,
+    recentlyUsedCodes,
     fetchShiftCodes,
+    fetchRecentlyUsedCodes,
     saveShiftCode,
     deleteShiftCode,
   } = useShiftCodeStore();
@@ -112,10 +115,22 @@ export default function ShiftsScreen() {
     });
   };
 
+  const [showAllCodes, setShowAllCodes] = useState(false);
+
+  // Codes actually used in the last 3 months, plus anything still pending
+  // confirmation — a code awaiting definition must stay visible even if
+  // it hasn't been "used" yet in the recency sense.
+  const visibleShiftCodes = showAllCodes
+    ? shiftCodes
+    : shiftCodes.filter(
+        (sc) => recentlyUsedCodes.has(sc.code) || pendingCodes.includes(sc.code)
+      );
+  const hiddenCodeCount = shiftCodes.length - visibleShiftCodes.length;
+
   // Group codes by source: 'private' (no group_id) or specific group id.
   const codeSections = (() => {
     const buckets = new Map<string, LocalShiftCode[]>();
-    for (const code of shiftCodes) {
+    for (const code of visibleShiftCodes) {
       const key = code.groupId ?? 'private';
       const arr = buckets.get(key) ?? [];
       arr.push(code);
@@ -151,6 +166,7 @@ export default function ShiftsScreen() {
   useEffect(() => {
     if (user?.id) {
       fetchShiftCodes(user.id);
+      fetchRecentlyUsedCodes(user.id);
     }
   }, [user?.id, viewScope]);
 
@@ -161,6 +177,9 @@ export default function ShiftsScreen() {
     });
     AsyncStorage.getItem(UNIFY_DAYOFF_SYMBOL_KEY).then((val) => {
       if (val) setUnifyDayOffSymbol(val);
+    });
+    AsyncStorage.getItem(SHOW_ALL_CODES_KEY).then((val) => {
+      if (val !== null) setShowAllCodes(val === 'true');
     });
   }, []);
 
@@ -536,10 +555,39 @@ export default function ShiftsScreen() {
 
         {/* Saved Codes Section, grouped by source */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
-            {t('shifts.yourShiftCodes')}
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, flex: 1, marginBottom: 0 }]}>
+              {t('shifts.yourShiftCodes')}
+            </Text>
+            {hiddenCodeCount > 0 && !showAllCodes && (
+              <TouchableOpacity
+                onPress={() => {
+                  setShowAllCodes(true);
+                  AsyncStorage.setItem(SHOW_ALL_CODES_KEY, 'true');
+                }}
+              >
+                <Text style={{ color: theme.colors.primary, fontSize: 13 }}>
+                  {t('shifts.showAllCodes', { count: hiddenCodeCount })}
+                </Text>
+              </TouchableOpacity>
+            )}
+            {showAllCodes && (
+              <TouchableOpacity
+                onPress={() => {
+                  setShowAllCodes(false);
+                  AsyncStorage.setItem(SHOW_ALL_CODES_KEY, 'false');
+                }}
+              >
+                <Text style={{ color: theme.colors.primary, fontSize: 13 }}>
+                  {t('shifts.showRecentCodes')}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <Text style={[styles.sectionSubtitle, { color: theme.colors.textMuted, marginBottom: 8 }]}>
+            {showAllCodes ? t('shifts.showingAllCodes') : t('shifts.showingRecentCodes')}
           </Text>
-          {shiftCodes.length > 0 ? (
+          {visibleShiftCodes.length > 0 ? (
             codeSections.map((section) => {
               const collapsed = collapsedGroups.has(section.key);
               return (
@@ -577,6 +625,23 @@ export default function ShiftsScreen() {
                 </View>
               );
             })
+          ) : shiftCodes.length > 0 ? (
+            <Card style={styles.emptyCard}>
+              <Ionicons name="time-outline" size={48} color={theme.colors.textMuted} />
+              <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>
+                {t('shifts.noRecentCodes')}
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowAllCodes(true);
+                  AsyncStorage.setItem(SHOW_ALL_CODES_KEY, 'true');
+                }}
+              >
+                <Text style={{ color: theme.colors.primary, fontSize: 14, marginTop: 4 }}>
+                  {t('shifts.showAllCodes', { count: shiftCodes.length })}
+                </Text>
+              </TouchableOpacity>
+            </Card>
           ) : (
             <Card style={styles.emptyCard}>
               <Ionicons name="code-outline" size={48} color={theme.colors.textMuted} />

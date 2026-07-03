@@ -19,10 +19,12 @@ interface ShiftCodeItem {
 
 interface ShiftCodeState {
   shiftCodes: ShiftCodeItem[];
+  recentlyUsedCodes: Set<string>;
   loading: boolean;
   error: string | null;
 
   fetchShiftCodes: (userId: string) => Promise<void>;
+  fetchRecentlyUsedCodes: (userId: string) => Promise<void>;
   saveShiftCode: (
     userId: string,
     code: string,
@@ -36,10 +38,59 @@ interface ShiftCodeState {
   reset: () => void;
 }
 
+const RECENT_MONTHS_WINDOW = 3;
+
 export const useShiftCodeStore = create<ShiftCodeState>((set, get) => ({
   shiftCodes: [],
+  recentlyUsedCodes: new Set(),
   loading: false,
   error: null,
+
+  fetchRecentlyUsedCodes: async (userId: string) => {
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - (RECENT_MONTHS_WINDOW - 1));
+    cutoff.setDate(1);
+    const cutoffStr = cutoff.toISOString().split('T')[0];
+
+    if (getIsGuest()) {
+      const guestShifts = useShiftStore.getState().allOcrShifts;
+      const codes = new Set(
+        guestShifts.filter((s) => s.date >= cutoffStr).map((s) => s.shift_code)
+      );
+      set({ recentlyUsedCodes: codes });
+      return;
+    }
+    try {
+      const { data: ownShifts, error } = await supabase
+        .from('shifts')
+        .select('shift_code')
+        .eq('user_id', userId)
+        .gte('date', cutoffStr);
+      if (error) throw error;
+
+      const codes = new Set<string>((ownShifts || []).map((s: any) => s.shift_code));
+
+      const { groups, viewScope } = useGroupStore.getState();
+      const realGroupIds = groups.map((g) => g.id).filter((id) => id !== 'guest-group');
+      const targetGroupIds =
+        viewScope === 'all' ? realGroupIds : realGroupIds.includes(viewScope) ? [viewScope] : [];
+
+      if (targetGroupIds.length > 0) {
+        const { data: groupShifts, error: groupError } = await supabase
+          .from('shifts')
+          .select('shift_code, schedules!inner(group_id)')
+          .in('schedules.group_id', targetGroupIds)
+          .gte('date', cutoffStr);
+        if (!groupError && groupShifts) {
+          groupShifts.forEach((s: any) => codes.add(s.shift_code));
+        }
+      }
+
+      set({ recentlyUsedCodes: codes });
+    } catch (error) {
+      console.error('Error fetching recently used shift codes:', error);
+    }
+  },
 
   fetchShiftCodes: async (userId: string) => {
     if (getIsGuest()) {
@@ -143,6 +194,9 @@ export const useShiftCodeStore = create<ShiftCodeState>((set, get) => ({
       useShiftStore.setState({
         monthShifts: shiftState.monthShifts.map(applyUpdate),
         allOcrShifts: shiftState.allOcrShifts.map(applyUpdate),
+        shiftsByMonth: Object.fromEntries(
+          Object.entries(shiftState.shiftsByMonth).map(([ym, shifts]) => [ym, shifts.map(applyUpdate)])
+        ),
       });
       return;
     }
@@ -197,10 +251,14 @@ export const useShiftCodeStore = create<ShiftCodeState>((set, get) => ({
           .eq('shift_code', code);
         // Update in-memory shifts
         const shiftState = useShiftStore.getState();
-        const updatedMonthShifts = shiftState.monthShifts.map((s) =>
-          s.shift_code === code ? { ...s, start_time: startTime, end_time: endTime, is_day_off: isDayOff } : s
-        );
-        useShiftStore.setState({ monthShifts: updatedMonthShifts });
+        const applyUpdate = (s: any) =>
+          s.shift_code === code ? { ...s, start_time: startTime, end_time: endTime, is_day_off: isDayOff } : s;
+        useShiftStore.setState({
+          monthShifts: shiftState.monthShifts.map(applyUpdate),
+          shiftsByMonth: Object.fromEntries(
+            Object.entries(shiftState.shiftsByMonth).map(([ym, shifts]) => [ym, shifts.map(applyUpdate)])
+          ),
+        });
       } catch (cascadeError) {
         console.error('Non-critical: failed to cascade shift code times to shifts:', cascadeError);
       }
@@ -240,6 +298,6 @@ export const useShiftCodeStore = create<ShiftCodeState>((set, get) => ({
   },
 
   reset: () => {
-    set({ shiftCodes: [], loading: false, error: null });
+    set({ shiftCodes: [], recentlyUsedCodes: new Set(), loading: false, error: null });
   },
 }));

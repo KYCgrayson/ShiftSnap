@@ -72,7 +72,7 @@ export default function CalendarScreen() {
   const { t } = useTranslation();
   const locale = useLocaleStore((s) => s.locale);
   const { user } = useAuthStore();
-  const { monthShifts, fetchShiftsForMonth, updateShift, updateShiftCalendarSync, loading } = useShiftStore();
+  const { monthShifts, shiftsByMonth, fetchShiftsWindow, updateShift, updateShiftCalendarSync, loading } = useShiftStore();
   const { shiftCodes, fetchShiftCodes, getCodeInfo } = useShiftCodeStore();
   const { persons, fetchPersons, updatePerson } = usePersonStore();
   const { isConnected: calendarConnected, syncShift } = useCalendarStore();
@@ -81,6 +81,9 @@ export default function CalendarScreen() {
   const groups = useGroupStore((s) => s.groups);
   const viewScope = useGroupStore((s) => s.viewScope);
   const cycleViewScope = useGroupStore((s) => s.cycleViewScope);
+  const groupMembers = useGroupStore((s) => s.members);
+  const fetchGroupMembers = useGroupStore((s) => s.fetchMembers);
+  const claimPersonInSchedule = useGroupStore((s) => s.claimPersonInSchedule);
   const toast = useToast();
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split('T')[0]
@@ -157,8 +160,36 @@ export default function CalendarScreen() {
 
   const loadMonth = useCallback(async (yearMonth: string) => {
     if (!userId) return;
-    await fetchShiftsForMonth(userId, yearMonth);
+    await fetchShiftsWindow(userId, yearMonth);
   }, [userId]);
+
+  // Previous/current/next month keys — the cached window backing the
+  // calendar view. react-native-calendars pads the grid with a few days
+  // from adjacent months, and swiping across a month boundary should show
+  // cached data instantly rather than a blank flash while refetching.
+  const windowMonths = useMemo(() => {
+    const [y, m] = currentMonth.split('-').map(Number);
+    const base = new Date(y, m - 1, 1);
+    const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const prev = new Date(base);
+    prev.setMonth(prev.getMonth() - 1);
+    const next = new Date(base);
+    next.setMonth(next.getMonth() + 1);
+    return [fmt(prev), currentMonth, fmt(next)];
+  }, [currentMonth]);
+
+  const windowShifts = useMemo(() => {
+    const seen = new Set<string>();
+    const merged: typeof monthShifts = [];
+    windowMonths.forEach((ym) => {
+      (shiftsByMonth[ym] || []).forEach((s) => {
+        if (seen.has(s.id)) return;
+        seen.add(s.id);
+        merged.push(s);
+      });
+    });
+    return merged;
+  }, [windowMonths, shiftsByMonth]);
 
   useEffect(() => {
     if (userId) {
@@ -169,15 +200,30 @@ export default function CalendarScreen() {
     }
   }, [userId, currentMonth, currentGroupId, viewScope]);
 
+  // Load group members so we know which coworker rows have been claimed
+  // (member.claimed_person_id) — drives the "confirmed" name highlight.
+  useEffect(() => {
+    if (currentGroupId) fetchGroupMembers(currentGroupId);
+  }, [currentGroupId]);
+
+  // Person IDs that a group member has claimed as their own schedule.
+  const claimedPersonIds = useMemo(() => {
+    return new Set(
+      groupMembers.map((m) => m.claimed_person_id).filter((id): id is string => !!id)
+    );
+  }, [groupMembers]);
+
   const onRefresh = async () => {
     setRefreshing(true);
     await loadMonth(currentMonth);
     setRefreshing(false);
   };
 
-  // Convert DB shifts to ShiftEvent format
+  // Convert DB shifts to ShiftEvent format. Sourced from the cached
+  // 3-month window (not just the visible month) so the calendar grid's
+  // adjacent-month padding days already have bars painted in.
   const shifts: ShiftEvent[] = useMemo(() => {
-    return monthShifts.map((shift) => {
+    return windowShifts.map((shift) => {
       const person = shift.person_id ? persons.find((p) => p.id === shift.person_id) : null;
       // isSelf: must match both source type AND user_id
       const isSelfSource = shift.source === 'self_scan' || !shift.source || shift.source === 'manual';
@@ -205,7 +251,7 @@ export default function CalendarScreen() {
         shiftUserId: shift.user_id,
       };
     });
-  }, [monthShifts, shiftCodes, theme, persons, getCodeInfo, userId]);
+  }, [windowShifts, shiftCodes, theme, persons, getCodeInfo, userId]);
 
   // Helper to check if a shift belongs to the current user
   const isMyShift = useCallback((shift: ShiftEvent) => {
@@ -354,6 +400,60 @@ export default function CalendarScreen() {
     });
   };
 
+  // Long-press on a coworker's legend row to claim their row as "this is
+  // me" — e.g. a husband uploaded his wife's schedule under his account,
+  // and she wants her calendar to show it as her own going forward.
+  // Reuses the same claim_person_in_schedule RPC the settings-page claim
+  // modal uses, but targets the specific schedule that produced this
+  // person's most recent shift instead of "the group's latest schedule".
+  const [claiming, setClaiming] = useState(false);
+  const handleLongPressClaim = (person: { personId: string; name: string }) => {
+    if (claiming || !userId) return;
+    const candidates = windowShifts
+      .filter((s) => s.person_id === person.personId && s.schedule_id)
+      .sort((a, b) => b.date.localeCompare(a.date));
+    const target = candidates[0];
+    if (!target) {
+      Alert.alert(t('common.error'), t('calendar.claimNoSchedule'));
+      return;
+    }
+    const nameOnSchedule = target.name_on_schedule || person.name;
+    const claimedBy = groupMembers.find((m) => m.claimed_person_id === person.personId);
+
+    const confirmMessage = claimedBy
+      ? t('calendar.claimReassignMessage', { name: person.name, member: claimedBy.display_name || '?' })
+      : t('calendar.claimMessage', { name: person.name });
+
+    Alert.alert(t('calendar.claimTitle', { name: person.name }), confirmMessage, [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('calendar.claimConfirm'),
+        onPress: async () => {
+          setClaiming(true);
+          try {
+            await claimPersonInSchedule(target.schedule_id, nameOnSchedule);
+            if (currentGroupId) await fetchGroupMembers(currentGroupId);
+            await fetchPersons(userId);
+            await loadMonth(currentMonth);
+            toast(t('calendar.claimSuccess', { name: person.name }));
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : '';
+            Alert.alert(
+              t('common.error'),
+              msg === 'NOT_GROUP_MEMBER'
+                ? t('settings.claimNotMember')
+                : msg === 'SCHEDULE_NOT_IN_GROUP'
+                  ? t('settings.claimScheduleMissing')
+                  : t('settings.claimFailed'),
+            );
+          } finally {
+            setClaiming(false);
+          }
+        },
+      },
+    ]);
+  };
+
   // Open shift edit modal
   const handleEditShift = (shift: ShiftEvent) => {
     setEditingShift(shift);
@@ -374,7 +474,7 @@ export default function CalendarScreen() {
       });
       // Re-sync to device calendar if connected
       if (calendarConnected) {
-        const dbShift = monthShifts.find((s) => s.id === editingShift.id);
+        const dbShift = windowShifts.find((s) => s.id === editingShift.id);
         if (dbShift) {
           const codeInfo = getCodeInfo(editingShift.code);
           const eventId = await syncShift(
@@ -463,22 +563,35 @@ export default function CalendarScreen() {
     void deleteNoteImage(url);
   };
 
-  // Coworker entries: only persons that appear in the currently-viewed
-  // month, excluding the demo "Me" person and any shifts the user has
-  // claimed as their own (those render under "My schedule"). Scoping to
-  // the visible month keeps the toggle list short — uploading 5 months
-  // of schedules with 5 coworkers no longer produces 25 toggles, just
-  // the persons relevant to whatever month is on screen.
+  // Coworker entries: only persons that appear in the cached 3-month
+  // window (last/current/next month), excluding the demo "Me" person and
+  // any shifts the user has claimed as their own (those render under "My
+  // schedule"). Scoping to 3 months instead of "everyone ever imported"
+  // keeps the toggle list short and relevant; grouping by month lets the
+  // user see which month a coworker's shifts actually came from.
+  const coworkerEntriesByMonth = useMemo(() => {
+    return windowMonths
+      .map((ym) => {
+        const personIds = new Set<string>();
+        (shiftsByMonth[ym] || []).forEach((s) => {
+          if (s.user_id === userId) return; // not a coworker of this user
+          if (s.person_id) personIds.add(s.person_id);
+        });
+        const list = persons
+          .filter((p) => p.id !== 'g-person-1' && personIds.has(p.id))
+          .map((p) => ({ name: p.name, color: p.color, personId: p.id }));
+        return { yearMonth: ym, list };
+      })
+      .filter((m) => m.list.length > 0);
+  }, [persons, shiftsByMonth, windowMonths, userId]);
+
+  // Flattened + deduped across the window — drives the "select all
+  // coworkers" toggle and any code that just needs "who's visible at all".
   const coworkerEntries = useMemo(() => {
-    const personIds = new Set<string>();
-    monthShifts.forEach((s) => {
-      if (s.user_id === userId) return; // not a coworker of this user
-      if (s.person_id) personIds.add(s.person_id);
-    });
-    return persons
-      .filter((p) => p.id !== 'g-person-1' && personIds.has(p.id))
-      .map((p) => ({ name: p.name, color: p.color, personId: p.id }));
-  }, [persons, monthShifts, userId]);
+    const seen = new Map<string, { name: string; color: string; personId: string }>();
+    coworkerEntriesByMonth.forEach((m) => m.list.forEach((p) => seen.set(p.personId, p)));
+    return Array.from(seen.values());
+  }, [coworkerEntriesByMonth]);
 
   // Toggle all coworkers on/off
   const allCoworkersVisible = useMemo(() => {
@@ -842,7 +955,17 @@ export default function CalendarScreen() {
                             : codeInfo?.meaning || t('home.shift', { code: shift.code })}
                         </Text>
                         {shift.personName && (
-                          <Text style={[styles.personName, { color: theme.colors.textSecondary }]}>
+                          <Text
+                            style={[
+                              styles.personName,
+                              shift.personId && claimedPersonIds.has(shift.personId)
+                                ? [
+                                    styles.nameBadge,
+                                    { color: theme.colors.success, backgroundColor: theme.colors.success + '18' },
+                                  ]
+                                : { color: theme.colors.textSecondary },
+                            ]}
+                          >
                             {shift.personName}
                           </Text>
                         )}
@@ -886,9 +1009,17 @@ export default function CalendarScreen() {
                 <View style={[styles.shiftTypeDot, { backgroundColor: ShiftTypeColors.night }]} />
                 <View style={[styles.shiftTypeDot, { backgroundColor: ShiftTypeColors.dayOff }]} />
               </View>
-              <Text style={[styles.legendText, { color: theme.colors.textPrimary, flex: 1 }]}>
-                {t('calendar.mySchedule')}
-              </Text>
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={[
+                    styles.legendText,
+                    styles.nameBadge,
+                    { color: theme.colors.primary, backgroundColor: theme.colors.primary + '18' },
+                  ]}
+                >
+                  {t('calendar.mySchedule')}
+                </Text>
+              </View>
               <Switch
                 value={visiblePersonIds.has('self')}
                 onValueChange={() => togglePersonVisibility('self')}
@@ -926,26 +1057,76 @@ export default function CalendarScreen() {
                     thumbColor={allCoworkersVisible ? theme.colors.primary : '#f4f3f4'}
                   />
                 </View>
-                {coworkerEntries.map((person) => (
-                  <View key={person.personId} style={[styles.legendItem, { paddingLeft: 12 }]}>
-                    <TouchableOpacity
-                      style={[styles.legendColor, { backgroundColor: person.color }]}
-                      onPress={() => {
-                        setColorEditTarget({ personId: person.personId, personName: person.name });
-                        setShowColorPicker(true);
-                      }}
-                    />
-                    <Text style={[styles.legendText, { color: theme.colors.textPrimary, flex: 1 }]}>
-                      {person.name}
-                    </Text>
-                    <Switch
-                      value={visiblePersonIds.has(person.personId)}
-                      onValueChange={() => togglePersonVisibility(person.personId)}
-                      trackColor={{ false: theme.colors.border, true: person.color + '80' }}
-                      thumbColor={visiblePersonIds.has(person.personId) ? person.color : '#f4f3f4'}
-                    />
-                  </View>
-                ))}
+                <Text style={[styles.coworkerHintText, { color: theme.colors.textMuted }]}>
+                  {t('calendar.claimHint')}
+                </Text>
+                {coworkerEntriesByMonth.map(({ yearMonth, list }) => {
+                  const [y, m] = yearMonth.split('-').map(Number);
+                  const monthLabel = new Date(y, m - 1, 1).toLocaleDateString(locale, {
+                    year: 'numeric',
+                    month: 'long',
+                  });
+                  return (
+                    <View key={yearMonth}>
+                      <Text
+                        style={[
+                          styles.coworkerMonthLabel,
+                          { color: theme.colors.textMuted, borderTopColor: theme.colors.border },
+                        ]}
+                      >
+                        {monthLabel}
+                      </Text>
+                      {list.map((person) => {
+                        const isClaimed = claimedPersonIds.has(person.personId);
+                        return (
+                          <View key={`${yearMonth}-${person.personId}`} style={[styles.legendItem, { paddingLeft: 12 }]}>
+                            <TouchableOpacity
+                              style={[styles.legendColor, { backgroundColor: person.color }]}
+                              onPress={() => {
+                                setColorEditTarget({ personId: person.personId, personName: person.name });
+                                setShowColorPicker(true);
+                              }}
+                            />
+                            <TouchableOpacity
+                              style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
+                              activeOpacity={0.6}
+                              delayLongPress={450}
+                              onLongPress={() => handleLongPressClaim(person)}
+                            >
+                              <Text
+                                style={[
+                                  styles.legendText,
+                                  isClaimed && styles.nameBadge,
+                                  isClaimed && {
+                                    color: theme.colors.success,
+                                    backgroundColor: theme.colors.success + '18',
+                                  },
+                                  !isClaimed && { color: theme.colors.textPrimary },
+                                ]}
+                              >
+                                {person.name}
+                              </Text>
+                              {isClaimed && (
+                                <Ionicons
+                                  name="checkmark-circle"
+                                  size={14}
+                                  color={theme.colors.success}
+                                  style={{ marginLeft: 6 }}
+                                />
+                              )}
+                            </TouchableOpacity>
+                            <Switch
+                              value={visiblePersonIds.has(person.personId)}
+                              onValueChange={() => togglePersonVisibility(person.personId)}
+                              trackColor={{ false: theme.colors.border, true: person.color + '80' }}
+                              thumbColor={visiblePersonIds.has(person.personId) ? person.color : '#f4f3f4'}
+                            />
+                          </View>
+                        );
+                      })}
+                    </View>
+                  );
+                })}
               </>
             )}
           </Card>
@@ -1361,6 +1542,20 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
+  coworkerHintText: {
+    fontSize: 11,
+    paddingHorizontal: 4,
+    paddingTop: 2,
+  },
+  coworkerMonthLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    paddingTop: 8,
+    paddingBottom: 4,
+    paddingLeft: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    marginTop: 4,
+  },
   legendColor: {
     width: 14,
     height: 14,
@@ -1369,6 +1564,13 @@ const styles = StyleSheet.create({
   },
   legendText: {
     fontSize: 15,
+  },
+  nameBadge: {
+    fontWeight: '600',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
   },
   colorPickerOverlay: {
     flex: 1,

@@ -16,21 +16,63 @@ export async function requestCalendarPermissions(): Promise<boolean> {
 // of a bare native error string.
 export const CALENDAR_ACCOUNT_READONLY = 'CALENDAR_ACCOUNT_READONLY';
 
-async function createNamedCalendar(source: Calendar.Source | undefined): Promise<string> {
+async function createNamedCalendarWithSource(source: Calendar.Source): Promise<string> {
+  // iOS keys off sourceId; the source object is passed too so Android and
+  // older iOS paths both resolve the owning account.
   return Calendar.createCalendarAsync({
     title: CALENDAR_NAME,
     color: CALENDAR_COLOR,
     entityType: Calendar.EntityTypes.EVENT,
-    sourceId: source?.id,
-    source: source || {
-      isLocalAccount: true,
-      name: CALENDAR_NAME,
-      type: Platform.OS === 'ios' ? Calendar.CalendarType.LOCAL : (undefined as any),
-    },
+    sourceId: source.id,
+    source,
     name: CALENDAR_NAME,
     ownerAccount: 'personal',
     accessLevel: Calendar.CalendarAccessLevel.OWNER,
   });
+}
+
+// Build the iOS source-try order. Creating a calendar needs an EKSource that
+// permits it: iCloud (CalDAV) syncs across devices and usually allows it, a
+// LOCAL source is on-device but always writable, and read-only sources
+// (Subscribed / Birthdays) are skipped entirely. We try REAL sources by id —
+// a synthesized source object is rejected by iOS ("must match an account on
+// the device... or the OS will delete the calendar").
+async function getIosCandidateSources(): Promise<Calendar.Source[]> {
+  const ordered: Calendar.Source[] = [];
+  const push = (s?: Calendar.Source) => {
+    if (s?.id) ordered.push(s);
+  };
+
+  try {
+    const sources = await Calendar.getSourcesAsync();
+    const isType = (s: Calendar.Source, t: Calendar.SourceType) => s.type === t;
+    // iCloud first (cross-device), then reliable on-device LOCAL, then any
+    // other source that isn't obviously read-only.
+    sources.filter((s) => isType(s, Calendar.SourceType.CALDAV)).forEach(push);
+    sources.filter((s) => isType(s, Calendar.SourceType.LOCAL)).forEach(push);
+    sources
+      .filter(
+        (s) =>
+          !isType(s, Calendar.SourceType.CALDAV) &&
+          !isType(s, Calendar.SourceType.LOCAL) &&
+          !isType(s, Calendar.SourceType.SUBSCRIBED) &&
+          !isType(s, Calendar.SourceType.BIRTHDAYS),
+      )
+      .forEach(push);
+  } catch {
+    // getSourcesAsync can throw on locked-down devices — fall through to the
+    // default-calendar source below.
+  }
+
+  // Always also consider the default calendar's own source as a candidate.
+  try {
+    const def = await Calendar.getDefaultCalendarAsync();
+    push(def?.source);
+  } catch {
+    // ignore
+  }
+
+  return ordered;
 }
 
 export async function getOrCreateShiftSnapCalendar(): Promise<string | null> {
@@ -41,44 +83,41 @@ export async function getOrCreateShiftSnapCalendar(): Promise<string | null> {
   if (existing) return existing.id;
 
   if (Platform.OS === 'ios') {
-    // Some account sources (managed/Exchange/Google, or a read-only default)
-    // reject createCalendarAsync with "該帳號不允許加入或移除行事曆". Try a
-    // sequence of sources so a single unfriendly account doesn't sink the
-    // whole feature.
-    let defaultSource: Calendar.Source | undefined;
-    try {
-      const defaultCalendar = await Calendar.getDefaultCalendarAsync();
-      defaultSource = defaultCalendar?.source;
-    } catch {
-      // getDefaultCalendarAsync itself can throw on locked-down accounts.
-    }
-
-    // Attempt 1: the default calendar's source (usually iCloud — allows it).
-    if (defaultSource) {
+    const candidates = await getIosCandidateSources();
+    const seen = new Set<string>();
+    for (const src of candidates) {
+      if (!src.id || seen.has(src.id)) continue;
+      seen.add(src.id);
       try {
-        return await createNamedCalendar(defaultSource);
+        return await createNamedCalendarWithSource(src);
       } catch {
-        // fall through
+        // This source rejected creation — try the next one.
       }
     }
 
-    // Attempt 2: force a local source, which sidesteps account restrictions.
-    try {
-      return await createNamedCalendar(undefined);
-    } catch {
-      // fall through
-    }
-
-    // Attempt 3: reuse any writable calendar so events still land somewhere
-    // rather than failing outright.
+    // Last resort: reuse an existing writable calendar so events still land
+    // somewhere rather than failing outright. Intrusive (mixes into a
+    // personal calendar), only reached when no source accepts a new calendar.
     const writable = calendars.find((c) => c.allowsModifications);
     if (writable) return writable.id;
 
     throw new Error(CALENDAR_ACCOUNT_READONLY);
   }
 
-  // Android
-  return await createNamedCalendar(undefined);
+  // Android: a synthesized local account is the expected pattern here.
+  return Calendar.createCalendarAsync({
+    title: CALENDAR_NAME,
+    color: CALENDAR_COLOR,
+    entityType: Calendar.EntityTypes.EVENT,
+    source: {
+      isLocalAccount: true,
+      name: CALENDAR_NAME,
+      type: undefined as any,
+    },
+    name: CALENDAR_NAME,
+    ownerAccount: 'personal',
+    accessLevel: Calendar.CalendarAccessLevel.OWNER,
+  });
 }
 
 export async function syncShiftToCalendar(

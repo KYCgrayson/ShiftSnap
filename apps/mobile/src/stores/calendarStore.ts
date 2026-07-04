@@ -5,6 +5,7 @@ import {
   getOrCreateShiftSnapCalendar,
   syncShiftToCalendar,
   removeShiftFromCalendar,
+  CALENDAR_ACCOUNT_READONLY,
 } from '../services/calendarSync';
 
 const CALENDAR_CONNECTED_KEY = 'shiftsnap_calendar_connected';
@@ -66,7 +67,11 @@ export const useCalendarStore = create<CalendarState>((set, get) => ({
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to connect calendar';
-      set({ loading: false, error: message });
+      // Normalize the "no source will accept a new calendar" case so the UI
+      // can show an actionable message instead of a raw native error.
+      const normalized =
+        message === CALENDAR_ACCOUNT_READONLY ? CALENDAR_ACCOUNT_READONLY : message;
+      set({ loading: false, error: normalized });
       return false;
     }
   },

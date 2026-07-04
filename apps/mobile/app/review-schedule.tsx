@@ -43,8 +43,17 @@ import type { OCRResult, OCRShift } from '@shiftsnap/shared';
 const MY_COLOR_KEY = 'shiftsnap_my_schedule_color';
 
 const STEPS = [1, 2, 3, 4] as const;
-const IMAGE_STRIP_HEIGHT = 180;
+// Raised ~20% (was 180) so more of the schedule above/below the selected
+// row stays visible — the "可視距離上下邊界" the user asked to widen.
+const IMAGE_STRIP_HEIGHT = 216;
 const SCREEN_WIDTH = Dimensions.get('window').width;
+// Date-cell horizontal pitch in the strip below the image: cell width (44)
+// plus the row gap (6). Used to translate a date-strip scroll into the
+// matching pixel shift on the reference photo.
+const DATE_CELL_PITCH = 50;
+// The name column on a paper schedule is roughly this many day-columns
+// wide; used to estimate the photo's per-day pixel width for scroll sync.
+const NAME_COL_EQUIV = 3;
 
 export default function ReviewScheduleScreen() {
   const theme = useTheme();
@@ -282,15 +291,26 @@ export default function ReviewScheduleScreen() {
   // showing whatever columns were visible before — the exact "can't line
   // them up after moving right" complaint. The user still pinch/pans to
   // align the image by eye once; from then on horizontal date-strip
-  // scrolling shifts the image by the same pixel delta to preserve it.
+  // scrolling shifts the image to preserve it.
+  //
+  // The previous version shifted the image 1:1 with the scroll offset, but a
+  // date cell (~50px) is far wider than one day-column in the photo, so the
+  // image raced ahead and never stayed aligned. We now scale the shift by
+  // the photo's estimated per-day width (accounting for the current zoom),
+  // so one day of scrolling moves the image by one day-column.
   const lastDateScrollX = useRef(0);
   const handleDateStripScroll = useCallback((e: any) => {
     const x = e.nativeEvent.contentOffset.x;
     const delta = x - lastDateScrollX.current;
     lastDateScrollX.current = x;
-    translateX.value -= delta;
+    if (!imageDims) return;
+    const [yy, mm] = (yearMonth || '').split('-').map(Number);
+    const dim = yy && mm ? new Date(yy, mm, 0).getDate() : 31;
+    const imageDayPitch = (imageBaseWidth / (dim + NAME_COL_EQUIV)) * scale.value;
+    const factor = imageDayPitch / DATE_CELL_PITCH;
+    translateX.value -= delta * factor;
     savedTranslateX.value = translateX.value;
-  }, []);
+  }, [imageDims, imageBaseWidth, yearMonth]);
 
   // Initialize coworker selections when OCR data and selected person are set
   useEffect(() => {
@@ -951,6 +971,14 @@ export default function ReviewScheduleScreen() {
     const shiftMap = new Map<number, OCRShift>();
     selectedRow.shifts.forEach((s) => shiftMap.set(s.date, s));
 
+    // Height of the horizontal "your row" guide band — approximate one
+    // schedule row so the user can drop their name-row cleanly inside it.
+    const rowGuideHeight = (() => {
+      if (!imageDims || !ocrData) return 44;
+      const rh = imageBaseHeight / (ocrData.rows.length + 1);
+      return Math.max(28, Math.min(rh, 80));
+    })();
+
     const allMyCodesHandled = myUniqueCodes.every(
       (code) => !codeNeedsConfirmation(code) || sessionIgnoredCodes.has(code)
     );
@@ -1044,51 +1072,87 @@ export default function ReviewScheduleScreen() {
                       onError={() => setImageLoadFailed(true)}
                     />
                   </GestureDetector>
+
+                  {/* Fixed alignment guides drawn over the photo. Pan the
+                      image so your name-row sits inside the horizontal band;
+                      the vertical line marks the date column that stays in
+                      sync with the date strip below. pointerEvents="none" so
+                      pinch/pan gestures still reach the image underneath. */}
+                  <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+                    <View
+                      style={[
+                        styles.rowGuideBand,
+                        {
+                          height: rowGuideHeight,
+                          top: IMAGE_STRIP_HEIGHT / 2 - rowGuideHeight / 2,
+                          borderColor: theme.colors.primary,
+                          backgroundColor: theme.colors.primary + '14',
+                        },
+                      ]}
+                    >
+                      <View style={[styles.rowGuideTag, { backgroundColor: theme.colors.primary }]}>
+                        <Text style={styles.rowGuideTagText} numberOfLines={1}>
+                          {selectedRow.name || t('review.alignRowTag')}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={[styles.colGuideLine, { backgroundColor: theme.colors.primary + 'AA' }]} />
+                  </View>
                 </View>
               </View>
             )}
 
             {/* Date cells — horizontal ScrollView, synced to the image
                 strip above so scrolling right keeps the reference photo
-                aligned with whichever dates are on screen. */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.dateStrip}
-              onScroll={handleDateStripScroll}
-              scrollEventThrottle={16}
-            >
-              <View>
-                <View style={{ flexDirection: 'row', gap: 6 }}>
-                  {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
-                    const shift = shiftMap.get(day);
-                    const bgColor = shift
-                      ? getConfidenceColor(shift.confidence) + '20'
-                      : 'transparent';
+                aligned with whichever dates are on screen. The centered
+                vertical marker mirrors the image's column guide so the two
+                strips read as one aligned view. */}
+            <View style={styles.dateStripWrap}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.dateStrip}
+                onScroll={handleDateStripScroll}
+                scrollEventThrottle={16}
+              >
+                <View>
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
+                      const shift = shiftMap.get(day);
+                      const bgColor = shift
+                        ? getConfidenceColor(shift.confidence) + '20'
+                        : 'transparent';
 
-                    return (
-                      <TouchableOpacity
-                        key={day}
-                        style={[styles.dateCell, {
-                          backgroundColor: bgColor,
-                          borderColor: shift ? getConfidenceColor(shift.confidence) + '40' : theme.colors.border,
-                        }]}
-                        onPress={() => handleCellPress(day, shift?.code || '')}
-                      >
-                        <Text style={[styles.dateCellDay, { color: theme.colors.textSecondary }]}>
-                          {day}
-                        </Text>
-                        <Text style={[styles.dateCellCode, {
-                          color: shift ? getConfidenceColor(shift.confidence) : theme.colors.textMuted,
-                        }]}>
-                          {shift?.code || '·'}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
+                      return (
+                        <TouchableOpacity
+                          key={day}
+                          style={[styles.dateCell, {
+                            backgroundColor: bgColor,
+                            borderColor: shift ? getConfidenceColor(shift.confidence) + '40' : theme.colors.border,
+                          }]}
+                          onPress={() => handleCellPress(day, shift?.code || '')}
+                        >
+                          <Text style={[styles.dateCellDay, { color: theme.colors.textSecondary }]}>
+                            {day}
+                          </Text>
+                          <Text style={[styles.dateCellCode, {
+                            color: shift ? getConfidenceColor(shift.confidence) : theme.colors.textMuted,
+                          }]}>
+                            {shift?.code || '·'}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
                 </View>
-              </View>
-            </ScrollView>
+              </ScrollView>
+              {imageDims && params.imageUrl && !imageLoadFailed && (
+                <View
+                  pointerEvents="none"
+                  style={[styles.dateStripMarker, { backgroundColor: theme.colors.primary + 'AA' }]}
+                />
+              )}
+            </View>
           </View>
 
           {/* Code confirmation list */}
@@ -1983,6 +2047,46 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 3,
     position: 'relative',
+  },
+  rowGuideBand: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    borderTopWidth: 2,
+    borderBottomWidth: 2,
+    borderStyle: 'dashed',
+    justifyContent: 'flex-start',
+  },
+  rowGuideTag: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderBottomRightRadius: 8,
+    maxWidth: 160,
+  },
+  rowGuideTagText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  colGuideLine: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: '50%',
+    width: 2,
+    marginLeft: -1,
+  },
+  dateStripWrap: {
+    position: 'relative',
+  },
+  dateStripMarker: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: '50%',
+    width: 2,
+    marginLeft: -1,
   },
   dateCell: {
     width: 44,

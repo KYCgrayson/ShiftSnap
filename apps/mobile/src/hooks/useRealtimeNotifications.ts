@@ -26,6 +26,15 @@ export function useRealtimeNotifications(userId: string | undefined) {
           // just saved something.
           if (!row || row.user_id === userId) return;
 
+          // A re-save / claim runs a bulk delete + insert. DELETE payloads
+          // only carry a full pre-image when REPLICA IDENTITY FULL is in
+          // effect; otherwise row.user_id / row.date come back empty and we
+          // can neither attribute the change nor navigate to it. Those
+          // produce the "有人 刪除了 的班次" (empty name + empty date) banners
+          // that flooded the screen. If we can't resolve a date, drop it —
+          // an un-navigable, un-attributable banner is pure noise.
+          if (!row.date) return;
+
           const members = useGroupStore.getState().members;
           const member = members.find((m) => m.user_id === row.user_id);
           const name =

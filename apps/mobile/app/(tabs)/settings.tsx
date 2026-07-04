@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -137,13 +137,42 @@ export default function SettingsScreen() {
     }
   };
 
+  // The coworker list used to render every Person record ever created —
+  // one per (name, month) as schedules were imported — so the same
+  // colleague showed up many times and it grew without bound. Collapse to
+  // one entry per distinct name (trimmed, case-insensitive), keeping the
+  // most recently created record so its color is the current one.
+  const dedupedPersons = useMemo(() => {
+    const byName = new Map<string, (typeof persons)[number]>();
+    for (const p of persons) {
+      const key = (p.name || '').trim().toLowerCase();
+      if (!key) continue;
+      const existing = byName.get(key);
+      if (!existing || (p.created_at || '') > (existing.created_at || '')) {
+        byName.set(key, p);
+      }
+    }
+    return Array.from(byName.values());
+  }, [persons]);
+
   const handleDeleteCoworker = (personId: string, personName: string) => {
     Alert.alert(t('settings.deleteCoworker'), t('settings.deleteCoworkerConfirm'), [
       { text: t('common.cancel'), style: 'cancel' },
       {
         text: t('common.delete'),
         style: 'destructive',
-        onPress: () => deletePerson(personId),
+        onPress: async () => {
+          // Remove every Person record sharing this name so the deduped row
+          // doesn't reappear from a leftover duplicate on the next fetch.
+          const key = (personName || '').trim().toLowerCase();
+          const ids = persons
+            .filter((p) => (p.name || '').trim().toLowerCase() === key)
+            .map((p) => p.id);
+          const targets = ids.length > 0 ? ids : [personId];
+          for (const id of targets) {
+            await deletePerson(id);
+          }
+        },
       },
     ]);
   };
@@ -282,6 +311,11 @@ export default function SettingsScreen() {
           { text: t('common.cancel'), style: 'cancel' },
           { text: t('settings.openSystemSettings'), onPress: () => Linking.openSettings() },
         ]);
+      } else if (reason === 'CALENDAR_ACCOUNT_READONLY') {
+        Alert.alert(t('common.error'), t('settings.calendarAccountReadonly'), [
+          { text: t('common.cancel'), style: 'cancel' },
+          { text: t('settings.openSystemSettings'), onPress: () => Linking.openSettings() },
+        ]);
       } else {
         Alert.alert(
           t('common.error'),
@@ -295,10 +329,16 @@ export default function SettingsScreen() {
 
   const scheduleAllReminders = async (minutes: number) => {
     await cancelAllReminders();
-    for (const shift of upcomingShifts) {
+    const shifts = upcomingShifts ?? [];
+    for (const shift of shifts) {
       if (shift.is_day_off || !shift.start_time) continue;
-      const codeInfo = getCodeInfo(shift.shift_code);
-      await scheduleShiftReminder(shift, codeInfo ? { meaning: codeInfo.meaning } : undefined, minutes);
+      // Each reminder is isolated so one bad shift can't abort the batch.
+      try {
+        const codeInfo = getCodeInfo(shift.shift_code);
+        await scheduleShiftReminder(shift, codeInfo ? { meaning: codeInfo.meaning } : undefined, minutes);
+      } catch (e) {
+        console.warn('Failed to schedule reminder for shift', shift.id, e);
+      }
     }
   };
 
@@ -308,16 +348,27 @@ export default function SettingsScreen() {
       setNotificationsEnabled(false);
       await AsyncStorage.setItem(NOTIFICATIONS_KEY, 'false');
       await cancelAllReminders();
-    } else {
-      // Enable — request permission first
+      return;
+    }
+
+    // Enable — request permission first. Wrap the whole flow so any failure
+    // (permission API, scheduling) surfaces as an alert instead of an
+    // unhandled rejection that crashes the app.
+    try {
       const granted = await requestNotificationPermissions();
       if (!granted) {
         Alert.alert(t('common.error'), t('settings.notificationsPermDenied'));
         return;
       }
+      await scheduleAllReminders(alarmMinutes);
+      // Only flip the UI/persisted state once scheduling has succeeded.
       setNotificationsEnabled(true);
       await AsyncStorage.setItem(NOTIFICATIONS_KEY, 'true');
-      await scheduleAllReminders(alarmMinutes);
+    } catch (e) {
+      console.warn('Enable notifications failed:', e);
+      setNotificationsEnabled(false);
+      await AsyncStorage.setItem(NOTIFICATIONS_KEY, 'false').catch(() => {});
+      Alert.alert(t('common.error'), t('settings.notificationsEnableFailed'));
     }
   };
 
@@ -1024,7 +1075,7 @@ export default function SettingsScreen() {
               </View>
             </View>
             {/* Coworkers */}
-            {persons.map((person) => (
+            {dedupedPersons.map((person) => (
               <React.Fragment key={person.id}>
                 <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
                 <View style={styles.settingsItem}>

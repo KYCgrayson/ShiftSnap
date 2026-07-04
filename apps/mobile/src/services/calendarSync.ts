@@ -10,6 +10,29 @@ export async function requestCalendarPermissions(): Promise<boolean> {
   return status === 'granted';
 }
 
+// Thrown when the OS refuses to create a calendar under every source we
+// try AND there is no writable calendar to fall back to. Callers map this
+// to a user-facing "your account doesn't allow calendars" message instead
+// of a bare native error string.
+export const CALENDAR_ACCOUNT_READONLY = 'CALENDAR_ACCOUNT_READONLY';
+
+async function createNamedCalendar(source: Calendar.Source | undefined): Promise<string> {
+  return Calendar.createCalendarAsync({
+    title: CALENDAR_NAME,
+    color: CALENDAR_COLOR,
+    entityType: Calendar.EntityTypes.EVENT,
+    sourceId: source?.id,
+    source: source || {
+      isLocalAccount: true,
+      name: CALENDAR_NAME,
+      type: Platform.OS === 'ios' ? Calendar.CalendarType.LOCAL : (undefined as any),
+    },
+    name: CALENDAR_NAME,
+    ownerAccount: 'personal',
+    accessLevel: Calendar.CalendarAccessLevel.OWNER,
+  });
+}
+
 export async function getOrCreateShiftSnapCalendar(): Promise<string | null> {
   const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
 
@@ -17,30 +40,45 @@ export async function getOrCreateShiftSnapCalendar(): Promise<string | null> {
   const existing = calendars.find((cal) => cal.title === CALENDAR_NAME);
   if (existing) return existing.id;
 
-  // Create new calendar
-  let defaultCalendarSource: Calendar.Source | undefined;
-
   if (Platform.OS === 'ios') {
-    const defaultCalendar = await Calendar.getDefaultCalendarAsync();
-    defaultCalendarSource = defaultCalendar?.source;
+    // Some account sources (managed/Exchange/Google, or a read-only default)
+    // reject createCalendarAsync with "該帳號不允許加入或移除行事曆". Try a
+    // sequence of sources so a single unfriendly account doesn't sink the
+    // whole feature.
+    let defaultSource: Calendar.Source | undefined;
+    try {
+      const defaultCalendar = await Calendar.getDefaultCalendarAsync();
+      defaultSource = defaultCalendar?.source;
+    } catch {
+      // getDefaultCalendarAsync itself can throw on locked-down accounts.
+    }
+
+    // Attempt 1: the default calendar's source (usually iCloud — allows it).
+    if (defaultSource) {
+      try {
+        return await createNamedCalendar(defaultSource);
+      } catch {
+        // fall through
+      }
+    }
+
+    // Attempt 2: force a local source, which sidesteps account restrictions.
+    try {
+      return await createNamedCalendar(undefined);
+    } catch {
+      // fall through
+    }
+
+    // Attempt 3: reuse any writable calendar so events still land somewhere
+    // rather than failing outright.
+    const writable = calendars.find((c) => c.allowsModifications);
+    if (writable) return writable.id;
+
+    throw new Error(CALENDAR_ACCOUNT_READONLY);
   }
 
-  const calendarId = await Calendar.createCalendarAsync({
-    title: CALENDAR_NAME,
-    color: CALENDAR_COLOR,
-    entityType: Calendar.EntityTypes.EVENT,
-    sourceId: defaultCalendarSource?.id,
-    source: defaultCalendarSource || {
-      isLocalAccount: true,
-      name: CALENDAR_NAME,
-      type: Platform.OS === 'ios' ? Calendar.CalendarType.LOCAL : undefined as any,
-    },
-    name: CALENDAR_NAME,
-    ownerAccount: 'personal',
-    accessLevel: Calendar.CalendarAccessLevel.OWNER,
-  });
-
-  return calendarId;
+  // Android
+  return await createNamedCalendar(undefined);
 }
 
 export async function syncShiftToCalendar(

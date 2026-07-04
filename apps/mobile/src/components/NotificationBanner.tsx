@@ -40,7 +40,9 @@ function BannerItem({ item }: { item: InAppNotification }) {
       ]).start(() => dismiss(item.id));
     }, AUTO_DISMISS_MS);
     return () => clearTimeout(timer);
-  }, [item.id]);
+    // Re-run when more events fold into this banner (count changes) so the
+    // auto-dismiss timer restarts and the banner doesn't vanish mid-burst.
+  }, [item.id, item.count]);
 
   const handlePress = () => {
     if (item.navigateToDate) {
@@ -76,6 +78,11 @@ function BannerItem({ item }: { item: InAppNotification }) {
         <Text style={[styles.message, { color: fg }]} numberOfLines={2}>
           {item.message}
         </Text>
+        {item.count > 1 && (
+          <View style={[styles.countBadge, { backgroundColor: accent }]}>
+            <Text style={styles.countText}>{item.count > 99 ? '99+' : `×${item.count}`}</Text>
+          </View>
+        )}
         <TouchableOpacity
           onPress={() => dismiss(item.id)}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -122,5 +129,18 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     lineHeight: 18,
+  },
+  countBadge: {
+    minWidth: 24,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  countText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
   },
 });

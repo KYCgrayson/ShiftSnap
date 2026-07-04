@@ -148,6 +148,7 @@ export default {
     notificationsEnabled: '已開啟',
     notificationsDisabled: '已關閉',
     notificationsPermDenied: '通知權限被拒絕，請在系統設定中開啟。',
+    notificationsEnableFailed: '開啟通知時發生問題，請稍後再試。',
     defaultAlarm: '預設鬧鐘',
     defaultAlarmDesc: '班次前 60 分鐘',
     alarmBeforeShift: '班次前 {{time}}',
@@ -166,6 +167,7 @@ export default {
     calendarConnected: '您的班次現在會同步至 Apple 日曆',
     calendarPermDenied: '日曆權限已被拒絕。請到系統設定開啟 IShift 的日曆存取權限。',
     calendarConnectFailed: '連接日曆失敗',
+    calendarAccountReadonly: '此裝置上的日曆帳號不允許新增行事曆。請到「設定 → 日曆 → 帳號」確認 iCloud 日曆已開啟，或將預設日曆改為 iCloud 後再試一次。',
     openSystemSettings: '前往設定',
     about: '關於',
     termsOfService: '服務條款',
@@ -368,6 +370,7 @@ export default {
     // Alerts & shared
     originalReference: '原始影像（參考用）',
     doubleTapToReset: '雙指縮放移動 · 雙擊重置',
+    alignRowTag: '你的那列',
     scheduleSaved: '班表已儲存',
     scheduleSavedDesc: '您的班次已成功儲存！',
     viewCalendar: '查看日曆',

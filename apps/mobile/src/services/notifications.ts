@@ -12,15 +12,22 @@ Notifications.setNotificationHandler({
 });
 
 export async function requestNotificationPermissions(): Promise<boolean> {
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
+  try {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
 
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    return finalStatus === 'granted';
+  } catch (e) {
+    // Never let a permission-API failure bubble up as an unhandled
+    // rejection — that used to crash the app when the toggle was flipped.
+    console.warn('requestNotificationPermissions failed:', e);
+    return false;
   }
-
-  return finalStatus === 'granted';
 }
 
 export async function scheduleShiftReminder(
@@ -31,6 +38,10 @@ export async function scheduleShiftReminder(
   if (!shift.start_time) return null;
 
   const shiftDate = new Date(`${shift.date}T${shift.start_time}:00`);
+  // Guard against malformed date/time strings — scheduleNotificationAsync
+  // throws on an Invalid Date trigger, which previously surfaced as a crash.
+  if (isNaN(shiftDate.getTime())) return null;
+
   const triggerDate = new Date(shiftDate.getTime() - alarmMinutes * 60 * 1000);
 
   // Don't schedule if trigger time is in the past
@@ -44,26 +55,41 @@ export async function scheduleShiftReminder(
     ? `Your shift starts in ${Math.round(alarmMinutes / 60)} hour${alarmMinutes >= 120 ? 's' : ''}`
     : `Your shift starts in ${alarmMinutes} minutes`;
 
-  const notificationId = await Notifications.scheduleNotificationAsync({
-    content: {
-      title,
-      body,
-      data: { shiftId: shift.id },
-      sound: true,
-    },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.DATE,
-      date: triggerDate,
-    },
-  });
+  try {
+    const notificationId = await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        data: { shiftId: shift.id },
+        sound: true,
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: triggerDate,
+      },
+    });
 
-  return notificationId;
+    return notificationId;
+  } catch (e) {
+    // A single un-schedulable reminder should never abort the batch or crash
+    // the toggle — log and skip it.
+    console.warn('scheduleShiftReminder failed for shift', shift.id, e);
+    return null;
+  }
 }
 
 export async function cancelShiftReminder(notificationId: string): Promise<void> {
-  await Notifications.cancelScheduledNotificationAsync(notificationId);
+  try {
+    await Notifications.cancelScheduledNotificationAsync(notificationId);
+  } catch (e) {
+    console.warn('cancelShiftReminder failed:', e);
+  }
 }
 
 export async function cancelAllReminders(): Promise<void> {
-  await Notifications.cancelAllScheduledNotificationsAsync();
+  try {
+    await Notifications.cancelAllScheduledNotificationsAsync();
+  } catch (e) {
+    console.warn('cancelAllReminders failed:', e);
+  }
 }

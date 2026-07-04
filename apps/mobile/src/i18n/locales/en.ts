@@ -148,6 +148,7 @@ export default {
     notificationsEnabled: 'Enabled',
     notificationsDisabled: 'Disabled',
     notificationsPermDenied: 'Notification permission denied. Please enable in system settings.',
+    notificationsEnableFailed: 'Something went wrong enabling notifications. Please try again later.',
     defaultAlarm: 'Default Alarm',
     defaultAlarmDesc: '60 minutes before shift',
     alarmBeforeShift: '{{time}} before shift',
@@ -166,6 +167,7 @@ export default {
     calendarConnected: 'Your shifts will now sync to Apple Calendar',
     calendarPermDenied: 'Calendar permission was denied. Please enable calendar access for IShift in system settings.',
     calendarConnectFailed: 'Failed to connect calendar',
+    calendarAccountReadonly: 'The calendar account on this device does not allow adding calendars. Open Settings → Calendar → Accounts and make sure iCloud Calendar is enabled (or set your default calendar to iCloud), then try again.',
     openSystemSettings: 'Open Settings',
     about: 'ABOUT',
     termsOfService: 'Terms of Service',
@@ -368,6 +370,7 @@ export default {
     // Alerts & shared
     originalReference: 'Original image (for reference)',
     doubleTapToReset: 'Pinch to zoom · Double-tap to reset',
+    alignRowTag: 'Your row',
     scheduleSaved: 'Schedule Saved',
     scheduleSavedDesc: 'Your shifts have been saved successfully!',
     viewCalendar: 'View Calendar',

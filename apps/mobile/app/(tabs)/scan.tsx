@@ -25,6 +25,13 @@ import { useLocaleStore } from '../../src/stores/localeStore';
 import { useGroupStore } from '../../src/stores/groupStore';
 import { formatYearMonth } from '@shiftsnap/shared';
 
+const DEMO_ACCOUNT_EMAIL = 'demo@ishift.app';
+const DEMO_ROSTER_IMAGE = require('../../assets/ishift-demo-roster-september-2026.png');
+
+const getImageMimeType = (uri: string): 'image/png' | 'image/jpeg' => {
+  return uri.toLowerCase().includes('.png') ? 'image/png' : 'image/jpeg';
+};
+
 // Generate a fresh signed URL from a storage path
 const getSignedImageUrl = async (imageUrl: string): Promise<string> => {
   // If it's already a local file URI or a fresh URL, return as-is
@@ -54,6 +61,7 @@ export default function ScanScreen() {
   const { createScheduleFromOCR, schedules, fetchSchedules } = useScheduleStore();
   const currentGroupId = useGroupStore((s) => s.currentGroup?.id);
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+  const isDemoAccount = user?.email?.toLowerCase() === DEMO_ACCOUNT_EMAIL;
 
   // Pulse animation for processing overlay
   useEffect(() => {
@@ -124,6 +132,15 @@ export default function ScanScreen() {
     }
   };
 
+  const useDemoRosterImage = () => {
+    const source = Image.resolveAssetSource(DEMO_ROSTER_IMAGE);
+    if (source?.uri) {
+      setCapturedImage(source.uri);
+      return;
+    }
+    Alert.alert(t('common.error'), t('scan.demoRosterUnavailable'));
+  };
+
   // Permission denied view
   if (!permission.granted) {
     return (
@@ -151,6 +168,15 @@ export default function ScanScreen() {
             fullWidth
             style={{ marginTop: 12 }}
           />
+          {isDemoAccount && (
+            <Button
+              title={t('scan.useDemoRoster')}
+              onPress={useDemoRosterImage}
+              variant="secondary"
+              fullWidth
+              style={{ marginTop: 12 }}
+            />
+          )}
         </View>
       </SafeAreaView>
     );
@@ -190,12 +216,13 @@ export default function ScanScreen() {
   // Upload image to storage for record keeping (non-blocking, best-effort)
   const uploadToStorage = async (uri: string): Promise<string | null> => {
     try {
-      const fileName = `schedule_${Date.now()}.jpg`;
+      const mimeType = getImageMimeType(uri);
+      const fileName = `schedule_${Date.now()}.${mimeType === 'image/png' ? 'png' : 'jpg'}`;
       const response = await fetch(uri);
       const blob = await response.blob();
       const { error } = await supabase.storage
         .from('shift-images')
-        .upload(fileName, blob, { contentType: 'image/jpeg' });
+        .upload(fileName, blob, { contentType: mimeType });
       if (error) {
         console.warn('Storage upload failed (non-critical):', error.message);
         return null;
@@ -253,7 +280,7 @@ export default function ScanScreen() {
       // Start OCR and storage upload in parallel
       const ocrPromise = callOcrFunction({
         imageBase64: base64,
-        imageMimeType: 'image/jpeg',
+        imageMimeType: getImageMimeType(capturedImage),
       });
 
       // For authenticated users, upload to storage for record keeping (non-blocking)
@@ -517,7 +544,17 @@ export default function ScanScreen() {
             <View style={styles.captureButtonInner} />
           </TouchableOpacity>
 
-          <View style={{ width: 56 }} />
+          {isDemoAccount ? (
+            <TouchableOpacity
+              style={styles.demoRosterButton}
+              onPress={useDemoRosterImage}
+            >
+              <Ionicons name="document-text-outline" size={24} color="#FFF" />
+              <Text style={styles.demoRosterButtonText}>{t('scan.demoRosterShort')}</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={{ width: 56 }} />
+          )}
         </View>
       </CameraView>
     </View>
@@ -649,6 +686,23 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  demoRosterButton: {
+    width: 64,
+    minHeight: 56,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+    gap: 2,
+  },
+  demoRosterButtonText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   captureButton: {
     width: 72,

@@ -23,7 +23,13 @@ import { useTheme } from '../../src/theme';
 import { Card } from '../../src/components/ui';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useThemeStore } from '../../src/stores/themeStore';
-import { useCalendarStore } from '../../src/stores/calendarStore';
+import {
+  useCalendarStore,
+  CALENDAR_ALARMS_KEY,
+  ALARM_MINUTES_KEY,
+  CALENDAR_SYNC_FILTER_KEY,
+  type CalendarSyncFilter,
+} from '../../src/stores/calendarStore';
 import { useLocaleStore } from '../../src/stores/localeStore';
 import { usePersonStore } from '../../src/stores/personStore';
 import { useGroupStore } from '../../src/stores/groupStore';
@@ -41,7 +47,20 @@ import {
 
 const MY_COLOR_KEY = 'shiftsnap_my_schedule_color';
 const NOTIFICATIONS_KEY = 'shiftsnap_notifications_enabled';
-const ALARM_MINUTES_KEY = 'shiftsnap_default_alarm_minutes';
+
+function getMonthDateRange(yearMonth: string): { startDate: string; endDate: string } {
+  const [year, month] = yearMonth.split('-').map(Number);
+  const lastDay = new Date(year, month, 0).getDate();
+  return {
+    startDate: `${yearMonth}-01`,
+    endDate: `${yearMonth}-${String(lastDay).padStart(2, '0')}`,
+  };
+}
+
+function getCurrentYearMonth(): string {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+}
 
 export default function SettingsScreen() {
   const theme = useTheme();
@@ -50,7 +69,14 @@ export default function SettingsScreen() {
   const themeMode = useThemeStore((s) => s.mode);
   const setThemeMode = useThemeStore((s) => s.setMode);
   const { locale, setLocale } = useLocaleStore();
-  const { isConnected: calendarConnected, connectCalendar, disconnectCalendar, loading: calendarLoading } = useCalendarStore();
+  const {
+    isConnected: calendarConnected,
+    connectCalendar,
+    disconnectCalendar,
+    removeSyncedEvents,
+    syncUserShifts,
+    loading: calendarLoading,
+  } = useCalendarStore();
 
   const { persons, fetchPersons, createPerson, updatePerson, deletePerson } = usePersonStore();
   const {
@@ -75,6 +101,8 @@ export default function SettingsScreen() {
   const [unsharedCount, setUnsharedCount] = useState(0);
   const [sharingSchedules, setSharingSchedules] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [calendarAlarmsEnabled, setCalendarAlarmsEnabled] = useState(false);
+  const [calendarSyncFilter, setCalendarSyncFilter] = useState<CalendarSyncFilter>('all');
   const [alarmMinutes, setAlarmMinutes] = useState(DEFAULT_ALARM_MINUTES);
 
   // Claim-my-schedule modal state. claimRows lists the distinct name +
@@ -89,6 +117,10 @@ export default function SettingsScreen() {
   const upcomingShifts = useShiftStore((s) => s.upcomingShifts);
   const getCodeInfo = useShiftCodeStore((s) => s.getCodeInfo);
   const { getUnsharedCount, shareSchedulesWithGroup } = useScheduleStore();
+  const myGroupMembership = useMemo(
+    () => members.find((member) => member.user_id === user?.id),
+    [members, user?.id],
+  );
 
   useEffect(() => {
     AsyncStorage.getItem(MY_COLOR_KEY).then((color) => {
@@ -99,6 +131,12 @@ export default function SettingsScreen() {
     });
     AsyncStorage.getItem(ALARM_MINUTES_KEY).then((val) => {
       if (val !== null) setAlarmMinutes(Number(val));
+    });
+    AsyncStorage.getItem(CALENDAR_ALARMS_KEY).then((val) => {
+      if (val !== null) setCalendarAlarmsEnabled(val === 'true');
+    });
+    AsyncStorage.getItem(CALENDAR_SYNC_FILTER_KEY).then((val) => {
+      if (val === 'work_days' || val === 'days_off') setCalendarSyncFilter(val);
     });
   }, []);
 
@@ -285,19 +323,67 @@ export default function SettingsScreen() {
     }
   };
 
+  const askCalendarAlarmPreference = () =>
+    new Promise<boolean>((resolve) => {
+      let settled = false;
+      const finish = (value: boolean) => {
+        if (settled) return;
+        settled = true;
+        resolve(value);
+      };
+
+      Alert.alert(
+        t('settings.calendarAlarmPromptTitle'),
+        t('settings.calendarAlarmPromptDesc', { time: getAlarmLabel(alarmMinutes) }),
+        [
+          {
+            text: t('settings.noCalendarAlarm'),
+            style: 'cancel',
+            onPress: () => finish(false),
+          },
+          {
+            text: t('settings.addCalendarAlarm'),
+            onPress: () => finish(true),
+          },
+        ],
+        { cancelable: true, onDismiss: () => finish(false) },
+      );
+    });
+
   const handleCalendarConnect = async () => {
     if (calendarConnected) {
       Alert.alert(t('settings.disconnectCalendar'), t('settings.disconnectDesc'), [
         { text: t('common.cancel'), style: 'cancel' },
         {
           text: t('settings.disconnect'),
-          style: 'destructive',
           onPress: () => disconnectCalendar(),
+        },
+        {
+          text: t('settings.removeAndDisconnect'),
+          style: 'destructive',
+          onPress: () => void removeSyncedCalendarEvents(true),
         },
       ]);
     } else {
       const success = await connectCalendar();
       if (success) {
+        if (user && !isGuest) {
+          try {
+            const savedAlarmPreference = await AsyncStorage.getItem(CALENDAR_ALARMS_KEY);
+            const wantsCalendarAlarms = savedAlarmPreference === null
+              ? await askCalendarAlarmPreference()
+              : savedAlarmPreference === 'true';
+
+            setCalendarAlarmsEnabled(wantsCalendarAlarms);
+            await AsyncStorage.setItem(
+              CALENDAR_ALARMS_KEY,
+              wantsCalendarAlarms ? 'true' : 'false',
+            );
+            await syncUserShifts(user.id);
+          } catch {
+            // Calendar backfill is best-effort; future saves will retry.
+          }
+        }
         Alert.alert(t('settings.connected'), t('settings.calendarConnected'));
         return;
       }
@@ -325,6 +411,113 @@ export default function SettingsScreen() {
         );
       }
     }
+  };
+
+  const removeSyncedCalendarEvents = async (disconnectAfter: boolean) => {
+    if (!user?.id || isGuest || calendarLoading) return;
+
+    const result = await removeSyncedEvents(
+      user.id,
+      getMonthDateRange(getCurrentYearMonth()),
+    );
+    if (!result) {
+      Alert.alert(t('common.error'), t('settings.removeSyncedFailed'));
+      return;
+    }
+
+    if (disconnectAfter) await disconnectCalendar();
+
+    Alert.alert(
+      t('settings.removeSyncedSuccessTitle'),
+      result.failed > 0
+        ? t('settings.removeSyncedPartial', {
+            deleted: result.deleted,
+            failed: result.failed,
+          })
+        : t('settings.removeSyncedSuccess', { count: result.deleted }),
+    );
+  };
+
+  const handleRemoveSyncedCalendarEvents = () => {
+    Alert.alert(
+      t('settings.removeSyncedShifts'),
+      t('settings.removeSyncedDesc'),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('settings.removeSyncedConfirm'),
+          style: 'destructive',
+          onPress: () => void removeSyncedCalendarEvents(false),
+        },
+      ],
+    );
+  };
+
+  const handleToggleCalendarAlarms = async (enabled: boolean) => {
+    setCalendarAlarmsEnabled(enabled);
+    await AsyncStorage.setItem(CALENDAR_ALARMS_KEY, enabled ? 'true' : 'false');
+
+    if (!calendarConnected || !user || isGuest) return;
+
+    try {
+      await syncUserShifts(user.id);
+    } catch (e) {
+      console.warn('Failed to rewrite calendar alarms:', e);
+      Alert.alert(t('common.error'), t('settings.calendarAlarmSyncFailed'));
+    }
+  };
+
+  const getCalendarSyncFilterLabel = (filter: CalendarSyncFilter): string => {
+    if (filter === 'work_days') return t('settings.calendarSyncWorkDays');
+    if (filter === 'days_off') return t('settings.calendarSyncDaysOff');
+    return t('settings.calendarSyncAll');
+  };
+
+  const applyCalendarSyncFilter = async (filter: CalendarSyncFilter) => {
+    setCalendarSyncFilter(filter);
+    try {
+      await AsyncStorage.setItem(CALENDAR_SYNC_FILTER_KEY, filter);
+      if (!calendarConnected || !user || isGuest) return;
+      const result = await syncUserShifts(user.id);
+      if (!result) Alert.alert(t('common.error'), t('settings.calendarFilterSyncFailed'));
+    } catch {
+      Alert.alert(t('common.error'), t('settings.calendarFilterSyncFailed'));
+    }
+  };
+
+  const handleCalendarSyncFilterChange = () => {
+    const choices: Array<{ value: CalendarSyncFilter; label: string }> = [
+      { value: 'all', label: t('settings.calendarSyncAll') },
+      { value: 'work_days', label: t('settings.calendarSyncWorkDays') },
+      { value: 'days_off', label: t('settings.calendarSyncDaysOff') },
+    ];
+
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          title: t('settings.calendarSyncContent'),
+          options: [...choices.map((choice) => choice.label), t('common.cancel')],
+          cancelButtonIndex: choices.length,
+        },
+        (buttonIndex) => {
+          const choice = choices[buttonIndex];
+          if (choice) void applyCalendarSyncFilter(choice.value);
+        },
+      );
+      return;
+    }
+
+    Alert.alert(
+      t('settings.calendarSyncContent'),
+      undefined,
+      [
+        ...choices.map((choice) => ({
+          text: choice.label,
+          onPress: () => { void applyCalendarSyncFilter(choice.value); },
+        })),
+        { text: t('common.cancel'), style: 'cancel' as const },
+      ],
+    );
   };
 
   const scheduleAllReminders = async (minutes: number) => {
@@ -390,6 +583,9 @@ export default function SettingsScreen() {
             if (notificationsEnabled) {
               await scheduleAllReminders(selected);
             }
+            if (calendarConnected && calendarAlarmsEnabled && user && !isGuest) {
+              await syncUserShifts(user.id);
+            }
           }
         }
       );
@@ -401,6 +597,9 @@ export default function SettingsScreen() {
           await AsyncStorage.setItem(ALARM_MINUTES_KEY, String(opt.value));
           if (notificationsEnabled) {
             await scheduleAllReminders(opt.value);
+          }
+          if (calendarConnected && calendarAlarmsEnabled && user && !isGuest) {
+            await syncUserShifts(user.id);
           }
         },
       }));
@@ -561,33 +760,52 @@ export default function SettingsScreen() {
 
   const handleConfirmClaim = async (name: string) => {
     if (!claimScheduleId || !user?.id) return;
-    try {
-      const updated = await claimPersonInSchedule(claimScheduleId, name);
-      setShowClaimModal(false);
-      // Refresh members so the new claimed_person_id flows back into the
-      // member row, and refresh shifts so the calendar/today view picks
-      // up the now-self_scan rows attributed to this user.
-      if (currentGroup?.id) await fetchMembers(currentGroup.id);
-      if (claimYearMonth) {
-        await useShiftStore.getState().fetchShiftsForMonth(user.id, claimYearMonth);
+    const performClaim = async () => {
+      try {
+        const updated = await claimPersonInSchedule(claimScheduleId, name);
+        setShowClaimModal(false);
+        // Refresh the member's one claimed identity, all personal views, and
+        // Apple Calendar. The canonical shifts themselves are not transferred.
+        if (currentGroup?.id) await fetchMembers(currentGroup.id);
+        if (claimYearMonth) {
+          await useShiftStore.getState().fetchShiftsForMonth(user.id, claimYearMonth);
+        }
+        await useShiftStore.getState().fetchTodayShift(user.id);
+        await useShiftStore.getState().fetchUpcomingShifts(user.id);
+        if (calendarConnected && claimYearMonth) {
+          await syncUserShifts(user.id, getMonthDateRange(claimYearMonth));
+        }
+        Alert.alert(
+          t('settings.claimSuccessTitle'),
+          t('settings.claimSuccessBody', { count: updated, name }),
+        );
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : '';
+        Alert.alert(
+          t('common.error'),
+          msg === 'NOT_GROUP_MEMBER'
+            ? t('settings.claimNotMember')
+            : msg === 'SCHEDULE_NOT_IN_GROUP'
+              ? t('settings.claimScheduleMissing')
+              : t('settings.claimFailed'),
+        );
       }
-      await useShiftStore.getState().fetchTodayShift(user.id);
-      await useShiftStore.getState().fetchUpcomingShifts(user.id);
+    };
+
+    const currentClaim = myGroupMembership?.claimed_name_on_schedule?.trim();
+    if (currentClaim && currentClaim.toLocaleLowerCase() !== name.trim().toLocaleLowerCase()) {
       Alert.alert(
-        t('settings.claimSuccessTitle'),
-        t('settings.claimSuccessBody', { count: updated, name }),
+        t('settings.claimReplaceTitle'),
+        t('settings.claimReplaceBody', { current: currentClaim, next: name }),
+        [
+          { text: t('common.cancel'), style: 'cancel' },
+          { text: t('settings.claimReplaceConfirm'), onPress: () => void performClaim() },
+        ],
       );
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : '';
-      Alert.alert(
-        t('common.error'),
-        msg === 'NOT_GROUP_MEMBER'
-          ? t('settings.claimNotMember')
-          : msg === 'SCHEDULE_NOT_IN_GROUP'
-            ? t('settings.claimScheduleMissing')
-            : t('settings.claimFailed'),
-      );
+      return;
     }
+
+    await performClaim();
   };
 
   const handleLeaveGroup = (groupId: string) => {
@@ -903,6 +1121,44 @@ export default function SettingsScreen() {
                 )
               }
             />
+            {calendarConnected && (
+              <>
+                <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
+                <SettingsItem
+                  icon="options-outline"
+                  title={t('settings.calendarSyncContent')}
+                  subtitle={getCalendarSyncFilterLabel(calendarSyncFilter)}
+                  onPress={handleCalendarSyncFilterChange}
+                  rightElement={<Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />}
+                />
+                <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
+                <SettingsItem
+                  icon="alarm-outline"
+                  title={t('settings.calendarAlarms')}
+                  subtitle={
+                    calendarAlarmsEnabled
+                      ? t('settings.calendarAlarmsEnabled', { time: getAlarmLabel(alarmMinutes) })
+                      : t('settings.calendarAlarmsDisabled')
+                  }
+                  rightElement={
+                    <Switch
+                      value={calendarAlarmsEnabled}
+                      onValueChange={handleToggleCalendarAlarms}
+                      trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+                      thumbColor={theme.colors.white}
+                    />
+                  }
+                />
+                <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
+                <SettingsItem
+                  icon="trash-outline"
+                  title={t('settings.removeSyncedShifts')}
+                  subtitle={t('settings.removeSyncedHint')}
+                  onPress={handleRemoveSyncedCalendarEvents}
+                  destructive
+                />
+              </>
+            )}
           </Card>
         </View>
 
@@ -936,10 +1192,7 @@ export default function SettingsScreen() {
               <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
               {/* Claim my schedule */}
               {(() => {
-                const myMembership = members.find((m) => m.user_id === user?.id);
-                const claimedName = myMembership?.claimed_person_id
-                  ? persons.find((p) => p.id === myMembership.claimed_person_id)?.name
-                  : null;
+                const claimedName = myGroupMembership?.claimed_name_on_schedule || null;
                 return (
                   <SettingsItem
                     icon="bookmark-outline"
@@ -1530,7 +1783,11 @@ export default function SettingsScreen() {
               </Text>
             ) : (
               <ScrollView style={{ maxHeight: 320, alignSelf: 'stretch' }}>
-                {claimRows.map((row) => (
+                {claimRows.map((row) => {
+                  const isClaimedByMe =
+                    myGroupMembership?.claimed_name_on_schedule?.trim().toLocaleLowerCase()
+                    === row.name.trim().toLocaleLowerCase();
+                  return (
                   <TouchableOpacity
                     key={row.name}
                     style={{
@@ -1543,7 +1800,13 @@ export default function SettingsScreen() {
                       borderColor: theme.colors.border,
                       marginBottom: 8,
                     }}
-                    onPress={() => handleConfirmClaim(row.name)}
+                    onPress={() => {
+                      if (isClaimedByMe) {
+                        Alert.alert(t('settings.claimSuccessTitle'), t('settings.claimAlreadyBody', { name: row.name }));
+                        return;
+                      }
+                      handleConfirmClaim(row.name);
+                    }}
                   >
                     <Ionicons name="person-outline" size={20} color={theme.colors.primary} style={{ marginRight: 12 }} />
                     <View style={{ flex: 1 }}>
@@ -1551,12 +1814,19 @@ export default function SettingsScreen() {
                         {row.name}
                       </Text>
                       <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
-                        {t('settings.claimRowShifts', { count: row.shiftCount })}
+                        {isClaimedByMe
+                          ? t('settings.claimedByMe')
+                          : t('settings.claimRowShifts', { count: row.shiftCount })}
                       </Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
+                    <Ionicons
+                      name={isClaimedByMe ? 'checkmark-circle' : 'chevron-forward'}
+                      size={18}
+                      color={isClaimedByMe ? theme.colors.success : theme.colors.textMuted}
+                    />
                   </TouchableOpacity>
-                ))}
+                  );
+                })}
               </ScrollView>
             )}
 

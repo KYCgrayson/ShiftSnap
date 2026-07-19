@@ -16,7 +16,7 @@ interface GroupItem {
   created_at: string;
 }
 
-interface GroupMemberItem {
+export interface GroupMemberItem {
   id: string;
   group_id: string;
   user_id: string;
@@ -27,6 +27,7 @@ interface GroupMemberItem {
   joined_at: string;
   display_name?: string;
   claimed_person_id?: string | null;
+  claimed_name_on_schedule?: string | null;
 }
 
 interface GroupState {
@@ -177,7 +178,7 @@ export const useGroupStore = create<GroupState>((set, get) => ({
 
   switchGroup: (groupId: string) => {
     const group = get().groups.find((g) => g.id === groupId) || null;
-    set({ currentGroup: group });
+    set({ currentGroup: group, members: [] });
   },
 
   fetchMembers: async (groupId: string) => {
@@ -201,6 +202,7 @@ export const useGroupStore = create<GroupState>((set, get) => ({
         joined_at: m.joined_at,
         display_name: m.display_name || m.email?.split('@')[0] || undefined,
         claimed_person_id: m.claimed_person_id ?? null,
+        claimed_name_on_schedule: m.claimed_name_on_schedule ?? null,
       }));
       set({ members });
     } catch (error) {
@@ -321,6 +323,7 @@ export const useGroupStore = create<GroupState>((set, get) => ({
       if (msg.includes('NOT_AUTHENTICATED')) throw new Error('NOT_AUTHENTICATED');
       if (msg.includes('NOT_GROUP_MEMBER')) throw new Error('NOT_GROUP_MEMBER');
       if (msg.includes('SCHEDULE_NOT_IN_GROUP')) throw new Error('SCHEDULE_NOT_IN_GROUP');
+      if (msg.includes('SCHEDULE_ROW_NOT_FOUND')) throw new Error('SCHEDULE_ROW_NOT_FOUND');
       throw error;
     }
     return (data as number) ?? 0;

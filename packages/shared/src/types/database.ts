@@ -64,6 +64,7 @@ export type Database = {
       }
       group_members: {
         Row: {
+          claimed_name_on_schedule: string | null
           claimed_person_id: string | null
           color: string | null
           group_id: string
@@ -75,6 +76,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          claimed_name_on_schedule?: string | null
           claimed_person_id?: string | null
           color?: string | null
           group_id: string
@@ -86,6 +88,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          claimed_name_on_schedule?: string | null
           claimed_person_id?: string | null
           color?: string | null
           group_id?: string
@@ -549,6 +552,7 @@ export type Database = {
         Args: { gid: string }
         Returns: {
           avatar_url: string
+          claimed_name_on_schedule: string
           claimed_person_id: string
           color: string
           display_name: string
@@ -560,6 +564,10 @@ export type Database = {
           role: Database["public"]["Enums"]["group_role"]
           user_id: string
         }[]
+      }
+      get_my_schedule_shifts: {
+        Args: { p_end_date?: string | null; p_start_date?: string | null }
+        Returns: Database["public"]["Tables"]["shifts"]["Row"][]
       }
       get_user_group_ids: { Args: { uid: string }; Returns: string[] }
       is_group_admin: { Args: { gid: string; uid: string }; Returns: boolean }

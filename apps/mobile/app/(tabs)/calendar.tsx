@@ -51,8 +51,22 @@ const SHOW_COWORKERS_KEY = 'shiftsnap_show_coworker_shifts';
 const UNIFY_DAYOFF_KEY = 'shiftsnap_unify_dayoff';
 const UNIFY_DAYOFF_SYMBOL_KEY = 'shiftsnap_unify_dayoff_symbol';
 
+function getMonthDateRange(yearMonth: string): { startDate: string; endDate: string } {
+  const [year, month] = yearMonth.split('-').map(Number);
+  const lastDay = new Date(year, month, 0).getDate();
+  return {
+    startDate: `${yearMonth}-01`,
+    endDate: `${yearMonth}-${String(lastDay).padStart(2, '0')}`,
+  };
+}
+
+function normalizeScheduleName(name: string | null | undefined): string {
+  return (name || '').trim().toLocaleLowerCase();
+}
+
 interface ShiftEvent {
   id: string;
+  scheduleId: string;
   date: string;
   code: string;
   startTime: string | null;
@@ -65,6 +79,7 @@ interface ShiftEvent {
   nameOnSchedule: string | null;
   comparisonStatus: string | null;
   shiftUserId: string;
+  isMine: boolean;
 }
 
 export default function CalendarScreen() {
@@ -72,10 +87,10 @@ export default function CalendarScreen() {
   const { t } = useTranslation();
   const locale = useLocaleStore((s) => s.locale);
   const { user } = useAuthStore();
-  const { monthShifts, shiftsByMonth, fetchShiftsWindow, updateShift, updateShiftCalendarSync, loading } = useShiftStore();
+  const { monthShifts, shiftsByMonth, fetchShiftsWindow, updateShift, loading } = useShiftStore();
   const { shiftCodes, fetchShiftCodes, getCodeInfo } = useShiftCodeStore();
   const { persons, fetchPersons, updatePerson } = usePersonStore();
-  const { isConnected: calendarConnected, syncShift } = useCalendarStore();
+  const { isConnected: calendarConnected, syncUserShifts } = useCalendarStore();
   const { notesByDate, fetchNotesForMonth, saveNote } = useDailyNoteStore();
   const currentGroupId = useGroupStore((s) => s.currentGroup?.id);
   const groups = useGroupStore((s) => s.groups);
@@ -200,18 +215,32 @@ export default function CalendarScreen() {
     }
   }, [userId, currentMonth, currentGroupId, viewScope]);
 
-  // Load group members so we know which coworker rows have been claimed
-  // (member.claimed_person_id) — drives the "confirmed" name highlight.
+  // Member profiles include each member's one claimed roster identity.
   useEffect(() => {
     if (currentGroupId) fetchGroupMembers(currentGroupId);
   }, [currentGroupId]);
 
-  // Person IDs that a group member has claimed as their own schedule.
+  const myMembership = useMemo(
+    () => groupMembers.find((member) => member.user_id === userId),
+    [groupMembers, userId],
+  );
+
+  // Person IDs that at least one group member uses as their one schedule.
   const claimedPersonIds = useMemo(() => {
     return new Set(
-      groupMembers.map((m) => m.claimed_person_id).filter((id): id is string => !!id)
+      groupMembers
+        .map((member) => member.claimed_person_id)
+        .filter((id): id is string => !!id)
     );
   }, [groupMembers]);
+
+  // Authenticated month loads are annotated by the same database function
+  // used by Home and Apple Calendar. The fallback keeps guest/demo rows working.
+  const isPersonalMonthShift = useCallback((shift: (typeof monthShifts)[number]) => {
+    if (typeof shift.is_personal === 'boolean') return shift.is_personal;
+    const isSelfSource = shift.source === 'self_scan' || !shift.source || shift.source === 'manual';
+    return isSelfSource && shift.user_id === userId;
+  }, [userId]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -225,9 +254,7 @@ export default function CalendarScreen() {
   const shifts: ShiftEvent[] = useMemo(() => {
     return windowShifts.map((shift) => {
       const person = shift.person_id ? persons.find((p) => p.id === shift.person_id) : null;
-      // isSelf: must match both source type AND user_id
-      const isSelfSource = shift.source === 'self_scan' || !shift.source || shift.source === 'manual';
-      const isSelf = isSelfSource && shift.user_id === userId;
+      const isSelf = isPersonalMonthShift(shift);
       // For self shifts: color by shift type (morning/afternoon/night/day-off)
       // For coworker shifts: color by person
       const codeInfo = getCodeInfo(shift.shift_code);
@@ -235,6 +262,7 @@ export default function CalendarScreen() {
       const isDayOff = shift.is_day_off || codeInfo?.is_day_off || false;
       return {
         id: shift.id,
+        scheduleId: shift.schedule_id,
         date: shift.date,
         code: shift.shift_code,
         startTime: shift.start_time,
@@ -249,15 +277,15 @@ export default function CalendarScreen() {
         nameOnSchedule: (shift as any).name_on_schedule || null,
         comparisonStatus: (shift as any).comparison_status || null,
         shiftUserId: shift.user_id,
+        isMine: isSelf,
       };
     });
-  }, [windowShifts, shiftCodes, theme, persons, getCodeInfo, userId]);
+  }, [windowShifts, shiftCodes, theme, persons, getCodeInfo, isPersonalMonthShift]);
 
   // Helper to check if a shift belongs to the current user
   const isMyShift = useCallback((shift: ShiftEvent) => {
-    const isSelfSource = shift.source === 'self_scan' || shift.source === 'manual' || !shift.source;
-    return isSelfSource && shift.shiftUserId === userId;
-  }, [userId]);
+    return shift.isMine;
+  }, []);
 
   // Helper to check if a shift's times differ from its shift code defaults
   const isShiftOverridden = useCallback((shift: ShiftEvent) => {
@@ -410,7 +438,9 @@ export default function CalendarScreen() {
   const handleLongPressClaim = (person: { personId: string; name: string }) => {
     if (claiming || !userId) return;
     const candidates = windowShifts
-      .filter((s) => s.person_id === person.personId && s.schedule_id)
+      .filter((s) => s.person_id === person.personId
+        && s.schedule_id
+        && (!currentGroupId || s.group_id === currentGroupId))
       .sort((a, b) => b.date.localeCompare(a.date));
     const target = candidates[0];
     if (!target) {
@@ -418,10 +448,22 @@ export default function CalendarScreen() {
       return;
     }
     const nameOnSchedule = target.name_on_schedule || person.name;
-    const claimedBy = groupMembers.find((m) => m.claimed_person_id === person.personId);
+    const normalizedTargetName = normalizeScheduleName(nameOnSchedule);
+    const memberUsesTarget = (member: (typeof groupMembers)[number]) =>
+      normalizeScheduleName(member.claimed_name_on_schedule) === normalizedTargetName
+      || (!!target.person_id && member.claimed_person_id === target.person_id);
+    if (myMembership && memberUsesTarget(myMembership)) {
+      toast(t('calendar.claimAlready', { name: person.name }));
+      return;
+    }
+    const otherNames = groupMembers
+      .filter((member) => member.user_id !== userId && memberUsesTarget(member))
+      .map((member) => member.display_name)
+      .filter((name): name is string => !!name)
+      .join('、');
 
-    const confirmMessage = claimedBy
-      ? t('calendar.claimReassignMessage', { name: person.name, member: claimedBy.display_name || '?' })
+    const confirmMessage = otherNames
+      ? t('calendar.claimSharedMessage', { name: person.name, members: otherNames })
       : t('calendar.claimMessage', { name: person.name });
 
     Alert.alert(t('calendar.claimTitle', { name: person.name }), confirmMessage, [
@@ -435,6 +477,12 @@ export default function CalendarScreen() {
             if (currentGroupId) await fetchGroupMembers(currentGroupId);
             await fetchPersons(userId);
             await loadMonth(currentMonth);
+            if (calendarConnected) {
+              await syncUserShifts(
+                userId,
+                getMonthDateRange(target.date.slice(0, 7)),
+              );
+            }
             toast(t('calendar.claimSuccess', { name: person.name }));
           } catch (e) {
             const msg = e instanceof Error ? e.message : '';
@@ -472,19 +520,10 @@ export default function CalendarScreen() {
         start_time: editStartTime || null,
         end_time: editEndTime || null,
       });
-      // Re-sync to device calendar if connected
-      if (calendarConnected) {
-        const dbShift = windowShifts.find((s) => s.id === editingShift.id);
-        if (dbShift) {
-          const codeInfo = getCodeInfo(editingShift.code);
-          const eventId = await syncShift(
-            { ...dbShift, start_time: editStartTime || null },
-            codeInfo ? { meaning: codeInfo.meaning, start_time: editStartTime || null, end_time: editEndTime || null } : undefined
-          );
-          if (eventId && dbShift.id) {
-            await updateShiftCalendarSync(dbShift.id, eventId);
-          }
-        }
+      // Reconcile the affected month so calendar day filters and shared-row
+      // subscriptions are both respected after an edit.
+      if (calendarConnected && userId) {
+        await syncUserShifts(userId, getMonthDateRange(editingShift.date.slice(0, 7)));
       }
       setShowEditModal(false);
       setEditingShift(null);
@@ -565,7 +604,7 @@ export default function CalendarScreen() {
 
   // Coworker entries: only persons that appear in the cached 3-month
   // window (last/current/next month), excluding the demo "Me" person and
-  // any shifts the user has claimed as their own (those render under "My
+  // any shifts selected as the user's one schedule (those render under "My
   // schedule"). Scoping to 3 months instead of "everyone ever imported"
   // keeps the toggle list short and relevant; grouping by month lets the
   // user see which month a coworker's shifts actually came from.
@@ -574,7 +613,7 @@ export default function CalendarScreen() {
       .map((ym) => {
         const personIds = new Set<string>();
         (shiftsByMonth[ym] || []).forEach((s) => {
-          if (s.user_id === userId) return; // not a coworker of this user
+          if (isPersonalMonthShift(s)) return;
           if (s.person_id) personIds.add(s.person_id);
         });
         const list = persons
@@ -583,7 +622,7 @@ export default function CalendarScreen() {
         return { yearMonth: ym, list };
       })
       .filter((m) => m.list.length > 0);
-  }, [persons, shiftsByMonth, windowMonths, userId]);
+  }, [persons, shiftsByMonth, windowMonths, isPersonalMonthShift]);
 
   // Flattened + deduped across the window — drives the "select all
   // coworkers" toggle and any code that just needs "who's visible at all".
@@ -927,7 +966,7 @@ export default function CalendarScreen() {
 
               {showCoworkerShifts && coworkerDateShifts.map((shift) => {
                 const codeInfo = getCodeInfo(shift.code);
-                const isReference = shift.source === 'reference_scan';
+                const isReference = shift.source === 'reference_scan' && !isMyShift(shift);
                 return (
                   <Card
                     key={shift.id}

@@ -29,6 +29,15 @@ const UNIFY_DAYOFF_KEY = 'shiftsnap_unify_dayoff';
 const UNIFY_DAYOFF_SYMBOL_KEY = 'shiftsnap_unify_dayoff_symbol';
 const SHOW_ALL_CODES_KEY = 'shiftsnap_show_all_shift_codes';
 
+function getMonthDateRange(yearMonth: string): { startDate: string; endDate: string } {
+  const [year, month] = yearMonth.split('-').map(Number);
+  const lastDay = new Date(year, month, 0).getDate();
+  return {
+    startDate: `${yearMonth}-01`,
+    endDate: `${yearMonth}-${String(lastDay).padStart(2, '0')}`,
+  };
+}
+
 interface LocalShiftCode {
   id: string;
   code: string;
@@ -61,7 +70,7 @@ export default function ShiftsScreen() {
   } = useShiftCodeStore();
   const { createShiftsFromOCR } = useShiftStore();
   const { updateScheduleStatus } = useScheduleStore();
-  const { isConnected, syncShift } = useCalendarStore();
+  const { isConnected, syncUserShifts } = useCalendarStore();
   const viewScope = useGroupStore((s) => s.viewScope);
 
   const [pendingCodes, setPendingCodes] = useState<string[]>([]);
@@ -258,6 +267,14 @@ export default function ShiftsScreen() {
 
       await updateScheduleStatus(scheduleId, 'published');
 
+      if (isConnected) {
+        try {
+          await syncUserShifts(user.id, getMonthDateRange(yearMonth));
+        } catch {
+          // Calendar sync failure is non-critical
+        }
+      }
+
       Alert.alert(
         t('shifts.shiftsSaved'),
         t('shifts.shiftsSavedDesc'),
@@ -319,19 +336,13 @@ export default function ShiftsScreen() {
         editIsDayOff
       );
 
-      // Re-sync affected shifts to device calendar if connected
+      // Reconcile device calendar if connected. Shift-code edits cascade to
+      // DB shifts, so syncing by user keeps Apple Calendar idempotent.
       if (isConnected) {
-        const { monthShifts } = useShiftStore.getState();
-        const affectedShifts = monthShifts.filter((s) => s.shift_code === item.code);
-        for (const shift of affectedShifts) {
-          try {
-            await syncShift(
-              { ...shift, start_time: newStartTime },
-              { meaning: editMeaning.trim(), start_time: newStartTime, end_time: newEndTime }
-            );
-          } catch {
-            // Non-critical: individual sync failure shouldn't block
-          }
+        try {
+          await syncUserShifts(user.id);
+        } catch {
+          // Non-critical: calendar sync shouldn't block saving the code.
         }
       }
 

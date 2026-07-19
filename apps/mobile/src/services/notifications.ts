@@ -30,14 +30,25 @@ export async function requestNotificationPermissions(): Promise<boolean> {
   }
 }
 
+function normalizeTime(time?: string | null): string | null {
+  if (!time) return null;
+  const match = /^(\d{1,2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?$/.exec(time.trim());
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
 export async function scheduleShiftReminder(
   shift: { id: string; date: string; shift_code: string; start_time: string | null },
   codeInfo: { meaning: string } | undefined,
   alarmMinutes: number = 60
 ): Promise<string | null> {
-  if (!shift.start_time) return null;
+  const startTime = normalizeTime(shift.start_time);
+  if (!startTime) return null;
 
-  const shiftDate = new Date(`${shift.date}T${shift.start_time}:00`);
+  const shiftDate = new Date(`${shift.date}T${startTime}:00`);
   // Guard against malformed date/time strings — scheduleNotificationAsync
   // throws on an Invalid Date trigger, which previously surfaced as a crash.
   if (isNaN(shiftDate.getTime())) return null;

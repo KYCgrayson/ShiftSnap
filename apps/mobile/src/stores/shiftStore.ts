@@ -12,6 +12,7 @@ const GUEST_SHIFTS_KEY = 'shiftsnap:guest-shifts';
 interface ShiftItem {
   id: string;
   schedule_id: string;
+  group_id?: string | null;
   user_id: string;
   person_id: string | null;
   date: string;
@@ -24,6 +25,7 @@ interface ShiftItem {
   comparison_status: string | null;
   calendar_event_id: string | null;
   synced_at: string | null;
+  is_personal?: boolean;
 }
 
 // Adjacent-months window used by the calendar screen: last month, the
@@ -48,17 +50,34 @@ async function fetchAuthedMonthShifts(userId: string, yearMonth: string): Promis
   const lastDay = new Date(year, month, 0).getDate();
   const endDate = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
 
-  const { data: ownShifts, error } = await supabase
-    .from('shifts')
-    .select('*')
-    .eq('user_id', userId)
-    .gte('date', startDate)
-    .lte('date', endDate)
-    .order('date', { ascending: true });
+  const [ownResult, personalResult] = await Promise.all([
+    supabase
+      .from('shifts')
+      .select('*, schedules(group_id)')
+      .eq('user_id', userId)
+      .gte('date', startDate)
+      .lte('date', endDate)
+      .order('date', { ascending: true }),
+    supabase.rpc('get_my_schedule_shifts', {
+      p_start_date: startDate,
+      p_end_date: endDate,
+    }),
+  ]);
 
-  if (error) throw error;
+  if (ownResult.error) throw ownResult.error;
+  if (personalResult.error) throw personalResult.error;
 
-  let allShifts = ownShifts || [];
+  const personalShiftIds = new Set(
+    (personalResult.data || []).map((shift: { id: string }) => shift.id),
+  );
+  let allShifts: ShiftItem[] = (ownResult.data || []).map((row: any) => {
+    const { schedules, ...shift } = row;
+    return {
+      ...shift,
+      group_id: schedules?.group_id ?? null,
+      is_personal: personalShiftIds.has(shift.id),
+    };
+  });
   const { groups, viewScope } = useGroupStore.getState();
   const realGroupIds = groups.map((g) => g.id).filter((id) => id !== 'guest-group');
   const targetGroupIds =
@@ -80,13 +99,29 @@ async function fetchAuthedMonthShifts(userId: string, yearMonth: string): Promis
         .filter((s: any) => !ownIds.has(s.id))
         .map((s: any) => {
           const { schedules, ...shift } = s;
-          return shift;
+          return {
+            ...shift,
+            group_id: schedules?.group_id ?? null,
+            is_personal: personalShiftIds.has(shift.id),
+          };
         });
       allShifts = [...allShifts, ...uniqueGroupShifts];
     }
   }
 
   return allShifts;
+}
+
+async function fetchMyScheduleShifts(
+  startDate: string | null,
+  endDate: string | null,
+): Promise<ShiftItem[]> {
+  const { data, error } = await supabase.rpc('get_my_schedule_shifts', {
+    p_start_date: startDate,
+    p_end_date: endDate,
+  });
+  if (error) throw error;
+  return (data || []) as ShiftItem[];
 }
 
 interface ShiftState {
@@ -156,21 +191,11 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
     }
     try {
       const today = formatDateISO(new Date());
-      // Note: no person_id IS NULL filter. After claim_person_in_schedule
-      // a wife's claimed shifts have user_id = her id and source = self_scan;
-      // the older filter would have hidden them. The createShiftsFromOCR
-      // flow deletes existing shifts in the date range before insert, so
-      // (user_id, date) stays unique within a single self_scan source.
-      const { data, error } = await supabase
-        .from('shifts')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('date', today)
-        .eq('source', 'self_scan')
-        .maybeSingle();
-
-      if (error) throw error;
-      set({ todayShift: data });
+      const shifts = await fetchMyScheduleShifts(today, today);
+      // Home currently has one primary card. Prefer a canonical shift already
+      // owned by this account, then fall back to a shared/claimed row.
+      const todayShift = shifts.find((shift) => shift.user_id === userId) ?? shifts[0] ?? null;
+      set({ todayShift });
     } catch (error) {
       console.error('Error fetching today shift:', error);
     }
@@ -192,17 +217,11 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
     }
     try {
       const today = formatDateISO(new Date());
-      const { data, error } = await supabase
-        .from('shifts')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('source', 'self_scan')
-        .gte('date', today)
-        .order('date', { ascending: true })
-        .limit(limit);
-
-      if (error) throw error;
-      set({ upcomingShifts: data || [] });
+      const shifts = await fetchMyScheduleShifts(today, null);
+      const upcoming = shifts
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .slice(0, limit);
+      set({ upcomingShifts: upcoming });
     } catch (error) {
       console.error('Error fetching upcoming shifts:', error);
     }
@@ -496,15 +515,33 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
 
   updateShiftCalendarSync: async (shiftId: string, calendarEventId: string) => {
     try {
+      const syncedAt = new Date().toISOString();
       const { error } = await supabase
         .from('shifts')
         .update({
           calendar_event_id: calendarEventId,
-          synced_at: new Date().toISOString(),
+          synced_at: syncedAt,
         })
         .eq('id', shiftId);
 
       if (error) throw error;
+
+      const applyUpdates = (shifts: ShiftItem[]) =>
+        shifts.map((s) =>
+          s.id === shiftId
+            ? { ...s, calendar_event_id: calendarEventId, synced_at: syncedAt }
+            : s
+        );
+      set((state) => ({
+        monthShifts: applyUpdates(state.monthShifts),
+        shiftsByMonth: Object.fromEntries(
+          Object.entries(state.shiftsByMonth).map(([ym, shifts]) => [ym, applyUpdates(shifts)])
+        ),
+        todayShift: state.todayShift?.id === shiftId
+          ? { ...state.todayShift, calendar_event_id: calendarEventId, synced_at: syncedAt }
+          : state.todayShift,
+        upcomingShifts: applyUpdates(state.upcomingShifts),
+      }));
     } catch (error) {
       console.error('Error updating shift calendar sync:', error);
     }

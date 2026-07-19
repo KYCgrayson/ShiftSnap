@@ -55,9 +55,25 @@ const DATE_CELL_PITCH = 50;
 // wide; used to estimate the photo's per-day pixel width for scroll sync.
 const NAME_COL_EQUIV = 3;
 
+function getMonthDateRange(yearMonth: string): { startDate: string; endDate: string } {
+  const [year, month] = yearMonth.split('-').map(Number);
+  const lastDay = new Date(year, month, 0).getDate();
+  return {
+    startDate: `${yearMonth}-01`,
+    endDate: `${yearMonth}-${String(lastDay).padStart(2, '0')}`,
+  };
+}
+
+function getWeekdayLabel(year: number, month: number, day: number, language: string): string {
+  const weekday = new Date(year, month - 1, day).getDay();
+  const zhLabels = ['日', '一', '二', '三', '四', '五', '六'];
+  const enLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  return language.startsWith('zh') ? zhLabels[weekday] : enLabels[weekday];
+}
+
 export default function ReviewScheduleScreen() {
   const theme = useTheme();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const params = useLocalSearchParams<{
     ocrResult: string;
     scheduleId: string;
@@ -68,7 +84,7 @@ export default function ReviewScheduleScreen() {
   const { shiftCodes, fetchShiftCodes, saveShiftCode } = useShiftCodeStore();
   const { createShiftsFromOCR } = useShiftStore();
   const { updateScheduleStatus, updateScheduleYearMonth } = useScheduleStore();
-  const { isConnected, syncShift } = useCalendarStore();
+  const { isConnected, syncUserShifts } = useCalendarStore();
   const { persons, createPerson, fetchPersons } = usePersonStore();
   const { currentGroup, members, fetchMembers } = useGroupStore();
 
@@ -131,6 +147,8 @@ export default function ReviewScheduleScreen() {
   const savedTranslateX = useSharedValue(0);
   const savedTranslateY = useSharedValue(0);
   const savedScale = useSharedValue(1);
+  const rowGuideCenterY = useSharedValue(IMAGE_STRIP_HEIGHT / 2);
+  const savedRowGuideCenterY = useSharedValue(IMAGE_STRIP_HEIGHT / 2);
 
   const scheduleId = params.scheduleId;
 
@@ -212,6 +230,14 @@ export default function ReviewScheduleScreen() {
     ? imageDims.height * (stripContainerWidth / imageDims.width)
     : 0;
 
+  // Height of the horizontal "your row" guide band — approximate one
+  // schedule row so the user can drop their name-row cleanly inside it.
+  const rowGuideHeight = useMemo(() => {
+    if (!imageDims || !ocrData) return 44;
+    const rh = imageBaseHeight / (ocrData.rows.length + 1);
+    return Math.max(28, Math.min(rh, 80));
+  }, [imageDims, ocrData, imageBaseHeight]);
+
   // Calculate initial transform for image strip
   const getInitialTransform = useCallback(() => {
     if (!imageDims || !ocrData || selectedPersonIndex === null) return null;
@@ -229,9 +255,11 @@ export default function ReviewScheduleScreen() {
     translateX.value = withTiming(initial.translateX, { duration: 300 });
     translateY.value = withTiming(initial.translateY, { duration: 300 });
     scale.value = withTiming(initial.scale, { duration: 300 });
+    rowGuideCenterY.value = withTiming(IMAGE_STRIP_HEIGHT / 2, { duration: 300 });
     savedTranslateX.value = initial.translateX;
     savedTranslateY.value = initial.translateY;
     savedScale.value = initial.scale;
+    savedRowGuideCenterY.value = IMAGE_STRIP_HEIGHT / 2;
   }, [getInitialTransform]);
 
   // Set initial transform when image dims / selected person change
@@ -244,6 +272,8 @@ export default function ReviewScheduleScreen() {
     savedTranslateX.value = initial.translateX;
     savedTranslateY.value = initial.translateY;
     savedScale.value = initial.scale;
+    rowGuideCenterY.value = IMAGE_STRIP_HEIGHT / 2;
+    savedRowGuideCenterY.value = IMAGE_STRIP_HEIGHT / 2;
   }, [imageDims, selectedPersonIndex, ocrData]);
 
   // Gesture definitions for image strip
@@ -278,12 +308,36 @@ export default function ReviewScheduleScreen() {
     Gesture.Simultaneous(panGesture, pinchGesture)
   );
 
+  const rowGuidePanGesture = Gesture.Pan()
+    .onUpdate((e) => {
+      const minY = rowGuideHeight / 2;
+      const maxY = IMAGE_STRIP_HEIGHT - rowGuideHeight / 2;
+      const next = savedRowGuideCenterY.value + e.translationY;
+      rowGuideCenterY.value = Math.min(Math.max(next, minY), maxY);
+    })
+    .onEnd(() => {
+      savedRowGuideCenterY.value = rowGuideCenterY.value;
+    });
+
+  const rowGuideDoubleTapGesture = Gesture.Tap()
+    .numberOfTaps(2)
+    .onStart(() => {
+      rowGuideCenterY.value = withTiming(IMAGE_STRIP_HEIGHT / 2, { duration: 200 });
+      savedRowGuideCenterY.value = IMAGE_STRIP_HEIGHT / 2;
+    });
+
+  const rowGuideGesture = Gesture.Race(rowGuideDoubleTapGesture, rowGuidePanGesture);
+
   const animatedImageStyle = useAnimatedStyle(() => ({
     transform: [
       { translateX: translateX.value },
       { translateY: translateY.value },
       { scale: scale.value },
     ],
+  }));
+
+  const animatedRowGuideStyle = useAnimatedStyle(() => ({
+    top: rowGuideCenterY.value - rowGuideHeight / 2,
   }));
 
   // Keep the reference image following the date-cell strip. Without this,
@@ -712,26 +766,11 @@ export default function ReviewScheduleScreen() {
       // Refresh persons so calendar legend picks up new coworkers
       await fetchPersons(user.id);
 
-      // Auto-sync to calendar if connected (only self_scan shifts)
+      // Auto-sync to calendar if connected. Reconcile the whole month so a
+      // re-recognition overwrites old OS events and removes stale days.
       if (isConnected) {
         try {
-          const newShifts = useShiftStore.getState().monthShifts;
-          const allShiftCodes = useShiftCodeStore.getState().shiftCodes;
-          const { updateShiftCalendarSync } = useShiftStore.getState();
-          for (const shift of newShifts.filter((s) => s.source === 'self_scan')) {
-            const codeInfo = allShiftCodes.find((sc) => sc.code === shift.shift_code);
-            const info = codeInfo
-              ? {
-                  meaning: codeInfo.meaning,
-                  start_time: codeInfo.start_time,
-                  end_time: codeInfo.end_time,
-                }
-              : undefined;
-            const eventId = await syncShift(shift, info);
-            if (eventId && shift.id) {
-              await updateShiftCalendarSync(shift.id, eventId);
-            }
-          }
+          await syncUserShifts(user.id, getMonthDateRange(yearMonth));
         } catch {
           // Calendar sync failure is non-critical
         }
@@ -971,14 +1010,6 @@ export default function ReviewScheduleScreen() {
     const shiftMap = new Map<number, OCRShift>();
     selectedRow.shifts.forEach((s) => shiftMap.set(s.date, s));
 
-    // Height of the horizontal "your row" guide band — approximate one
-    // schedule row so the user can drop their name-row cleanly inside it.
-    const rowGuideHeight = (() => {
-      if (!imageDims || !ocrData) return 44;
-      const rh = imageBaseHeight / (ocrData.rows.length + 1);
-      return Math.max(28, Math.min(rh, 80));
-    })();
-
     const allMyCodesHandled = myUniqueCodes.every(
       (code) => !codeNeedsConfirmation(code) || sessionIgnoredCodes.has(code)
     );
@@ -1073,30 +1104,36 @@ export default function ReviewScheduleScreen() {
                     />
                   </GestureDetector>
 
-                  {/* Fixed alignment guides drawn over the photo. Pan the
-                      image so your name-row sits inside the horizontal band;
-                      the vertical line marks the date column that stays in
-                      sync with the date strip below. pointerEvents="none" so
-                      pinch/pan gestures still reach the image underneath. */}
-                  <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-                    <View
-                      style={[
-                        styles.rowGuideBand,
-                        {
-                          height: rowGuideHeight,
-                          top: IMAGE_STRIP_HEIGHT / 2 - rowGuideHeight / 2,
-                          borderColor: theme.colors.primary,
-                          backgroundColor: theme.colors.primary + '14',
-                        },
-                      ]}
-                    >
-                      <View style={[styles.rowGuideTag, { backgroundColor: theme.colors.primary }]}>
-                        <Text style={styles.rowGuideTagText} numberOfLines={1}>
-                          {selectedRow.name || t('review.alignRowTag')}
-                        </Text>
-                      </View>
+                  {/* Alignment guides drawn over the photo. Two-finger pan
+                      still moves the image; single-finger dragging the band
+                      moves only the guide so it does not have to sit in the
+                      middle while reading. */}
+                  <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+                    <GestureDetector gesture={rowGuideGesture}>
+                      <Animated.View
+                        style={[
+                          styles.rowGuideBand,
+                          {
+                            height: rowGuideHeight,
+                            borderColor: theme.colors.primary,
+                            backgroundColor: theme.colors.primary + '14',
+                          },
+                          animatedRowGuideStyle,
+                        ]}
+                      >
+                        <View style={[styles.rowGuideTag, { backgroundColor: theme.colors.primary }]}>
+                          <Text style={styles.rowGuideTagText} numberOfLines={1}>
+                            {selectedRow.name || t('review.alignRowTag')}
+                          </Text>
+                        </View>
+                        <View style={[styles.rowGuideHandle, { backgroundColor: theme.colors.primary }]}>
+                          <Ionicons name="reorder-two" size={18} color="#FFFFFF" />
+                        </View>
+                      </Animated.View>
+                    </GestureDetector>
+                    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+                      <View style={[styles.colGuideLine, { backgroundColor: theme.colors.primary + 'AA' }]} />
                     </View>
-                    <View style={[styles.colGuideLine, { backgroundColor: theme.colors.primary + 'AA' }]} />
                   </View>
                 </View>
               </View>
@@ -1122,6 +1159,7 @@ export default function ReviewScheduleScreen() {
                       const bgColor = shift
                         ? getConfidenceColor(shift.confidence) + '20'
                         : 'transparent';
+                      const weekday = getWeekdayLabel(year, month, day, i18n.language);
 
                       return (
                         <TouchableOpacity
@@ -1134,6 +1172,9 @@ export default function ReviewScheduleScreen() {
                         >
                           <Text style={[styles.dateCellDay, { color: theme.colors.textSecondary }]}>
                             {day}
+                          </Text>
+                          <Text style={[styles.dateCellWeekday, { color: theme.colors.textMuted }]}>
+                            {weekday}
                           </Text>
                           <Text style={[styles.dateCellCode, {
                             color: shift ? getConfidenceColor(shift.confidence) : theme.colors.textMuted,
@@ -2069,6 +2110,17 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
+  rowGuideHandle: {
+    position: 'absolute',
+    right: 8,
+    top: '50%',
+    width: 28,
+    height: 28,
+    marginTop: -14,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   colGuideLine: {
     position: 'absolute',
     top: 0,
@@ -2090,16 +2142,20 @@ const styles = StyleSheet.create({
   },
   dateCell: {
     width: 44,
-    height: 56,
+    height: 64,
     borderRadius: 10,
     borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 2,
+    gap: 1,
   },
   dateCellDay: {
     fontSize: 11,
     fontWeight: '500',
+  },
+  dateCellWeekday: {
+    fontSize: 9,
+    fontWeight: '600',
   },
   dateCellCode: {
     fontSize: 14,

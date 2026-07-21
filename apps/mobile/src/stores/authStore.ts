@@ -3,8 +3,6 @@ import { User, Session } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   supabase,
-  signInWithEmail,
-  signUpWithEmail,
   signOut as supabaseSignOut,
   getCurrentSession,
   signInWithGoogle as googleSignIn,
@@ -12,11 +10,6 @@ import {
 } from '../services/supabase';
 
 const GUEST_MODE_KEY = 'shiftsnap:guest-mode';
-
-// Shared demo account — credentials are intentionally public.
-// The account is for exploration only; do not put real PII into it.
-const DEMO_EMAIL = 'demo@ishift.app';
-const DEMO_PASSWORD = 'DemoIShift2026!';
 
 interface AuthState {
   user: User | null;
@@ -28,10 +21,7 @@ interface AuthState {
 
   // Actions
   initialize: () => Promise<void>;
-  signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  signUp: (email: string, password: string, displayName?: string) => Promise<{ success: boolean; error?: string }>;
   signInAsGuest: () => void;
-  signInAsDemo: () => Promise<{ success: boolean; error?: string }>;
   signInWithGoogle: () => Promise<{ success: boolean; error?: string }>;
   signInWithApple: () => Promise<{ success: boolean; error?: string }>;
   signOut: () => Promise<void>;
@@ -57,7 +47,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const { session, error } = await getCurrentSession();
 
       if (error) {
-        console.error('Error getting session:', error);
+        console.error('Unable to restore authentication session');
       }
 
       if (session) {
@@ -102,67 +92,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           isGuest: session ? false : current.isGuest,
         });
       });
-    } catch (error) {
-      console.error('Auth initialization error:', error);
+    } catch {
+      console.error('Authentication initialization failed');
       set({ user: null, session: null, initialized: true, loading: false });
-    }
-  },
-
-  signIn: async (email: string, password: string) => {
-    set({ loading: true, error: null });
-
-    try {
-      const { data, error } = await signInWithEmail(email, password);
-
-      if (error) {
-        set({ loading: false, error: error.message });
-        return { success: false, error: error.message };
-      }
-
-      set({
-        user: data.user,
-        session: data.session,
-        loading: false,
-        error: null,
-      });
-
-      return { success: true };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Sign in failed';
-      set({ loading: false, error: message });
-      return { success: false, error: message };
-    }
-  },
-
-  signUp: async (email: string, password: string, displayName?: string) => {
-    set({ loading: true, error: null });
-
-    try {
-      const { data, error } = await signUpWithEmail(email, password, displayName);
-
-      if (error) {
-        set({ loading: false, error: error.message });
-        return { success: false, error: error.message };
-      }
-
-      // Note: User might need to verify email before they can sign in
-      if (data.user && !data.session) {
-        set({ loading: false });
-        return { success: true };
-      }
-
-      set({
-        user: data.user,
-        session: data.session,
-        loading: false,
-        error: null,
-      });
-
-      return { success: true };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Sign up failed';
-      set({ loading: false, error: message });
-      return { success: false, error: message };
     }
   },
 
@@ -183,53 +115,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       loading: false,
       error: null,
     });
-    AsyncStorage.setItem(GUEST_MODE_KEY, 'true').catch(
-      (e) => console.warn('Failed to persist guest mode:', e)
-    );
-  },
-
-  signInAsDemo: async () => {
-    set({ loading: true, error: null });
-    try {
-      let user: User | null = null;
-      let session: Session | null = null;
-
-      // Try sign in first; on first run the account may not exist yet,
-      // in which case we sign it up and then sign in.
-      const first = await signInWithEmail(DEMO_EMAIL, DEMO_PASSWORD);
-      if (first.data?.session) {
-        user = first.data.user;
-        session = first.data.session;
-      } else {
-        const signup = await signUpWithEmail(DEMO_EMAIL, DEMO_PASSWORD, 'Demo User');
-        if (signup.error) {
-          set({ loading: false, error: signup.error.message });
-          return { success: false, error: signup.error.message };
-        }
-        if (signup.data?.session) {
-          user = signup.data.user;
-          session = signup.data.session;
-        } else {
-          // Email-confirmation flow: try sign in once more in case it's auto-confirmed.
-          const retry = await signInWithEmail(DEMO_EMAIL, DEMO_PASSWORD);
-          if (retry.error || !retry.data?.session) {
-            const msg = retry.error?.message ?? 'Demo account unavailable';
-            set({ loading: false, error: msg });
-            return { success: false, error: msg };
-          }
-          user = retry.data.user;
-          session = retry.data.session;
-        }
-      }
-
-      await AsyncStorage.removeItem(GUEST_MODE_KEY).catch(() => {});
-      set({ user, session, isGuest: false, loading: false, error: null });
-      return { success: true };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Demo sign in failed';
-      set({ loading: false, error: message });
-      return { success: false, error: message };
-    }
+    AsyncStorage.setItem(GUEST_MODE_KEY, 'true').catch(() => {
+      console.warn('Failed to persist guest mode');
+    });
   },
 
   signInWithGoogle: async () => {
@@ -309,8 +197,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       set({ user: null, session: null, isGuest: false, loading: false, error: null });
       AsyncStorage.removeItem(GUEST_MODE_KEY).catch(() => {});
-    } catch (error) {
-      console.error('Sign out error:', error);
+    } catch {
+      console.error('Sign out failed');
       set({ loading: false });
     }
   },

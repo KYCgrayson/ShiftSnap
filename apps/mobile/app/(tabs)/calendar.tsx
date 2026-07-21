@@ -1,9 +1,8 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   TouchableOpacity,
   RefreshControl,
@@ -14,6 +13,7 @@ import {
   Image,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadNoteImage, deleteNoteImage } from '../../src/services/noteImages';
@@ -27,6 +27,7 @@ import { useShiftCodeStore } from '../../src/stores/shiftCodeStore';
 import { usePersonStore } from '../../src/stores/personStore';
 import { useCalendarStore } from '../../src/stores/calendarStore';
 import { useGroupStore } from '../../src/stores/groupStore';
+import { supabase } from '../../src/services/supabase';
 import { useToast } from '../../src/components/ui';
 import { Card, TimePickerInput } from '../../src/components/ui';
 import { GuestUpgradeBanner } from '../../src/components/GuestUpgradeBanner';
@@ -50,6 +51,7 @@ const SHOW_CODES_KEY = 'shiftsnap_show_shift_codes';
 const SHOW_COWORKERS_KEY = 'shiftsnap_show_coworker_shifts';
 const UNIFY_DAYOFF_KEY = 'shiftsnap_unify_dayoff';
 const UNIFY_DAYOFF_SYMBOL_KEY = 'shiftsnap_unify_dayoff_symbol';
+const PENDING_NOTE_IMAGE_PICKER_KEY = 'shiftsnap_pending_note_image_picker';
 
 function getMonthDateRange(yearMonth: string): { startDate: string; endDate: string } {
   const [year, month] = yearMonth.split('-').map(Number);
@@ -82,6 +84,29 @@ interface ShiftEvent {
   isMine: boolean;
 }
 
+interface SchedulePhoto {
+  id: string;
+  image_url: string;
+  year_month: string;
+  created_at: string;
+}
+
+// Older releases stored a public or already-signed Storage URL. Convert those
+// values back to their object path so every remote roster image is authorized
+// again with a fresh, short-lived signed URL.
+function extractShiftImagePath(imageUrl: string): string | null {
+  if (!imageUrl.startsWith('http')) return imageUrl;
+  const match = imageUrl.match(
+    /\/storage\/v1\/object\/(?:public|sign|authenticated)\/shift-images\/([^?]+)/,
+  );
+  if (!match?.[1]) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+}
+
 export default function CalendarScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -112,6 +137,12 @@ export default function CalendarScreen() {
   const [showCoworkerShifts, setShowCoworkerShifts] = useState(false);
   const [unifyDayOff, setUnifyDayOff] = useState(false);
   const [unifyDayOffSymbol, setUnifyDayOffSymbol] = useState('');
+  const [showSchedulePhoto, setShowSchedulePhoto] = useState(false);
+  const [schedulePhotoIndex, setSchedulePhotoIndex] = useState(0);
+  const [schedulePhotoUrl, setSchedulePhotoUrl] = useState<string | null>(null);
+  const [schedulePhotoLoading, setSchedulePhotoLoading] = useState(false);
+  const [schedulePhotoError, setSchedulePhotoError] = useState<string | null>(null);
+  const [monthSchedulePhotos, setMonthSchedulePhotos] = useState<SchedulePhoto[]>([]);
 
   // Shift edit modal state
   const [showEditModal, setShowEditModal] = useState(false);
@@ -126,8 +157,47 @@ export default function CalendarScreen() {
   const [noteImageUrls, setNoteImageUrls] = useState<string[]>([]);
   const [noteImageUploading, setNoteImageUploading] = useState(false);
   const [savingNote, setSavingNote] = useState(false);
+  const handledNoteImageUris = useRef(new Set<string>());
+  const schedulePhotoFetchRequest = useRef(0);
+  const schedulePhotoOpenRequest = useRef(0);
 
   const userId = user?.id;
+  const groupIds = useMemo(() => groups.map((group) => group.id).sort(), [groups]);
+
+  const appendNotePhoto = useCallback(async (uri: string, reopenNote = false) => {
+    if (!userId || handledNoteImageUris.current.has(uri)) return;
+    handledNoteImageUris.current.add(uri);
+    setNoteImageUploading(true);
+    try {
+      const url = await uploadNoteImage(userId, uri);
+      setNoteImageUrls((prev) => [...prev, url]);
+      if (reopenNote) setShowNoteModal(true);
+    } catch (e) {
+      handledNoteImageUris.current.delete(uri);
+      const reason = e instanceof Error ? e.message : '';
+      Alert.alert(t('common.error'), reason || t('calendar.photoUploadFailed'));
+    } finally {
+      setNoteImageUploading(false);
+    }
+  }, [t, userId]);
+
+  // Recover a library selection when Android recreates this activity. The URI
+  // guard also prevents a recovered result and the original promise resolving
+  // from uploading the same image twice.
+  useEffect(() => {
+    if (!userId) return;
+    AsyncStorage.getItem(PENDING_NOTE_IMAGE_PICKER_KEY)
+      .then(async (isPending) => {
+        if (isPending !== 'true') return;
+        const result = await ImagePicker.getPendingResultAsync();
+        const uri = result && !('code' in result) && !result.canceled
+          ? result.assets?.[0]?.uri
+          : undefined;
+        if (uri) void appendNotePhoto(uri, true);
+        await AsyncStorage.removeItem(PENDING_NOTE_IMAGE_PICKER_KEY);
+      })
+      .catch((error) => console.warn('Pending note image recovery failed:', error));
+  }, [appendNotePhoto, userId]);
 
   // Set calendar locale
   LocaleConfig.defaultLocale = locale === 'zh-TW' ? 'zh-TW' : '';
@@ -214,6 +284,99 @@ export default function CalendarScreen() {
       fetchNotesForMonth(userId, currentMonth);
     }
   }, [userId, currentMonth, currentGroupId, viewScope]);
+
+  // Fetch this view's photos locally. The schedule store follows the active
+  // editing group, which is intentionally different from Calendar's view
+  // scope; using it here could display an image from the wrong group.
+  useEffect(() => {
+    const request = ++schedulePhotoFetchRequest.current;
+    setMonthSchedulePhotos([]);
+    if (!userId) {
+      return () => {
+        if (schedulePhotoFetchRequest.current === request) {
+          schedulePhotoFetchRequest.current += 1;
+        }
+        schedulePhotoOpenRequest.current += 1;
+      };
+    }
+
+    const scopedGroupIds = viewScope === 'all'
+      ? groupIds
+      : groupIds.includes(viewScope) ? [viewScope] : [];
+    const scopeClauses = [`owner_id.eq.${userId}`];
+    if (scopedGroupIds.length > 0) {
+      scopeClauses.push(`group_id.in.(${scopedGroupIds.join(',')})`);
+    }
+
+    let query = supabase
+      .from('schedules')
+      .select('id, image_url, year_month, created_at')
+      .eq('year_month', currentMonth)
+      .not('image_url', 'is', null)
+      .neq('image_url', '')
+      .or(scopeClauses.join(','));
+
+    query.order('created_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (request !== schedulePhotoFetchRequest.current) return;
+        if (error) {
+          console.warn('Unable to load schedule photos:', error.message);
+          return;
+        }
+        setMonthSchedulePhotos((data || []) as SchedulePhoto[]);
+      });
+    return () => {
+      if (schedulePhotoFetchRequest.current === request) {
+        schedulePhotoFetchRequest.current += 1;
+      }
+      schedulePhotoOpenRequest.current += 1;
+    };
+  }, [currentMonth, groupIds, userId, viewScope]);
+
+  // Changing the visible calendar month closes the photo viewer. This keeps
+  // the image and the selected calendar month permanently in lockstep.
+  useEffect(() => {
+    schedulePhotoOpenRequest.current += 1;
+    setShowSchedulePhoto(false);
+    setSchedulePhotoIndex(0);
+    setSchedulePhotoUrl(null);
+    setSchedulePhotoError(null);
+  }, [currentMonth, groupIds, userId, viewScope]);
+
+  const resolveSchedulePhotoUrl = useCallback(async (imageUrl: string) => {
+    if (imageUrl.startsWith('file://') || imageUrl.startsWith('data:')) {
+      return imageUrl;
+    }
+    const storagePath = extractShiftImagePath(imageUrl);
+    if (!storagePath) return imageUrl;
+    const { data, error } = await supabase.storage
+      .from('shift-images')
+      .createSignedUrl(storagePath, 60 * 60);
+    if (error || !data?.signedUrl) throw error || new Error('Unable to open schedule image');
+    return data.signedUrl;
+  }, []);
+
+  const openSchedulePhoto = useCallback(async (index = 0) => {
+    const schedule = monthSchedulePhotos[index];
+    if (!schedule) return;
+    setSchedulePhotoIndex(index);
+    setSchedulePhotoUrl(null);
+    setSchedulePhotoError(null);
+    setSchedulePhotoLoading(true);
+    setShowSchedulePhoto(true);
+    const request = ++schedulePhotoOpenRequest.current;
+    try {
+      const url = await resolveSchedulePhotoUrl(schedule.image_url);
+      if (request === schedulePhotoOpenRequest.current) setSchedulePhotoUrl(url);
+    } catch (error) {
+      console.warn('Unable to open schedule image:', error);
+      if (request === schedulePhotoOpenRequest.current) {
+        setSchedulePhotoError(t('calendar.schedulePhotoLoadFailed'));
+      }
+    } finally {
+      if (request === schedulePhotoOpenRequest.current) setSchedulePhotoLoading(false);
+    }
+  }, [monthSchedulePhotos, resolveSchedulePhotoUrl, t]);
 
   // Member profiles include each member's one claimed roster identity.
   useEffect(() => {
@@ -580,19 +743,18 @@ export default function CalendarScreen() {
         Alert.alert(t('common.error'), t('calendar.photoPermissionDenied'));
         return;
       }
+      await AsyncStorage.setItem(PENDING_NOTE_IMAGE_PICKER_KEY, 'true');
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 1,
       });
       if (result.canceled || !result.assets?.[0]) return;
-      setNoteImageUploading(true);
-      const url = await uploadNoteImage(userId, result.assets[0].uri);
-      setNoteImageUrls((prev) => [...prev, url]);
+      await appendNotePhoto(result.assets[0].uri);
     } catch (e) {
       const reason = e instanceof Error ? e.message : '';
       Alert.alert(t('common.error'), reason || t('calendar.photoUploadFailed'));
     } finally {
-      setNoteImageUploading(false);
+      await AsyncStorage.removeItem(PENDING_NOTE_IMAGE_PICKER_KEY);
     }
   };
 
@@ -657,6 +819,29 @@ export default function CalendarScreen() {
           {t('calendar.title')}
         </Text>
         <View style={styles.headerActions}>
+          {/* The original scanned roster for the month currently on screen. */}
+          <TouchableOpacity
+            style={[
+              styles.headerIconButton,
+              monthSchedulePhotos.length === 0 && styles.headerIconButtonDisabled,
+            ]}
+            onPress={() => void openSchedulePhoto()}
+            disabled={monthSchedulePhotos.length === 0}
+            accessibilityRole="button"
+            accessibilityLabel={t('calendar.viewSchedulePhoto')}
+            accessibilityHint={
+              monthSchedulePhotos.length > 0
+                ? t('calendar.viewSchedulePhotoHint')
+                : t('calendar.schedulePhotoUnavailable')
+            }
+            accessibilityState={{ disabled: monthSchedulePhotos.length === 0 }}
+          >
+            <Ionicons
+              name="image-outline"
+              size={21}
+              color={monthSchedulePhotos.length > 0 ? theme.colors.primary : theme.colors.textMuted}
+            />
+          </TouchableOpacity>
           {/* Toggle shift codes on calendar */}
           <TouchableOpacity
             style={styles.headerIconButton}
@@ -1419,6 +1604,101 @@ export default function CalendarScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      <Modal
+        visible={showSchedulePhoto}
+        animationType="fade"
+        onRequestClose={() => setShowSchedulePhoto(false)}
+      >
+        <SafeAreaView style={[styles.schedulePhotoModal, { backgroundColor: theme.colors.warmWhite }]}>
+          <View style={[styles.schedulePhotoHeader, { borderBottomColor: theme.colors.border }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.schedulePhotoTitle, { color: theme.colors.textPrimary }]}>
+                {t('calendar.schedulePhotoTitle')}
+              </Text>
+              <Text style={[styles.schedulePhotoSubtitle, { color: theme.colors.textSecondary }]}>
+                {currentMonth}
+                {monthSchedulePhotos.length > 1
+                  ? ` · ${schedulePhotoIndex + 1}/${monthSchedulePhotos.length}`
+                  : ''}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.headerIconButton}
+              onPress={() => setShowSchedulePhoto(false)}
+              accessibilityRole="button"
+              accessibilityLabel={t('common.close')}
+            >
+              <Ionicons name="close" size={26} color={theme.colors.textPrimary} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.schedulePhotoBody}>
+            {schedulePhotoLoading ? (
+              <ActivityIndicator size="large" color={theme.colors.primary} />
+            ) : schedulePhotoError ? (
+              <View style={styles.schedulePhotoMessage}>
+                <Ionicons name="alert-circle-outline" size={34} color={theme.colors.error} />
+                <Text style={[styles.schedulePhotoMessageText, { color: theme.colors.textSecondary }]}>
+                  {schedulePhotoError}
+                </Text>
+                <TouchableOpacity
+                  style={[styles.schedulePhotoRetry, { backgroundColor: theme.colors.primary }]}
+                  onPress={() => void openSchedulePhoto(schedulePhotoIndex)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('common.retry')}
+                >
+                  <Text style={styles.schedulePhotoRetryText}>{t('common.retry')}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : schedulePhotoUrl ? (
+              <Image
+                source={{ uri: schedulePhotoUrl }}
+                style={styles.schedulePhotoImage}
+                resizeMode="contain"
+                accessibilityLabel={t('calendar.schedulePhotoTitle')}
+                onError={() => setSchedulePhotoError(t('calendar.schedulePhotoLoadFailed'))}
+              />
+            ) : null}
+          </View>
+
+          {monthSchedulePhotos.length > 1 && (
+            <View style={[styles.schedulePhotoPager, { borderTopColor: theme.colors.border }]}>
+              <TouchableOpacity
+                style={styles.schedulePhotoPageButton}
+                disabled={schedulePhotoIndex === 0 || schedulePhotoLoading}
+                onPress={() => void openSchedulePhoto(schedulePhotoIndex - 1)}
+                accessibilityRole="button"
+                accessibilityLabel={t('calendar.previousSchedulePhoto')}
+                accessibilityState={{ disabled: schedulePhotoIndex === 0 || schedulePhotoLoading }}
+              >
+                <Ionicons
+                  name="chevron-back"
+                  size={25}
+                  color={schedulePhotoIndex === 0 ? theme.colors.textMuted : theme.colors.primary}
+                />
+              </TouchableOpacity>
+              <Text style={[styles.schedulePhotoPageText, { color: theme.colors.textSecondary }]}>
+                {schedulePhotoIndex + 1} / {monthSchedulePhotos.length}
+              </Text>
+              <TouchableOpacity
+                style={styles.schedulePhotoPageButton}
+                disabled={schedulePhotoIndex === monthSchedulePhotos.length - 1 || schedulePhotoLoading}
+                onPress={() => void openSchedulePhoto(schedulePhotoIndex + 1)}
+                accessibilityRole="button"
+                accessibilityLabel={t('calendar.nextSchedulePhoto')}
+                accessibilityState={{ disabled: schedulePhotoIndex === monthSchedulePhotos.length - 1 || schedulePhotoLoading }}
+              >
+                <Ionicons
+                  name="chevron-forward"
+                  size={25}
+                  color={schedulePhotoIndex === monthSchedulePhotos.length - 1 ? theme.colors.textMuted : theme.colors.primary}
+                />
+              </TouchableOpacity>
+            </View>
+          )}
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1449,6 +1729,73 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 18,
+  },
+  headerIconButtonDisabled: {
+    opacity: 0.42,
+  },
+  schedulePhotoModal: {
+    flex: 1,
+  },
+  schedulePhotoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  schedulePhotoTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  schedulePhotoSubtitle: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  schedulePhotoBody: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  schedulePhotoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  schedulePhotoMessage: {
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 32,
+  },
+  schedulePhotoMessageText: {
+    textAlign: 'center',
+    fontSize: 15,
+  },
+  schedulePhotoRetry: {
+    borderRadius: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  schedulePhotoRetryText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  schedulePhotoPager: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  schedulePhotoPageButton: {
+    width: 44,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  schedulePhotoPageText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   scrollContent: {
     padding: 16,

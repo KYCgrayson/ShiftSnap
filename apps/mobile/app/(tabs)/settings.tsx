@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   TouchableOpacity,
   Alert,
@@ -15,19 +14,20 @@ import {
   Linking,
   Share,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../src/theme';
-import { Card } from '../../src/components/ui';
+import { Card, OptionListModal, type OptionListModalOption } from '../../src/components/ui';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useThemeStore } from '../../src/stores/themeStore';
 import {
   useCalendarStore,
-  CALENDAR_ALARMS_KEY,
+  calendarAlarmsKey,
   ALARM_MINUTES_KEY,
-  CALENDAR_SYNC_FILTER_KEY,
+  calendarSyncFilterKey,
   type CalendarSyncFilter,
 } from '../../src/stores/calendarStore';
 import { useLocaleStore } from '../../src/stores/localeStore';
@@ -75,6 +75,8 @@ export default function SettingsScreen() {
     disconnectCalendar,
     removeSyncedEvents,
     syncUserShifts,
+    getWritableCalendars,
+    calendarId,
     loading: calendarLoading,
   } = useCalendarStore();
 
@@ -83,7 +85,7 @@ export default function SettingsScreen() {
     groups, currentGroup, members,
     fetchMembers, switchGroup,
     joinGroupByInvite, leaveGroup, updateGroupName, removeMember,
-    claimPersonInSchedule,
+    claimPersonInSchedule, unclaimPersonInSchedule,
   } = useGroupStore();
 
   const [editingProfile, setEditingProfile] = useState(false);
@@ -104,6 +106,15 @@ export default function SettingsScreen() {
   const [calendarAlarmsEnabled, setCalendarAlarmsEnabled] = useState(false);
   const [calendarSyncFilter, setCalendarSyncFilter] = useState<CalendarSyncFilter>('all');
   const [alarmMinutes, setAlarmMinutes] = useState(DEFAULT_ALARM_MINUTES);
+  const [optionList, setOptionList] = useState<{
+    title: string;
+    options: OptionListModalOption[];
+    selectedValue?: string | null;
+    onSelect: (value: string) => void;
+  } | null>(null);
+  const [showGroupNameModal, setShowGroupNameModal] = useState(false);
+  const [groupName, setGroupName] = useState('');
+  const [calendarDestinationName, setCalendarDestinationName] = useState<string | null>(null);
 
   // Claim-my-schedule modal state. claimRows lists the distinct name +
   // shift count tuples extracted from the latest group schedule, so the
@@ -132,13 +143,43 @@ export default function SettingsScreen() {
     AsyncStorage.getItem(ALARM_MINUTES_KEY).then((val) => {
       if (val !== null) setAlarmMinutes(Number(val));
     });
-    AsyncStorage.getItem(CALENDAR_ALARMS_KEY).then((val) => {
-      if (val !== null) setCalendarAlarmsEnabled(val === 'true');
-    });
-    AsyncStorage.getItem(CALENDAR_SYNC_FILTER_KEY).then((val) => {
-      if (val === 'work_days' || val === 'days_off') setCalendarSyncFilter(val);
-    });
   }, []);
+
+  useEffect(() => {
+    if (!user?.id || isGuest) {
+      setCalendarAlarmsEnabled(false);
+      setCalendarSyncFilter('all');
+      return;
+    }
+    let active = true;
+    void Promise.all([
+      AsyncStorage.getItem(calendarAlarmsKey(user.id)),
+      AsyncStorage.getItem(calendarSyncFilterKey(user.id)),
+    ]).then(([alarms, filter]) => {
+      if (!active) return;
+      setCalendarAlarmsEnabled(alarms === 'true');
+      setCalendarSyncFilter(filter === 'work_days' || filter === 'days_off' ? filter : 'all');
+    });
+    return () => { active = false; };
+  }, [isGuest, user?.id]);
+
+  useEffect(() => {
+    if (user?.id) void useCalendarStore.getState().initialize(user.id);
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android' || !calendarConnected || !calendarId) {
+      setCalendarDestinationName(null);
+      return;
+    }
+    void getWritableCalendars()
+      .then((destinations) => {
+        setCalendarDestinationName(
+          destinations.find((calendar) => calendar.id === calendarId)?.title ?? null,
+        );
+      })
+      .catch(() => setCalendarDestinationName(null));
+  }, [calendarConnected, calendarId, getWritableCalendars]);
 
   useEffect(() => {
     if (user?.id) fetchPersons(user.id);
@@ -350,13 +391,56 @@ export default function SettingsScreen() {
       );
     });
 
+  const finishCalendarConnect = async (destinationId?: string) => {
+    const success = await connectCalendar(user?.id, destinationId);
+    if (success) {
+      if (Platform.OS === 'android') {
+        const destinations = await getWritableCalendars().catch(() => []);
+        setCalendarDestinationName(destinations.find((calendar) => calendar.id === useCalendarStore.getState().calendarId)?.title ?? null);
+      }
+      if (user && !isGuest) {
+        try {
+          const savedAlarmPreference = await AsyncStorage.getItem(calendarAlarmsKey(user.id));
+          const wantsCalendarAlarms = savedAlarmPreference === null ? await askCalendarAlarmPreference() : savedAlarmPreference === 'true';
+          setCalendarAlarmsEnabled(wantsCalendarAlarms);
+          await AsyncStorage.setItem(calendarAlarmsKey(user.id), wantsCalendarAlarms ? 'true' : 'false');
+          await syncUserShifts(user.id);
+        } catch { /* Calendar backfill is best-effort. */ }
+      }
+      Alert.alert(t('settings.connected'), t('settings.calendarConnected'));
+      return;
+    }
+    const reason = useCalendarStore.getState().error || '';
+    if (reason.includes('permission')) {
+      Alert.alert(t('common.error'), t('settings.calendarPermDenied'), [{ text: t('common.cancel'), style: 'cancel' }, { text: t('settings.openSystemSettings'), onPress: () => Linking.openSettings() }]);
+    } else if (reason === 'CALENDAR_ACCOUNT_READONLY') {
+      Alert.alert(t('common.error'), t('settings.calendarAccountReadonly'), [{ text: t('common.cancel'), style: 'cancel' }, { text: t('settings.openSystemSettings'), onPress: () => Linking.openSettings() }]);
+    } else Alert.alert(t('common.error'), reason ? `${t('settings.calendarConnectFailed')}\n${reason}` : t('settings.calendarConnectFailed'));
+  };
+
+  const showAndroidCalendarDestinations = async () => {
+    try {
+      const destinations = await getWritableCalendars();
+      if (destinations.length === 0) {
+        await finishCalendarConnect();
+        return;
+      }
+      setOptionList({
+        title: t('settings.chooseCalendar'),
+        options: destinations.map((calendar) => ({ value: calendar.id, label: calendar.title, detail: calendar.sourceName })),
+        selectedValue: calendarId,
+        onSelect: (value) => { setOptionList(null); void finishCalendarConnect(value); },
+      });
+    } catch { await finishCalendarConnect(); }
+  };
+
   const handleCalendarConnect = async () => {
     if (calendarConnected) {
       Alert.alert(t('settings.disconnectCalendar'), t('settings.disconnectDesc'), [
         { text: t('common.cancel'), style: 'cancel' },
         {
           text: t('settings.disconnect'),
-          onPress: () => disconnectCalendar(),
+          onPress: () => disconnectCalendar(user?.id),
         },
         {
           text: t('settings.removeAndDisconnect'),
@@ -364,53 +448,8 @@ export default function SettingsScreen() {
           onPress: () => void removeSyncedCalendarEvents(true),
         },
       ]);
-    } else {
-      const success = await connectCalendar();
-      if (success) {
-        if (user && !isGuest) {
-          try {
-            const savedAlarmPreference = await AsyncStorage.getItem(CALENDAR_ALARMS_KEY);
-            const wantsCalendarAlarms = savedAlarmPreference === null
-              ? await askCalendarAlarmPreference()
-              : savedAlarmPreference === 'true';
-
-            setCalendarAlarmsEnabled(wantsCalendarAlarms);
-            await AsyncStorage.setItem(
-              CALENDAR_ALARMS_KEY,
-              wantsCalendarAlarms ? 'true' : 'false',
-            );
-            await syncUserShifts(user.id);
-          } catch {
-            // Calendar backfill is best-effort; future saves will retry.
-          }
-        }
-        Alert.alert(t('settings.connected'), t('settings.calendarConnected'));
-        return;
-      }
-      // Surface the failure — a silent no-op here left users unsure
-      // whether the tap even registered. Permission denial is the common
-      // case (iOS never re-prompts once denied), so offer a jump to the
-      // system settings screen where it can be re-enabled.
-      const reason = useCalendarStore.getState().error || '';
-      if (reason.includes('permission')) {
-        Alert.alert(t('common.error'), t('settings.calendarPermDenied'), [
-          { text: t('common.cancel'), style: 'cancel' },
-          { text: t('settings.openSystemSettings'), onPress: () => Linking.openSettings() },
-        ]);
-      } else if (reason === 'CALENDAR_ACCOUNT_READONLY') {
-        Alert.alert(t('common.error'), t('settings.calendarAccountReadonly'), [
-          { text: t('common.cancel'), style: 'cancel' },
-          { text: t('settings.openSystemSettings'), onPress: () => Linking.openSettings() },
-        ]);
-      } else {
-        Alert.alert(
-          t('common.error'),
-          reason
-            ? `${t('settings.calendarConnectFailed')}\n${reason}`
-            : t('settings.calendarConnectFailed'),
-        );
-      }
-    }
+    } else if (Platform.OS === 'android') await showAndroidCalendarDestinations();
+    else await finishCalendarConnect();
   };
 
   const removeSyncedCalendarEvents = async (disconnectAfter: boolean) => {
@@ -425,7 +464,7 @@ export default function SettingsScreen() {
       return;
     }
 
-    if (disconnectAfter) await disconnectCalendar();
+    if (disconnectAfter) await disconnectCalendar(user.id);
 
     Alert.alert(
       t('settings.removeSyncedSuccessTitle'),
@@ -455,7 +494,9 @@ export default function SettingsScreen() {
 
   const handleToggleCalendarAlarms = async (enabled: boolean) => {
     setCalendarAlarmsEnabled(enabled);
-    await AsyncStorage.setItem(CALENDAR_ALARMS_KEY, enabled ? 'true' : 'false');
+    if (user?.id && !isGuest) {
+      await AsyncStorage.setItem(calendarAlarmsKey(user.id), enabled ? 'true' : 'false');
+    }
 
     if (!calendarConnected || !user || isGuest) return;
 
@@ -476,7 +517,8 @@ export default function SettingsScreen() {
   const applyCalendarSyncFilter = async (filter: CalendarSyncFilter) => {
     setCalendarSyncFilter(filter);
     try {
-      await AsyncStorage.setItem(CALENDAR_SYNC_FILTER_KEY, filter);
+      if (!user?.id || isGuest) return;
+      await AsyncStorage.setItem(calendarSyncFilterKey(user.id), filter);
       if (!calendarConnected || !user || isGuest) return;
       const result = await syncUserShifts(user.id);
       if (!result) Alert.alert(t('common.error'), t('settings.calendarFilterSyncFailed'));
@@ -507,17 +549,7 @@ export default function SettingsScreen() {
       return;
     }
 
-    Alert.alert(
-      t('settings.calendarSyncContent'),
-      undefined,
-      [
-        ...choices.map((choice) => ({
-          text: choice.label,
-          onPress: () => { void applyCalendarSyncFilter(choice.value); },
-        })),
-        { text: t('common.cancel'), style: 'cancel' as const },
-      ],
-    );
+    setOptionList({ title: t('settings.calendarSyncContent'), options: choices.map((choice) => ({ value: choice.value, label: choice.label })), selectedValue: calendarSyncFilter, onSelect: (value) => { setOptionList(null); void applyCalendarSyncFilter(value as CalendarSyncFilter); } });
   };
 
   const scheduleAllReminders = async (minutes: number) => {
@@ -590,21 +622,7 @@ export default function SettingsScreen() {
         }
       );
     } else {
-      const buttons: import('react-native').AlertButton[] = ALARM_OPTIONS.map((opt) => ({
-        text: opt.label,
-        onPress: async () => {
-          setAlarmMinutes(opt.value);
-          await AsyncStorage.setItem(ALARM_MINUTES_KEY, String(opt.value));
-          if (notificationsEnabled) {
-            await scheduleAllReminders(opt.value);
-          }
-          if (calendarConnected && calendarAlarmsEnabled && user && !isGuest) {
-            await syncUserShifts(user.id);
-          }
-        },
-      }));
-      buttons.push({ text: t('common.cancel'), onPress: () => {} });
-      Alert.alert(t('settings.selectAlarm'), undefined, buttons);
+      setOptionList({ title: t('settings.selectAlarm'), options: ALARM_OPTIONS.map((opt) => ({ value: String(opt.value), label: opt.label })), selectedValue: String(alarmMinutes), onSelect: (value) => { setOptionList(null); const selected = Number(value); setAlarmMinutes(selected); void AsyncStorage.setItem(ALARM_MINUTES_KEY, String(selected)); if (notificationsEnabled) void scheduleAllReminders(selected); if (calendarConnected && calendarAlarmsEnabled && user && !isGuest) void syncUserShifts(user.id); } });
     }
   };
 
@@ -665,28 +683,8 @@ export default function SettingsScreen() {
       Alert.alert(t('settings.editGroupName'), t('settings.onlyAdminCanEdit'));
       return;
     }
-    if (Platform.OS === 'ios') {
-      Alert.prompt(
-        t('settings.editGroupName'),
-        undefined,
-        [
-          { text: t('common.cancel'), style: 'cancel' },
-          {
-            text: t('common.save'),
-            onPress: (name: string | undefined) => {
-              if (name?.trim() && currentGroup) {
-                updateGroupName(currentGroup.id, name.trim());
-              }
-            },
-          },
-        ],
-        'plain-text',
-        currentGroup.name
-      );
-    } else {
-      // Android: simple alert (prompt not available)
-      Alert.alert(t('settings.editGroupName'), t('settings.onlyAdminCanEdit'));
-    }
+    setGroupName(currentGroup.name);
+    setShowGroupNameModal(true);
   };
 
   const handleJoinGroup = async () => {
@@ -808,6 +806,53 @@ export default function SettingsScreen() {
     await performClaim();
   };
 
+  const handleUnclaimSchedule = () => {
+    if (!currentGroup?.id || !user?.id) return;
+    Alert.alert(
+      t('settings.unclaimTitle'),
+      t('settings.unclaimBody'),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('settings.unclaimConfirm'),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // The RPC validates membership against a concrete schedule. Do
+              // not sync here: previously synced device-calendar events are
+              // intentionally preserved until the user removes them manually.
+              const { data: schedule, error } = await supabase
+                .from('schedules')
+                .select('id')
+                .eq('group_id', currentGroup.id)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+              if (error) throw error;
+              if (!schedule) throw new Error('SCHEDULE_NOT_IN_GROUP');
+
+              await unclaimPersonInSchedule(schedule.id);
+              await fetchMembers(currentGroup.id);
+              const currentMonth = getCurrentYearMonth();
+              await useShiftStore.getState().fetchShiftsForMonth(user.id, currentMonth);
+              await useShiftStore.getState().fetchTodayShift(user.id);
+              await useShiftStore.getState().fetchUpcomingShifts(user.id);
+              Alert.alert(t('settings.unclaimSuccessTitle'), t('settings.unclaimSuccessBody'));
+            } catch (e) {
+              const msg = e instanceof Error ? e.message : '';
+              Alert.alert(
+                t('common.error'),
+                msg === 'SCHEDULE_NOT_IN_GROUP'
+                  ? t('settings.claimScheduleMissing')
+                  : t('settings.unclaimFailed'),
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const handleLeaveGroup = (groupId: string) => {
     if (!user?.id) return;
     Alert.alert(t('settings.leaveGroup'), t('settings.leaveGroupConfirm'), [
@@ -836,14 +881,7 @@ export default function SettingsScreen() {
           }
         }
       );
-    } else {
-      const buttons = groups.map((g) => ({
-        text: g.name,
-        onPress: () => switchGroup(g.id),
-      }));
-      buttons.push({ text: t('common.cancel'), onPress: () => {} });
-      Alert.alert(t('settings.switchGroup'), undefined, buttons);
-    }
+    } else setOptionList({ title: t('settings.switchGroup'), options: groups.map((group) => ({ value: group.id, label: group.name })), selectedValue: currentGroup?.id, onSelect: (value) => { setOptionList(null); switchGroup(value); } });
   };
 
   const currentLocaleName = LOCALE_NAMES[i18n.language] || LOCALE_NAMES[locale] || 'English';
@@ -1105,8 +1143,8 @@ export default function SettingsScreen() {
           </Text>
           <Card padding="none">
             <SettingsItem
-              icon="logo-apple"
-              title={t('settings.appleCalendar')}
+              icon={Platform.OS === 'ios' ? 'logo-apple' : 'calendar-outline'}
+              title={Platform.OS === 'ios' ? t('settings.appleCalendar') : t('settings.deviceCalendar')}
               subtitle={calendarConnected ? t('settings.connected') : t('settings.notConnected')}
               onPress={handleCalendarConnect}
               rightElement={
@@ -1123,6 +1161,15 @@ export default function SettingsScreen() {
             />
             {calendarConnected && (
               <>
+                {Platform.OS === 'android' && <>
+                  <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
+                  <SettingsItem
+                    icon="calendar-outline"
+                    title={t('settings.calendarDestination')}
+                    subtitle={calendarDestinationName || t('settings.chooseCalendar')}
+                    onPress={showAndroidCalendarDestinations}
+                  />
+                </>}
                 <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
                 <SettingsItem
                   icon="options-outline"
@@ -1194,16 +1241,27 @@ export default function SettingsScreen() {
               {(() => {
                 const claimedName = myGroupMembership?.claimed_name_on_schedule || null;
                 return (
-                  <SettingsItem
-                    icon="bookmark-outline"
-                    title={
-                      claimedName
-                        ? t('settings.claimedAs', { name: claimedName })
-                        : t('settings.claimMySchedule')
-                    }
-                    subtitle={t('settings.claimMyScheduleHint')}
-                    onPress={handleOpenClaimModal}
-                  />
+                  <>
+                    <SettingsItem
+                      icon="bookmark-outline"
+                      title={
+                        claimedName
+                          ? t('settings.claimedAs', { name: claimedName })
+                          : t('settings.claimMySchedule')
+                      }
+                      subtitle={t('settings.claimMyScheduleHint')}
+                      onPress={handleOpenClaimModal}
+                    />
+                    {claimedName && (
+                      <SettingsItem
+                        icon="close-circle-outline"
+                        title={t('settings.unclaimSchedule')}
+                        subtitle={t('settings.unclaimHint')}
+                        onPress={handleUnclaimSchedule}
+                        destructive
+                      />
+                    )}
+                  </>
                 );
               })()}
               <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
@@ -1840,6 +1898,37 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
+      </Modal>
+      <OptionListModal
+        visible={!!optionList}
+        title={optionList?.title || ''}
+        options={optionList?.options || []}
+        selectedValue={optionList?.selectedValue}
+        cancelLabel={t('common.cancel')}
+        onClose={() => setOptionList(null)}
+        onSelect={(value) => optionList?.onSelect(value)}
+      />
+
+      <Modal visible={showGroupNameModal} transparent animationType="fade" onRequestClose={() => setShowGroupNameModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.colors.cardBackground }]} accessibilityViewIsModal>
+            <Text style={[styles.modalTitle, { color: theme.colors.textPrimary }]}>{t('settings.editGroupName')}</Text>
+            <TextInput
+              style={[styles.modalInput, { color: theme.colors.textPrimary, borderColor: theme.colors.border }]}
+              value={groupName}
+              onChangeText={setGroupName}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={() => {
+                if (groupName.trim() && currentGroup) { void updateGroupName(currentGroup.id, groupName.trim()); setShowGroupNameModal(false); }
+              }}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={[styles.modalButton, { borderColor: theme.colors.border }]} onPress={() => setShowGroupNameModal(false)}><Text style={[styles.modalButtonText, { color: theme.colors.textSecondary }]}>{t('common.cancel')}</Text></TouchableOpacity>
+              <TouchableOpacity style={[styles.modalButton, { borderColor: theme.colors.primary, backgroundColor: theme.colors.primary }]} onPress={() => { if (groupName.trim() && currentGroup) { void updateGroupName(currentGroup.id, groupName.trim()); setShowGroupNameModal(false); } }}><Text style={[styles.modalButtonText, { color: theme.colors.white }]}>{t('common.save')}</Text></TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );

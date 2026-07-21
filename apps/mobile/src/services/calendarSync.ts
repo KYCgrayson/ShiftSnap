@@ -50,9 +50,25 @@ export interface CalendarRemovalResult {
   failed: number;
 }
 
+export interface WritableCalendarDestination {
+  id: string;
+  title: string;
+  sourceName?: string;
+}
+
 export async function requestCalendarPermissions(): Promise<boolean> {
   const { status } = await Calendar.requestCalendarPermissionsAsync();
   return status === 'granted';
+}
+
+export async function getWritableCalendars(): Promise<WritableCalendarDestination[]> {
+  const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+  return calendars.filter((calendar) => calendar.allowsModifications).map((calendar) => ({ id: calendar.id, title: calendar.title || calendar.name || CALENDAR_NAME, sourceName: calendar.source?.name || calendar.ownerAccount || undefined }));
+}
+
+export async function isWritableCalendar(calendarId: string): Promise<boolean> {
+  const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+  return calendars.some((calendar) => calendar.id === calendarId && calendar.allowsModifications);
 }
 
 // Thrown when the OS refuses to create a calendar under every source we
@@ -124,7 +140,7 @@ export async function getOrCreateShiftSnapCalendar(): Promise<string | null> {
   const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
 
   // Look for existing ShiftSnap calendar
-  const existing = calendars.find((cal) => cal.title === CALENDAR_NAME);
+  const existing = calendars.find((cal) => cal.title === CALENDAR_NAME && cal.allowsModifications);
   if (existing) return existing.id;
 
   if (Platform.OS === 'ios') {
@@ -369,9 +385,9 @@ export async function removeShiftFromCalendar(eventId: string): Promise<void> {
   }
 }
 
-// Remove only events managed by IShift for the selected account. Newer events
-// carry the sync owner's user ID; unkeyed legacy IShift events are also removed
-// because older app versions had no way to attribute them to an account.
+// Remove only events that carry an ownership key for the selected account.
+// Unkeyed legacy events are deliberately left untouched: on shared devices we
+// cannot safely establish which account created them.
 export async function removeManagedEventsForUser(
   calendarId: string,
   userId: string,
@@ -388,10 +404,8 @@ export async function removeManagedEventsForUser(
     if (!eventDate || eventDate < range.startDate || eventDate > range.endDate) continue;
 
     const syncKey = getEventSyncKey(event);
-    if (syncKey) {
-      const syncOwnerUserId = getUserIdFromSyncKey(syncKey);
-      if (syncOwnerUserId && syncOwnerUserId !== userId) continue;
-    }
+    const syncOwnerUserId = syncKey ? getUserIdFromSyncKey(syncKey) : null;
+    if (!syncOwnerUserId || syncOwnerUserId !== userId) continue;
 
     const deleted = await deleteManagedEvent(event);
     if (deleted) result.deleted += 1;
@@ -450,7 +464,6 @@ export async function reconcileShiftsToCalendar(
 
   const events = await Calendar.getEventsAsync([calendarId], reconcileRange.start, reconcileRange.end);
   const eventsBySyncKey = new Map<string, Calendar.Event[]>();
-  const legacyEventsByDate = new Map<string, Calendar.Event[]>();
   const eventsById = new Map<string, Calendar.Event>();
 
   for (const event of events) {
@@ -464,13 +477,8 @@ export async function reconcileShiftsToCalendar(
       continue;
     }
 
-    if (isIShiftManagedEvent(event)) {
-      const date = getEventLocalStartDate(event);
-      if (!date) continue;
-      const bucket = legacyEventsByDate.get(date) ?? [];
-      bucket.push(event);
-      legacyEventsByDate.set(date, bucket);
-    }
+    // Legacy events without an ownership key are read-only. Reusing one by
+    // date could rewrite another account's event on a shared destination.
   }
 
   const desiredKeys = new Set<string>();
@@ -500,11 +508,17 @@ export async function reconcileShiftsToCalendar(
       (!range?.userId || shift.user_id === range.userId) && shift.calendar_event_id
         ? eventsById.get(shift.calendar_event_id)
         : undefined;
-    const legacyCandidates = legacyEventsByDate.get(shift.date) ?? [];
+    const storedCandidateKey = storedCandidate ? getEventSyncKey(storedCandidate) : null;
+    const storedCandidateOwner = storedCandidateKey
+      ? getUserIdFromSyncKey(storedCandidateKey)
+      : null;
     const selected =
       keyedCandidates.find((event) => !touchedEventIds.has(event.id)) ||
-      (storedCandidate && !touchedEventIds.has(storedCandidate.id) ? storedCandidate : undefined) ||
-      legacyCandidates.find((event) => !touchedEventIds.has(event.id));
+      (storedCandidate &&
+        storedCandidateOwner === (range?.userId || shift.user_id) &&
+        !touchedEventIds.has(storedCandidate.id)
+        ? storedCandidate
+        : undefined);
 
     try {
       let eventId: string;
@@ -520,10 +534,7 @@ export async function reconcileShiftsToCalendar(
       result.eventIdsByShiftId.set(shift.id, eventId);
       touchedEventIds.add(eventId);
 
-      const duplicateCandidates = [
-        ...keyedCandidates,
-        ...legacyCandidates,
-      ].filter((event, index, all) =>
+      const duplicateCandidates = keyedCandidates.filter((event, index, all) =>
         event.id !== eventId &&
         all.findIndex((candidate) => candidate.id === event.id) === index
       );
@@ -554,12 +565,12 @@ export async function reconcileShiftsToCalendar(
     );
     const syncKeyUserId = syncKey ? getUserIdFromSyncKey(syncKey) : null;
     const shouldDelete =
-      (isEventInTargetRange &&
-        syncKey &&
-        isIShiftSyncKey(syncKey) &&
-        (!syncKeyUserId || targetUserIds.has(syncKeyUserId)) &&
-        !desiredKeys.has(syncKey)) ||
-      (isEventInTargetRange && !syncKey && eventDate && legacyEventsByDate.has(eventDate));
+      isEventInTargetRange &&
+      !!syncKey &&
+      isIShiftSyncKey(syncKey) &&
+      !!syncKeyUserId &&
+      targetUserIds.has(syncKeyUserId) &&
+      !desiredKeys.has(syncKey);
 
     if (!shouldDelete) continue;
 

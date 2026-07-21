@@ -51,6 +51,7 @@ interface GroupState {
   updateGroupName: (groupId: string, name: string) => Promise<void>;
   removeMember: (groupId: string, targetUserId: string) => Promise<void>;
   claimPersonInSchedule: (scheduleId: string, nameOnSchedule: string) => Promise<number>;
+  unclaimPersonInSchedule: (scheduleId: string) => Promise<void>;
   initViewScope: () => Promise<void>;
   cycleViewScope: () => { scope: GroupViewScope; label: string };
   reset: () => void;
@@ -324,9 +325,24 @@ export const useGroupStore = create<GroupState>((set, get) => ({
       if (msg.includes('NOT_GROUP_MEMBER')) throw new Error('NOT_GROUP_MEMBER');
       if (msg.includes('SCHEDULE_NOT_IN_GROUP')) throw new Error('SCHEDULE_NOT_IN_GROUP');
       if (msg.includes('SCHEDULE_ROW_NOT_FOUND')) throw new Error('SCHEDULE_ROW_NOT_FOUND');
+      if (msg.includes('AMBIGUOUS_SCHEDULE_ROW')) throw new Error('AMBIGUOUS_SCHEDULE_ROW');
       throw error;
     }
     return (data as number) ?? 0;
+  },
+
+  unclaimPersonInSchedule: async (scheduleId: string) => {
+    if (getIsGuest()) return;
+    const { error } = await supabase.rpc('unclaim_person_in_schedule', {
+      p_schedule_id: scheduleId,
+    });
+    if (error) {
+      const msg = error.message || '';
+      if (msg.includes('NOT_AUTHENTICATED')) throw new Error('NOT_AUTHENTICATED');
+      if (msg.includes('NOT_GROUP_MEMBER')) throw new Error('NOT_GROUP_MEMBER');
+      if (msg.includes('SCHEDULE_NOT_IN_GROUP')) throw new Error('SCHEDULE_NOT_IN_GROUP');
+      throw error;
+    }
   },
 
   initViewScope: async () => {

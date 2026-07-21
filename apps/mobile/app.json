@@ -32,15 +32,7 @@
         "foregroundImage": "./assets/ishift-logo.png",
         "backgroundColor": "#FFFBF7"
       },
-      "package": "com.shiftsnap.app",
-      "permissions": [
-        "android.permission.CAMERA",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.READ_CALENDAR",
-        "android.permission.WRITE_CALENDAR"
-      ]
+      "package": "com.shiftsnap.app"
     },
     "web": {
       "bundler": "metro",
@@ -59,7 +51,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "IShift needs photo library access to select schedule images"
+          "photosPermission": "IShift needs photo library access to select schedule images",
+          "microphonePermission": false
         }
       ],
       [

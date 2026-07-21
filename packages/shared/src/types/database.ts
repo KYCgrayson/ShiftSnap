@@ -576,6 +576,10 @@ export type Database = {
         Args: { gid: string; target_user_id: string }
         Returns: boolean
       }
+      unclaim_person_in_schedule: {
+        Args: { p_schedule_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       comparison_status: "pending" | "matched" | "discrepancy" | "resolved"

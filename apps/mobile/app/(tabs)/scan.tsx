@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../src/theme';
@@ -27,23 +28,34 @@ import { formatYearMonth } from '@shiftsnap/shared';
 
 const DEMO_ACCOUNT_EMAIL = 'demo@ishift.app';
 const DEMO_ROSTER_IMAGE = require('../../assets/ishift-demo-roster-september-2026.png');
+const PENDING_SCAN_IMAGE_PICKER_KEY = 'shiftsnap_pending_scan_image_picker';
 
 const getImageMimeType = (uri: string): 'image/png' | 'image/jpeg' => {
   return uri.toLowerCase().includes('.png') ? 'image/png' : 'image/jpeg';
 };
 
-// Generate a fresh signed URL from a storage path
+const getShiftImageStoragePath = (imageUrl: string): string | null => {
+  if (!imageUrl.startsWith('http')) return imageUrl;
+  try {
+    const pathname = new URL(imageUrl).pathname;
+    const match = pathname.match(/\/storage\/v1\/object\/(?:sign|public|authenticated)\/shift-images\/(.+)$/);
+    return match?.[1] ? decodeURIComponent(match[1]) : null;
+  } catch {
+    return null;
+  }
+};
+
+// Supabase storage URLs (including previous signed URLs) are refreshed before
+// display. Only genuinely external HTTP URLs are used directly.
 const getSignedImageUrl = async (imageUrl: string): Promise<string> => {
-  // If it's already a local file URI or a fresh URL, return as-is
   if (imageUrl.startsWith('file://') || imageUrl.startsWith('data:')) return imageUrl;
-  // If it's a storage path (no http), generate a signed URL
-  if (!imageUrl.startsWith('http')) {
+  const storagePath = getShiftImageStoragePath(imageUrl);
+  if (storagePath) {
     const { data, error } = await supabase.storage
       .from('shift-images')
-      .createSignedUrl(imageUrl, 3600);
+      .createSignedUrl(storagePath, 3600);
     if (!error && data?.signedUrl) return data.signedUrl;
   }
-  // Fallback: return original (might be an old signed URL)
   return imageUrl;
 };
 
@@ -61,7 +73,28 @@ export default function ScanScreen() {
   const { createScheduleFromOCR, schedules, fetchSchedules } = useScheduleStore();
   const currentGroupId = useGroupStore((s) => s.currentGroup?.id);
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+  const handledPickerUris = useRef(new Set<string>());
   const isDemoAccount = user?.email?.toLowerCase() === DEMO_ACCOUNT_EMAIL;
+
+  const handleImagePickerResult = useCallback((result: ImagePicker.ImagePickerResult) => {
+    const uri = result.canceled ? undefined : result.assets?.[0]?.uri;
+    if (!uri || handledPickerUris.current.has(uri)) return;
+    handledPickerUris.current.add(uri);
+    setCapturedImage(uri);
+  }, []);
+
+  // Android can recreate the activity while the system photo picker is open.
+  // Restore its result into the preview; OCR still waits for an explicit tap.
+  useEffect(() => {
+    AsyncStorage.getItem(PENDING_SCAN_IMAGE_PICKER_KEY)
+      .then(async (isPending) => {
+        if (isPending !== 'true') return;
+        const result = await ImagePicker.getPendingResultAsync();
+        if (result && !('code' in result)) handleImagePickerResult(result);
+        await AsyncStorage.removeItem(PENDING_SCAN_IMAGE_PICKER_KEY);
+      })
+      .catch((error) => console.warn('Pending image picker recovery failed:', error));
+  }, [handleImagePickerResult]);
 
   // Pulse animation for processing overlay
   useEffect(() => {
@@ -118,16 +151,17 @@ export default function ScanScreen() {
 
   const pickImage = async () => {
     try {
+      await AsyncStorage.setItem(PENDING_SCAN_IMAGE_PICKER_KEY, 'true');
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
         quality: 0.8,
       });
 
-      if (!result.canceled && result.assets[0]) {
-        setCapturedImage(result.assets[0].uri);
-      }
+      handleImagePickerResult(result);
+      await AsyncStorage.removeItem(PENDING_SCAN_IMAGE_PICKER_KEY);
     } catch (error) {
+      await AsyncStorage.removeItem(PENDING_SCAN_IMAGE_PICKER_KEY);
       console.error('Image picker error:', error);
     }
   };
@@ -216,18 +250,21 @@ export default function ScanScreen() {
   // Upload image to storage for record keeping (non-blocking, best-effort)
   const uploadToStorage = async (uri: string): Promise<string | null> => {
     try {
+      if (!user?.id) return null;
       const mimeType = getImageMimeType(uri);
-      const fileName = `schedule_${Date.now()}.${mimeType === 'image/png' ? 'png' : 'jpg'}`;
+      const extension = mimeType === 'image/png' ? 'png' : 'jpg';
+      const randomSuffix = Math.random().toString(36).slice(2, 10);
+      const storagePath = `${user.id}/schedule_${Date.now()}_${randomSuffix}.${extension}`;
       const response = await fetch(uri);
       const blob = await response.blob();
       const { error } = await supabase.storage
         .from('shift-images')
-        .upload(fileName, blob, { contentType: mimeType });
+        .upload(storagePath, blob, { contentType: mimeType });
       if (error) {
         console.warn('Storage upload failed (non-critical):', error.message);
         return null;
       }
-      return fileName;
+      return storagePath;
     } catch (e) {
       console.warn('Storage upload error (non-critical):', e);
       return null;

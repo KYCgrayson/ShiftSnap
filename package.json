@@ -23,14 +23,14 @@
     "ios": "expo run:ios"
   },
   "engines": {
-    "node": ">=18.0.0",
+    "node": ">=20.19.0",
     "pnpm": ">=8.0.0"
   },
   "packageManager": "pnpm@9.0.0",
   "author": "Grayson",
   "license": "MIT",
   "dependencies": {
-    "expo": "~54.0.33",
+    "expo": "~54.0.36",
     "react": "19.1.0",
     "react-native": "0.81.5"
   }

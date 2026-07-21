@@ -1,4 +1,20 @@
 import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
+
+export const SHIFT_REMINDERS_CHANNEL_ID = 'shift-reminders';
+
+async function ensureAndroidNotificationChannel(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+
+  await Notifications.setNotificationChannelAsync(SHIFT_REMINDERS_CHANNEL_ID, {
+    name: 'IShift shift reminders',
+    description: 'Reminders before scheduled work shifts',
+    importance: Notifications.AndroidImportance.HIGH,
+    sound: 'default',
+    vibrationPattern: [0, 250, 250, 250],
+    lightColor: '#4A9DAD',
+  });
+}
 
 // Configure notification handler
 Notifications.setNotificationHandler({
@@ -13,6 +29,9 @@ Notifications.setNotificationHandler({
 
 export async function requestNotificationPermissions(): Promise<boolean> {
   try {
+    // Android 13 does not display its notification permission prompt until a
+    // channel exists. This is safe to call repeatedly and updates the channel.
+    await ensureAndroidNotificationChannel();
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
 
@@ -67,6 +86,10 @@ export async function scheduleShiftReminder(
     : `Your shift starts in ${alarmMinutes} minutes`;
 
   try {
+    await ensureAndroidNotificationChannel();
+    // Android reminders deliberately use Expo's normal best-effort scheduling.
+    // We do not request SCHEDULE_EXACT_ALARM because it requires separate
+    // system special access that cannot be granted from this notification flow.
     const notificationId = await Notifications.scheduleNotificationAsync({
       content: {
         title,
@@ -77,6 +100,7 @@ export async function scheduleShiftReminder(
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DATE,
         date: triggerDate,
+        ...(Platform.OS === 'android' ? { channelId: SHIFT_REMINDERS_CHANNEL_ID } : {}),
       },
     });
 

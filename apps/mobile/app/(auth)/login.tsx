@@ -1,368 +1,151 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  SafeAreaView,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  TouchableOpacity,
   Alert,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { Link, router } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { useTranslation } from 'react-i18next';
-import { Button, Input } from '../../src/components/ui';
 import { useTheme } from '../../src/theme';
 import { useAuthStore } from '../../src/stores/authStore';
-import { resetPassword } from '../../src/services/supabase';
-import { isValidEmail } from '@shiftsnap/shared';
 
 export default function LoginScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
-  const { signIn, signInAsGuest, signInWithGoogle, signInWithApple, loading, error, clearError } = useAuthStore();
+  const { signInAsGuest, signInWithGoogle, signInWithApple, loading, error } = useAuthStore();
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [emailError, setEmailError] = useState('');
-  const [passwordError, setPasswordError] = useState('');
+  const handleProviderSignIn = async (provider: 'google' | 'apple') => {
+    const result = provider === 'google'
+      ? await signInWithGoogle()
+      : await signInWithApple();
 
-  const validateForm = (): boolean => {
-    let valid = true;
-    clearError();
-
-    if (!email.trim()) {
-      setEmailError(t('auth.emailRequired'));
-      valid = false;
-    } else if (!isValidEmail(email)) {
-      setEmailError(t('auth.invalidEmail'));
-      valid = false;
-    } else {
-      setEmailError('');
-    }
-
-    if (!password) {
-      setPasswordError(t('auth.passwordRequired'));
-      valid = false;
-    } else if (password.length < 6) {
-      setPasswordError(t('auth.passwordTooShort'));
-      valid = false;
-    } else {
-      setPasswordError('');
-    }
-
-    return valid;
-  };
-
-  const handleSignIn = async () => {
-    if (!validateForm()) return;
-
-    const result = await signIn(email, password);
     if (result.success) {
       router.replace('/(tabs)/home');
+    } else if (result.error) {
+      Alert.alert(t('common.error'), result.error);
     }
   };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.warmWhite }]}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* Header */}
-          <View style={styles.header}>
-            <TouchableOpacity
-              onPress={() => router.back()}
-              style={styles.backButton}
-            >
-              <Ionicons
-                name="arrow-back"
-                size={24}
-                color={theme.colors.textPrimary}
-              />
-            </TouchableOpacity>
-            <Text style={[styles.title, { color: theme.colors.textPrimary }]}>
-              {t('auth.welcomeBack')}
-            </Text>
-            <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
-              {t('auth.signInSubtitle')}
-            </Text>
-          </View>
+      <View style={styles.content}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />
+        </TouchableOpacity>
 
-          {/* Form */}
-          <View style={styles.form}>
-            <Input
-              label={t('auth.email')}
-              placeholder={t('auth.emailPlaceholder')}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              error={emailError}
-              leftIcon="mail-outline"
-            />
+        <View style={styles.header}>
+          <Text style={[styles.title, { color: theme.colors.textPrimary }]}>
+            {t('auth.welcomeBack')}
+          </Text>
+          <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
+            {t('auth.signInSubtitle')}
+          </Text>
+        </View>
 
-            <Input
-              label={t('auth.password')}
-              placeholder={t('auth.passwordPlaceholder')}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              error={passwordError}
-              leftIcon="lock-closed-outline"
-            />
-
-            {error && (
-              <View style={[styles.errorBanner, { backgroundColor: theme.colors.error + '15' }]}>
-                <Text style={[styles.errorText, { color: theme.colors.error }]}>
-                  {error}
-                </Text>
-              </View>
-            )}
-
-            <TouchableOpacity
-              style={styles.forgotPassword}
-              onPress={async () => {
-                if (!email.trim()) {
-                  Alert.alert(
-                    t('auth.resetPasswordTitle'),
-                    t('auth.enterEmailFirst'),
-                  );
-                  return;
-                }
-                if (!isValidEmail(email)) {
-                  Alert.alert(
-                    t('auth.resetPasswordTitle'),
-                    t('auth.invalidEmail'),
-                  );
-                  return;
-                }
-                try {
-                  const { error: resetError } = await resetPassword(email.trim());
-                  if (resetError) {
-                    Alert.alert(t('common.error'), resetError.message);
-                  } else {
-                    Alert.alert(
-                      t('auth.resetPasswordTitle'),
-                      t('auth.resetPasswordSuccess'),
-                    );
-                  }
-                } catch {
-                  Alert.alert(t('common.error'), t('auth.resetPasswordFailed'));
-                }
+        <View style={styles.providers}>
+          {Platform.OS === 'ios' && (
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+              cornerRadius={12}
+              style={styles.appleButton}
+              onPress={() => {
+                if (!loading) void handleProviderSignIn('apple');
               }}
-            >
-              <Text style={[styles.forgotPasswordText, { color: theme.colors.primary }]}>
-                {t('auth.forgotPassword')}
-              </Text>
-            </TouchableOpacity>
-
-            <Button
-              title={t('common.signIn')}
-              onPress={handleSignIn}
+              pointerEvents={loading ? 'none' : 'auto'}
+              accessibilityState={{ disabled: loading }}
+            />
+          )}
+          {(Platform.OS === 'ios' || Platform.OS === 'android') && (
+            <ProviderButton
+              icon="logo-google"
+              iconColor="#DB4437"
+              label="Google"
               loading={loading}
-              fullWidth
-              style={{ marginTop: 8 }}
+              onPress={() => handleProviderSignIn('google')}
+              theme={theme}
             />
-          </View>
+          )}
+        </View>
 
-          {/* Divider */}
-          <View style={styles.divider}>
-            <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
-            <Text style={[styles.dividerText, { color: theme.colors.textMuted }]}>
-              {t('auth.orContinueWith')}
-            </Text>
-            <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
-          </View>
+        {error && (
+          <Text style={[styles.errorText, { color: theme.colors.error }]}>{error}</Text>
+        )}
 
-          {/* Social Sign In */}
-          <View style={styles.socialButtons}>
-            <TouchableOpacity
-              style={[
-                styles.socialButton,
-                {
-                  backgroundColor: theme.colors.cardBackground,
-                  borderColor: theme.colors.border,
-                },
-              ]}
-              onPress={async () => {
-                const result = await signInWithGoogle();
-                if (result.success) {
-                  router.replace('/(tabs)/home');
-                } else if (result.error) {
-                  Alert.alert(t('common.error'), result.error);
-                }
-              }}
-            >
-              <Ionicons name="logo-google" size={20} color="#DB4437" />
-              <Text style={[styles.socialButtonText, { color: theme.colors.textPrimary }]}>
-                Google
-              </Text>
-            </TouchableOpacity>
-
-            {Platform.OS === 'ios' && (
-              <TouchableOpacity
-                style={[
-                  styles.socialButton,
-                  {
-                    backgroundColor: theme.colors.cardBackground,
-                    borderColor: theme.colors.border,
-                  },
-                ]}
-                onPress={async () => {
-                  const result = await signInWithApple();
-                  if (result.success) {
-                    router.replace('/(tabs)/home');
-                  } else if (result.error) {
-                    Alert.alert(t('common.error'), result.error);
-                  }
-                }}
-              >
-                <Ionicons name="logo-apple" size={20} color={theme.colors.textPrimary} />
-                <Text style={[styles.socialButtonText, { color: theme.colors.textPrimary }]}>
-                  Apple
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Register link */}
-          <View style={styles.registerRow}>
-            <Text style={[styles.registerText, { color: theme.colors.textSecondary }]}>
-              {t('auth.noAccount')}
-            </Text>
-            <Link href="/(auth)/register">
-              <Text style={[styles.registerLink, { color: theme.colors.primary }]}>
-                {' '}{t('auth.signUp')}
-              </Text>
-            </Link>
-          </View>
-
-          {/* Guest Mode */}
-          <TouchableOpacity
-            style={[styles.guestButton, { borderColor: theme.colors.border }]}
-            onPress={() => {
-              signInAsGuest();
-              router.replace('/(tabs)/home');
-            }}
-          >
-            <Text style={[styles.guestButtonText, { color: theme.colors.textSecondary }]}>
-              {t('auth.continueAsGuest')}
-            </Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        <TouchableOpacity
+          style={[styles.guestButton, { borderColor: theme.colors.border }]}
+          onPress={() => {
+            signInAsGuest();
+            router.replace('/(tabs)/home');
+          }}
+          disabled={loading}
+        >
+          <Text style={[styles.guestButtonText, { color: theme.colors.textSecondary }]}>
+            {t('auth.continueAsGuest')}
+          </Text>
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
 
+function ProviderButton({
+  icon,
+  iconColor,
+  label,
+  loading,
+  onPress,
+  theme,
+}: {
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  iconColor?: string;
+  label: string;
+  loading: boolean;
+  onPress: () => void;
+  theme: ReturnType<typeof useTheme>;
+}) {
+  return (
+    <TouchableOpacity
+      style={[styles.providerButton, {
+        backgroundColor: theme.colors.cardBackground,
+        borderColor: theme.colors.border,
+      }]}
+      onPress={onPress}
+      disabled={loading}
+    >
+      <Ionicons name={icon} size={20} color={iconColor ?? theme.colors.textPrimary} />
+      <Text style={[styles.providerText, { color: theme.colors.textPrimary }]}>
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingBottom: 32,
-  },
-  header: {
-    marginTop: 16,
-    marginBottom: 32,
-  },
-  backButton: {
-    marginBottom: 24,
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-  },
-  form: {
-    marginBottom: 24,
-  },
-  errorBanner: {
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 16,
-  },
-  errorText: {
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  forgotPassword: {
-    alignSelf: 'flex-end',
-    marginBottom: 8,
-  },
-  forgotPasswordText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  divider: {
-    flexDirection: 'row',
+  container: { flex: 1 },
+  content: { flex: 1, padding: 24 },
+  backButton: { alignSelf: 'flex-start', paddingVertical: 12 },
+  header: { marginTop: 40, marginBottom: 40 },
+  title: { fontSize: 28, fontWeight: '700', marginBottom: 8 },
+  subtitle: { fontSize: 16, lineHeight: 22 },
+  providers: { gap: 12 },
+  appleButton: { height: 52, width: '100%' },
+  providerButton: {
     alignItems: 'center',
-    marginBottom: 24,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-  },
-  dividerText: {
-    marginHorizontal: 16,
-    fontSize: 14,
-  },
-  socialButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 32,
-  },
-  socialButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 48,
     borderRadius: 12,
     borderWidth: 1,
-    gap: 8,
-  },
-  socialButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  registerRow: {
     flexDirection: 'row',
     justifyContent: 'center',
+    minHeight: 52,
   },
-  registerText: {
-    fontSize: 14,
-  },
-  registerLink: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  guestButton: {
-    marginTop: 24,
-    paddingVertical: 12,
-    alignItems: 'center',
-    borderTopWidth: 1,
-  },
-  guestButtonText: {
-    fontSize: 14,
-  },
+  providerText: { fontSize: 16, fontWeight: '600', marginLeft: 10 },
+  errorText: { fontSize: 14, marginTop: 16, textAlign: 'center' },
+  guestButton: { alignItems: 'center', borderRadius: 12, borderWidth: 1, marginTop: 24, paddingVertical: 14 },
+  guestButtonText: { fontSize: 15, fontWeight: '600' },
 });

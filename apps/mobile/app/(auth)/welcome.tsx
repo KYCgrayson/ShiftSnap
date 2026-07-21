@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link, router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../src/components/ui';
@@ -9,24 +10,11 @@ import { useAuthStore } from '../../src/stores/authStore';
 export default function WelcomeScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
-  const { signInAsGuest, signInAsDemo } = useAuthStore();
-  const [demoLoading, setDemoLoading] = useState(false);
+  const { signInAsGuest } = useAuthStore();
 
   const handleGuestMode = () => {
     signInAsGuest();
     router.replace('/(tabs)/home');
-  };
-
-  const handleDemoLogin = async () => {
-    if (demoLoading) return;
-    setDemoLoading(true);
-    const result = await signInAsDemo();
-    setDemoLoading(false);
-    if (result.success) {
-      router.replace('/(tabs)/home');
-    } else {
-      Alert.alert(t('common.error'), result.error ?? t('welcome.demoFailed'));
-    }
   };
 
   return (
@@ -89,20 +77,6 @@ export default function WelcomeScreen() {
             </Text>
           </Link>
         </View>
-
-        <TouchableOpacity
-          onPress={handleDemoLogin}
-          disabled={demoLoading}
-          style={[styles.demoRow, { borderColor: theme.colors.primary }]}
-        >
-          {demoLoading ? (
-            <ActivityIndicator size="small" color={theme.colors.primary} />
-          ) : (
-            <Text style={[styles.demoLink, { color: theme.colors.primary }]}>
-              {t('welcome.loginAsDemo')}
-            </Text>
-          )}
-        </TouchableOpacity>
 
         <TouchableOpacity onPress={handleGuestMode} style={styles.guestRow}>
           <Text style={[styles.guestLink, { color: theme.colors.textSecondary }]}>
@@ -240,19 +214,6 @@ const styles = StyleSheet.create({
   guestRow: {
     alignItems: 'center',
     marginTop: 12,
-  },
-  demoRow: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 16,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderRadius: 12,
-    minHeight: 44,
-  },
-  demoLink: {
-    fontSize: 15,
-    fontWeight: '600',
   },
   guestLink: {
     fontSize: 14,

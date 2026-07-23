@@ -18,8 +18,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../src/theme';
-import { Button } from '../../src/components/ui';
+import { Button, useToast } from '../../src/components/ui';
 import { supabase } from '../../src/services/supabase';
+import { getShiftImageStoragePath } from '../../src/services/shiftImages';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useScheduleStore } from '../../src/stores/scheduleStore';
 import { useLocaleStore } from '../../src/stores/localeStore';
@@ -32,17 +33,6 @@ const PENDING_SCAN_IMAGE_PICKER_KEY = 'shiftsnap_pending_scan_image_picker';
 
 const getImageMimeType = (uri: string): 'image/png' | 'image/jpeg' => {
   return uri.toLowerCase().includes('.png') ? 'image/png' : 'image/jpeg';
-};
-
-const getShiftImageStoragePath = (imageUrl: string): string | null => {
-  if (!imageUrl.startsWith('http')) return imageUrl;
-  try {
-    const pathname = new URL(imageUrl).pathname;
-    const match = pathname.match(/\/storage\/v1\/object\/(?:sign|public|authenticated)\/shift-images\/(.+)$/);
-    return match?.[1] ? decodeURIComponent(match[1]) : null;
-  } catch {
-    return null;
-  }
 };
 
 // Supabase storage URLs (including previous signed URLs) are refreshed before
@@ -62,6 +52,7 @@ const getSignedImageUrl = async (imageUrl: string): Promise<string> => {
 export default function ScanScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
+  const toast = useToast();
   const [permission, requestPermission] = useCameraPermissions();
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -327,8 +318,9 @@ export default function ScanScreen() {
 
       const [ocrData, storagePath] = await Promise.all([ocrPromise, storagePromise]);
 
-      // DB stores storage path for future access; immediate review uses local file (always reliable)
-      const imagePathForDb = storagePath || capturedImage;
+      // Authenticated records must only retain a persistent Storage reference.
+      // OCR/shifts remain useful even if an image upload failed.
+      const imagePathForDb = isGuest ? capturedImage : (storagePath || '');
 
       // Determine year-month from OCR or use current
       const yearMonth = ocrData.detected_year && ocrData.detected_month
@@ -342,6 +334,10 @@ export default function ScanScreen() {
         yearMonth,
         ocrData
       );
+
+      if (!isGuest && !storagePath) {
+        toast(t('scan.photoNotSavedMessage'), 5000);
+      }
 
       // Navigate to review screen — use local file URI for immediate display
       router.push({

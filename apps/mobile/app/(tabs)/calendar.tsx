@@ -13,7 +13,7 @@ import {
   Image,
   ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadNoteImage, deleteNoteImage } from '../../src/services/noteImages';
@@ -28,6 +28,7 @@ import { usePersonStore } from '../../src/stores/personStore';
 import { useCalendarStore } from '../../src/stores/calendarStore';
 import { useGroupStore } from '../../src/stores/groupStore';
 import { supabase } from '../../src/services/supabase';
+import { getShiftImageStoragePath, isPersistentShiftImageReference } from '../../src/services/shiftImages';
 import { useToast } from '../../src/components/ui';
 import { Card, TimePickerInput } from '../../src/components/ui';
 import { GuestUpgradeBanner } from '../../src/components/GuestUpgradeBanner';
@@ -91,24 +92,9 @@ interface SchedulePhoto {
   created_at: string;
 }
 
-// Older releases stored a public or already-signed Storage URL. Convert those
-// values back to their object path so every remote roster image is authorized
-// again with a fresh, short-lived signed URL.
-function extractShiftImagePath(imageUrl: string): string | null {
-  if (!imageUrl.startsWith('http')) return imageUrl;
-  const match = imageUrl.match(
-    /\/storage\/v1\/object\/(?:public|sign|authenticated)\/shift-images\/([^?]+)/,
-  );
-  if (!match?.[1]) return null;
-  try {
-    return decodeURIComponent(match[1]);
-  } catch {
-    return match[1];
-  }
-}
-
 export default function CalendarScreen() {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const locale = useLocaleStore((s) => s.locale);
   const { user } = useAuthStore();
@@ -143,6 +129,7 @@ export default function CalendarScreen() {
   const [schedulePhotoLoading, setSchedulePhotoLoading] = useState(false);
   const [schedulePhotoError, setSchedulePhotoError] = useState<string | null>(null);
   const [monthSchedulePhotos, setMonthSchedulePhotos] = useState<SchedulePhoto[]>([]);
+  const [failedSchedulePhotoIds, setFailedSchedulePhotoIds] = useState<Set<string>>(new Set());
 
   // Shift edit modal state
   const [showEditModal, setShowEditModal] = useState(false);
@@ -163,6 +150,10 @@ export default function CalendarScreen() {
 
   const userId = user?.id;
   const groupIds = useMemo(() => groups.map((group) => group.id).sort(), [groups]);
+  const availableSchedulePhotos = useMemo(
+    () => monthSchedulePhotos.filter((photo) => !failedSchedulePhotoIds.has(photo.id)),
+    [failedSchedulePhotoIds, monthSchedulePhotos],
+  );
 
   const appendNotePhoto = useCallback(async (uri: string, reopenNote = false) => {
     if (!userId || handledNoteImageUris.current.has(uri)) return;
@@ -323,7 +314,9 @@ export default function CalendarScreen() {
           console.warn('Unable to load schedule photos:', error.message);
           return;
         }
-        setMonthSchedulePhotos((data || []) as SchedulePhoto[]);
+        setMonthSchedulePhotos(((data || []) as SchedulePhoto[]).filter((photo) =>
+          isPersistentShiftImageReference(photo.image_url),
+        ));
       });
     return () => {
       if (schedulePhotoFetchRequest.current === request) {
@@ -341,13 +334,14 @@ export default function CalendarScreen() {
     setSchedulePhotoIndex(0);
     setSchedulePhotoUrl(null);
     setSchedulePhotoError(null);
+    setFailedSchedulePhotoIds(new Set());
   }, [currentMonth, groupIds, userId, viewScope]);
 
   const resolveSchedulePhotoUrl = useCallback(async (imageUrl: string) => {
     if (imageUrl.startsWith('file://') || imageUrl.startsWith('data:')) {
       return imageUrl;
     }
-    const storagePath = extractShiftImagePath(imageUrl);
+    const storagePath = getShiftImageStoragePath(imageUrl);
     if (!storagePath) return imageUrl;
     const { data, error } = await supabase.storage
       .from('shift-images')
@@ -357,7 +351,7 @@ export default function CalendarScreen() {
   }, []);
 
   const openSchedulePhoto = useCallback(async (index = 0) => {
-    const schedule = monthSchedulePhotos[index];
+    const schedule = availableSchedulePhotos[index];
     if (!schedule) return;
     setSchedulePhotoIndex(index);
     setSchedulePhotoUrl(null);
@@ -376,7 +370,26 @@ export default function CalendarScreen() {
     } finally {
       if (request === schedulePhotoOpenRequest.current) setSchedulePhotoLoading(false);
     }
-  }, [monthSchedulePhotos, resolveSchedulePhotoUrl, t]);
+  }, [availableSchedulePhotos, resolveSchedulePhotoUrl, t]);
+
+  const markSchedulePhotoFailed = useCallback((id: string) => {
+    setFailedSchedulePhotoIds((previous) => new Set(previous).add(id));
+  }, []);
+
+  const handleSchedulePhotoRenderError = useCallback((reason: string) => {
+    console.warn('Schedule image failed to render:', reason);
+    const failed = availableSchedulePhotos[schedulePhotoIndex];
+    if (!failed) return;
+    const remaining = availableSchedulePhotos.filter((photo) => photo.id !== failed.id);
+    setSchedulePhotoUrl(null);
+    setSchedulePhotoIndex(Math.min(schedulePhotoIndex, Math.max(0, remaining.length - 1)));
+    markSchedulePhotoFailed(failed.id);
+    setSchedulePhotoError(
+      remaining.length === 0
+        ? t('calendar.schedulePhotoUnavailable')
+        : t('calendar.schedulePhotoLoadFailed'),
+    );
+  }, [availableSchedulePhotos, markSchedulePhotoFailed, schedulePhotoIndex, t]);
 
   // Member profiles include each member's one claimed roster identity.
   useEffect(() => {
@@ -823,23 +836,23 @@ export default function CalendarScreen() {
           <TouchableOpacity
             style={[
               styles.headerIconButton,
-              monthSchedulePhotos.length === 0 && styles.headerIconButtonDisabled,
+              availableSchedulePhotos.length === 0 && styles.headerIconButtonDisabled,
             ]}
             onPress={() => void openSchedulePhoto()}
-            disabled={monthSchedulePhotos.length === 0}
+            disabled={availableSchedulePhotos.length === 0}
             accessibilityRole="button"
             accessibilityLabel={t('calendar.viewSchedulePhoto')}
             accessibilityHint={
-              monthSchedulePhotos.length > 0
+              availableSchedulePhotos.length > 0
                 ? t('calendar.viewSchedulePhotoHint')
                 : t('calendar.schedulePhotoUnavailable')
             }
-            accessibilityState={{ disabled: monthSchedulePhotos.length === 0 }}
+            accessibilityState={{ disabled: availableSchedulePhotos.length === 0 }}
           >
             <Ionicons
               name="image-outline"
               size={21}
-              color={monthSchedulePhotos.length > 0 ? theme.colors.primary : theme.colors.textMuted}
+              color={availableSchedulePhotos.length > 0 ? theme.colors.primary : theme.colors.textMuted}
             />
           </TouchableOpacity>
           {/* Toggle shift codes on calendar */}
@@ -1610,7 +1623,12 @@ export default function CalendarScreen() {
         animationType="fade"
         onRequestClose={() => setShowSchedulePhoto(false)}
       >
-        <SafeAreaView style={[styles.schedulePhotoModal, { backgroundColor: theme.colors.warmWhite }]}>
+        <View
+          style={[
+            styles.schedulePhotoModal,
+            { backgroundColor: theme.colors.warmWhite, paddingTop: insets.top, paddingBottom: insets.bottom },
+          ]}
+        >
           <View style={[styles.schedulePhotoHeader, { borderBottomColor: theme.colors.border }]}>
             <View style={{ flex: 1 }}>
               <Text style={[styles.schedulePhotoTitle, { color: theme.colors.textPrimary }]}>
@@ -1618,8 +1636,8 @@ export default function CalendarScreen() {
               </Text>
               <Text style={[styles.schedulePhotoSubtitle, { color: theme.colors.textSecondary }]}>
                 {currentMonth}
-                {monthSchedulePhotos.length > 1
-                  ? ` · ${schedulePhotoIndex + 1}/${monthSchedulePhotos.length}`
+                {availableSchedulePhotos.length > 1
+                  ? ` · ${schedulePhotoIndex + 1}/${availableSchedulePhotos.length}`
                   : ''}
               </Text>
             </View>
@@ -1644,11 +1662,16 @@ export default function CalendarScreen() {
                 </Text>
                 <TouchableOpacity
                   style={[styles.schedulePhotoRetry, { backgroundColor: theme.colors.primary }]}
-                  onPress={() => void openSchedulePhoto(schedulePhotoIndex)}
+                  onPress={() => {
+                    if (availableSchedulePhotos.length === 0) setShowSchedulePhoto(false);
+                    else void openSchedulePhoto(Math.min(schedulePhotoIndex, availableSchedulePhotos.length - 1));
+                  }}
                   accessibilityRole="button"
-                  accessibilityLabel={t('common.retry')}
+                  accessibilityLabel={availableSchedulePhotos.length === 0 ? t('common.close') : t('common.retry')}
                 >
-                  <Text style={styles.schedulePhotoRetryText}>{t('common.retry')}</Text>
+                  <Text style={styles.schedulePhotoRetryText}>
+                    {availableSchedulePhotos.length === 0 ? t('common.close') : t('common.retry')}
+                  </Text>
                 </TouchableOpacity>
               </View>
             ) : schedulePhotoUrl ? (
@@ -1657,13 +1680,18 @@ export default function CalendarScreen() {
                 style={styles.schedulePhotoImage}
                 resizeMode="contain"
                 accessibilityLabel={t('calendar.schedulePhotoTitle')}
-                onError={() => setSchedulePhotoError(t('calendar.schedulePhotoLoadFailed'))}
+                onError={(error) => handleSchedulePhotoRenderError(error.nativeEvent.error)}
               />
             ) : null}
           </View>
 
-          {monthSchedulePhotos.length > 1 && (
-            <View style={[styles.schedulePhotoPager, { borderTopColor: theme.colors.border }]}>
+          {availableSchedulePhotos.length > 1 && (
+            <View
+              style={[
+                styles.schedulePhotoPager,
+                { borderTopColor: theme.colors.border },
+              ]}
+            >
               <TouchableOpacity
                 style={styles.schedulePhotoPageButton}
                 disabled={schedulePhotoIndex === 0 || schedulePhotoLoading}
@@ -1679,25 +1707,25 @@ export default function CalendarScreen() {
                 />
               </TouchableOpacity>
               <Text style={[styles.schedulePhotoPageText, { color: theme.colors.textSecondary }]}>
-                {schedulePhotoIndex + 1} / {monthSchedulePhotos.length}
+                {schedulePhotoIndex + 1} / {availableSchedulePhotos.length}
               </Text>
               <TouchableOpacity
                 style={styles.schedulePhotoPageButton}
-                disabled={schedulePhotoIndex === monthSchedulePhotos.length - 1 || schedulePhotoLoading}
+                disabled={schedulePhotoIndex === availableSchedulePhotos.length - 1 || schedulePhotoLoading}
                 onPress={() => void openSchedulePhoto(schedulePhotoIndex + 1)}
                 accessibilityRole="button"
                 accessibilityLabel={t('calendar.nextSchedulePhoto')}
-                accessibilityState={{ disabled: schedulePhotoIndex === monthSchedulePhotos.length - 1 || schedulePhotoLoading }}
+                accessibilityState={{ disabled: schedulePhotoIndex === availableSchedulePhotos.length - 1 || schedulePhotoLoading }}
               >
                 <Ionicons
                   name="chevron-forward"
                   size={25}
-                  color={schedulePhotoIndex === monthSchedulePhotos.length - 1 ? theme.colors.textMuted : theme.colors.primary}
+                  color={schedulePhotoIndex === availableSchedulePhotos.length - 1 ? theme.colors.textMuted : theme.colors.primary}
                 />
               </TouchableOpacity>
             </View>
           )}
-        </SafeAreaView>
+        </View>
       </Modal>
     </SafeAreaView>
   );

@@ -145,6 +145,7 @@ export default {
     noOcrDataDesc: '此班表沒有 OCR 資料，請重新掃描。',
     reanalyze: '重新分析',
     scheduleMonth: '排班月份',
+    photoNotSavedMessage: '班表資料已儲存，但原始照片無法儲存。若之後需要在日曆查看照片，請重新掃描或重新選擇該照片。',
   },
 
   // Settings screen

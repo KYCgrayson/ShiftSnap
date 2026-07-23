@@ -145,6 +145,7 @@ export default {
     noOcrDataDesc: 'This schedule has no OCR data. Please scan it again.',
     reanalyze: 'Re-analyze',
     scheduleMonth: 'Schedule',
+    photoNotSavedMessage: 'The schedule was saved, but its original photo could not be saved. Please scan or select it again if you need to view it later in Calendar.',
   },
 
   // Settings screen

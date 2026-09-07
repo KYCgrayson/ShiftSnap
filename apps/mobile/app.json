@@ -4,13 +4,13 @@
     "slug": "shiftsnap",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/ishift-logo.png",
+    "icon": "./assets/ishift-logo-light.png",
     "scheme": "shiftsnap",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/ishift-logo.png",
+      "image": "./assets/ishift-splash-light.png",
       "resizeMode": "contain",
-      "backgroundColor": "#000000"
+      "backgroundColor": "#FBF7F3"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -29,15 +29,15 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/ishift-logo.png",
-        "backgroundColor": "#FFFBF7"
+        "foregroundImage": "./assets/ishift-logo-light.png",
+        "backgroundColor": "#FBF7F3"
       },
       "package": "com.shiftsnap.app"
     },
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/ishift-logo.png"
+      "favicon": "./assets/ishift-logo-light.png"
     },
     "plugins": [
       "expo-router",

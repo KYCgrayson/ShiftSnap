@@ -35,7 +35,7 @@ Preserve the existing uncommitted work, synchronize it to GitHub, then make save
 - [x] Implement authenticated offline read and reconnect behavior.
 - [x] Independent review and repairs; final two guards independently reread.
 - [x] Run typecheck, existing tests, meaningful integration/database tests. Native E2E remains blocked by locked Mac (not passed).
-- [ ] Save reproducible QA artifact and push final reviewed commits.
+- [x] Save reproducible QA artifact and push reviewed implementation `1960d65`; local/remote alignment verified.
 
 ## QA and passing criteria
 - Replacement is all-or-nothing, authorized, and scoped; failures preserve old rows.

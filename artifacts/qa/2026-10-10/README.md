@@ -1,7 +1,7 @@
 # IShift reliability verification — 2026-10-10
 
 ## Decision
-Source and integration review passed on `development`. Native UI acceptance is blocked by the locked Mac; do not treat this report as a TestFlight/release approval. No TestFlight submission was made.
+Source and integration review passed on `development`. Implementation commit `1960d65` was pushed to origin and verified with zero ahead/behind commits. Native UI acceptance is blocked by the locked Mac; do not treat this report as a TestFlight/release approval. No TestFlight submission was made.
 
 ## Preserved baseline
 - Before implementation, all 29 pre-existing changed/untracked files were archived and each member checked against its SHA-256 manifest.

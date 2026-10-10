@@ -22,6 +22,7 @@ export interface Person {
   avatar_url: string | null;
   notes: string | null;
   created_at: string;
+  canonical_person_id?: string | null;
 }
 
 // Schedule sharing types
@@ -55,6 +56,10 @@ export interface Group {
 export interface GroupSettings {
   default_shift_codes?: ShiftCodeDefinition[];
   timezone?: string;
+  roster_name_matching?: {
+    mode: import('../utils/rosterIdentity').RosterNameMatchingMode;
+    sensitivity: import('../utils/rosterIdentity').RosterNameSensitivity;
+  };
 }
 
 // Group member types
@@ -78,6 +83,7 @@ export interface Schedule {
   person_id: string | null;
   group_id: string | null;
   image_url: string;
+  image_status: 'pending' | 'uploaded' | 'failed' | 'missing' | 'unverified';
   year_month: string; // Format: 2026-02
   raw_ocr_result: OCRResult | null;
   status: ScheduleStatus;

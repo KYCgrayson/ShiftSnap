@@ -37,7 +37,14 @@ import { useRealtimeShifts } from '../../src/hooks/useRealtimeShifts';
 import { useLocaleStore } from '../../src/stores/localeStore';
 import { useDailyNoteStore } from '../../src/stores/dailyNoteStore';
 import { useFocusEffect } from 'expo-router';
-import { formatYearMonth, PERSON_COLOR_HEX, getShiftTypeColor, ShiftTypeColors } from '@shiftsnap/shared';
+import {
+  formatYearMonth,
+  PERSON_COLOR_HEX,
+  getShiftTypeColor,
+  ShiftTypeColors,
+  rosterComparisonKey,
+  type RosterNameMatchingMode,
+} from '@shiftsnap/shared';
 
 // Configure zh-TW locale for react-native-calendars
 LocaleConfig.locales['zh-TW'] = {
@@ -63,10 +70,6 @@ function getMonthDateRange(yearMonth: string): { startDate: string; endDate: str
   };
 }
 
-function normalizeScheduleName(name: string | null | undefined): string {
-  return (name || '').trim().toLocaleLowerCase();
-}
-
 interface ShiftEvent {
   id: string;
   scheduleId: string;
@@ -88,6 +91,7 @@ interface ShiftEvent {
 interface SchedulePhoto {
   id: string;
   image_url: string;
+  image_status?: 'pending' | 'uploaded' | 'failed' | 'missing' | 'unverified';
   year_month: string;
   created_at: string;
 }
@@ -103,7 +107,8 @@ export default function CalendarScreen() {
   const { persons, fetchPersons, updatePerson } = usePersonStore();
   const { isConnected: calendarConnected, syncUserShifts } = useCalendarStore();
   const { notesByDate, fetchNotesForMonth, saveNote } = useDailyNoteStore();
-  const currentGroupId = useGroupStore((s) => s.currentGroup?.id);
+  const currentGroup = useGroupStore((s) => s.currentGroup);
+  const currentGroupId = currentGroup?.id;
   const groups = useGroupStore((s) => s.groups);
   const viewScope = useGroupStore((s) => s.viewScope);
   const cycleViewScope = useGroupStore((s) => s.cycleViewScope);
@@ -301,7 +306,7 @@ export default function CalendarScreen() {
 
     let query = supabase
       .from('schedules')
-      .select('id, image_url, year_month, created_at')
+      .select('id, image_url, image_status, year_month, created_at')
       .eq('year_month', currentMonth)
       .not('image_url', 'is', null)
       .neq('image_url', '')
@@ -315,7 +320,8 @@ export default function CalendarScreen() {
           return;
         }
         setMonthSchedulePhotos(((data || []) as SchedulePhoto[]).filter((photo) =>
-          isPersistentShiftImageReference(photo.image_url),
+          isPersistentShiftImageReference(photo.image_url)
+          && !['pending', 'failed', 'missing'].includes(photo.image_status || 'unverified'),
         ));
       });
     return () => {
@@ -346,7 +352,7 @@ export default function CalendarScreen() {
     const { data, error } = await supabase.storage
       .from('shift-images')
       .createSignedUrl(storagePath, 60 * 60);
-    if (error || !data?.signedUrl) throw error || new Error('Unable to open schedule image');
+    if (error || !data?.signedUrl) throw error || new Error('IMAGE_UNAVAILABLE');
     return data.signedUrl;
   }, []);
 
@@ -365,7 +371,14 @@ export default function CalendarScreen() {
     } catch (error) {
       console.warn('Unable to open schedule image:', error);
       if (request === schedulePhotoOpenRequest.current) {
-        setSchedulePhotoError(t('calendar.schedulePhotoLoadFailed'));
+        const message = error instanceof Error ? error.message.toLowerCase() : '';
+        setSchedulePhotoError(
+          message.includes('not found') || message.includes('404')
+            ? t('calendar.schedulePhotoMissing')
+            : message.includes('permission') || message.includes('forbidden') || message.includes('403')
+              ? t('calendar.schedulePhotoForbidden')
+              : t('calendar.schedulePhotoLoadFailed'),
+        );
       }
     } finally {
       if (request === schedulePhotoOpenRequest.current) setSchedulePhotoLoading(false);
@@ -387,7 +400,7 @@ export default function CalendarScreen() {
     setSchedulePhotoError(
       remaining.length === 0
         ? t('calendar.schedulePhotoUnavailable')
-        : t('calendar.schedulePhotoLoadFailed'),
+        : t('calendar.schedulePhotoRenderFailed'),
     );
   }, [availableSchedulePhotos, markSchedulePhotoFailed, schedulePhotoIndex, t]);
 
@@ -401,14 +414,59 @@ export default function CalendarScreen() {
     [groupMembers, userId],
   );
 
+  const rosterMatchingMode =
+    ((currentGroup?.settings?.roster_name_matching as { mode?: RosterNameMatchingMode } | undefined)
+      ?.mode ?? 'exact') as RosterNameMatchingMode;
+
+  // Map historical aliases and numeric-code variants onto the same visual
+  // representative used by new imports. This keeps legend toggles, colors,
+  // and claims aligned even before a user performs a destructive merge.
+  const displayPersonByRawId = useMemo(() => {
+    const personById = new Map(persons.map((person) => [person.id, person]));
+    const roots = persons.filter((person) => {
+      if (currentGroupId && person.group_id !== currentGroupId) return false;
+      return (person.canonical_person_id ?? person.id) === person.id;
+    });
+    const representativeByKey = new Map<string, (typeof persons)[number]>();
+    for (const person of roots) {
+      const key = rosterComparisonKey(person.name, rosterMatchingMode);
+      const existing = representativeByKey.get(key);
+      if (
+        !existing
+        || (person.created_at || '').localeCompare(existing.created_at || '') < 0
+        || (
+          person.created_at === existing.created_at
+          && person.id.localeCompare(existing.id) < 0
+        )
+      ) {
+        representativeByKey.set(key, person);
+      }
+    }
+
+    const result = new Map<string, (typeof persons)[number]>();
+    for (const person of persons) {
+      const root = personById.get(person.canonical_person_id ?? person.id) ?? person;
+      if (!currentGroupId || person.group_id !== currentGroupId) {
+        result.set(person.id, root);
+        continue;
+      }
+      result.set(
+        person.id,
+        representativeByKey.get(rosterComparisonKey(root.name, rosterMatchingMode)) ?? root,
+      );
+    }
+    return result;
+  }, [currentGroupId, persons, rosterMatchingMode]);
+
   // Person IDs that at least one group member uses as their one schedule.
   const claimedPersonIds = useMemo(() => {
     return new Set(
       groupMembers
         .map((member) => member.claimed_person_id)
         .filter((id): id is string => !!id)
+        .map((id) => displayPersonByRawId.get(id)?.id ?? id)
     );
-  }, [groupMembers]);
+  }, [displayPersonByRawId, groupMembers]);
 
   // Authenticated month loads are annotated by the same database function
   // used by Home and Apple Calendar. The fallback keeps guest/demo rows working.
@@ -429,7 +487,7 @@ export default function CalendarScreen() {
   // adjacent-month padding days already have bars painted in.
   const shifts: ShiftEvent[] = useMemo(() => {
     return windowShifts.map((shift) => {
-      const person = shift.person_id ? persons.find((p) => p.id === shift.person_id) : null;
+      const person = shift.person_id ? displayPersonByRawId.get(shift.person_id) ?? null : null;
       const isSelf = isPersonalMonthShift(shift);
       // For self shifts: color by shift type (morning/afternoon/night/day-off)
       // For coworker shifts: color by person
@@ -444,8 +502,8 @@ export default function CalendarScreen() {
         startTime: shift.start_time,
         endTime: shift.end_time,
         isDayOff,
-        personId: shift.person_id || null,
-        personName: (shift as any).name_on_schedule || person?.name,
+        personId: person?.id ?? shift.person_id ?? null,
+        personName: person?.name || (shift as any).name_on_schedule,
         color: isSelf
           ? getShiftTypeColor(isDayOff, startTime)
           : (person?.color || '#A78BFA'),
@@ -456,7 +514,7 @@ export default function CalendarScreen() {
         isMine: isSelf,
       };
     });
-  }, [windowShifts, shiftCodes, theme, persons, getCodeInfo, isPersonalMonthShift]);
+  }, [windowShifts, shiftCodes, theme, displayPersonByRawId, getCodeInfo, isPersonalMonthShift]);
 
   // Helper to check if a shift belongs to the current user
   const isMyShift = useCallback((shift: ShiftEvent) => {
@@ -614,7 +672,8 @@ export default function CalendarScreen() {
   const handleLongPressClaim = (person: { personId: string; name: string }) => {
     if (claiming || !userId) return;
     const candidates = windowShifts
-      .filter((s) => s.person_id === person.personId
+      .filter((s) => !!s.person_id
+        && (displayPersonByRawId.get(s.person_id)?.id ?? s.person_id) === person.personId
         && s.schedule_id
         && (!currentGroupId || s.group_id === currentGroupId))
       .sort((a, b) => b.date.localeCompare(a.date));
@@ -624,10 +683,18 @@ export default function CalendarScreen() {
       return;
     }
     const nameOnSchedule = target.name_on_schedule || person.name;
-    const normalizedTargetName = normalizeScheduleName(nameOnSchedule);
+    const normalizedTargetName = rosterComparisonKey(nameOnSchedule, rosterMatchingMode);
+    const targetDisplayPersonId = target.person_id
+      ? displayPersonByRawId.get(target.person_id)?.id ?? target.person_id
+      : null;
     const memberUsesTarget = (member: (typeof groupMembers)[number]) =>
-      normalizeScheduleName(member.claimed_name_on_schedule) === normalizedTargetName
-      || (!!target.person_id && member.claimed_person_id === target.person_id);
+      rosterComparisonKey(member.claimed_name_on_schedule, rosterMatchingMode) === normalizedTargetName
+      || (
+        !!targetDisplayPersonId
+        && !!member.claimed_person_id
+        && (displayPersonByRawId.get(member.claimed_person_id)?.id ?? member.claimed_person_id)
+          === targetDisplayPersonId
+      );
     if (myMembership && memberUsesTarget(myMembership)) {
       toast(t('calendar.claimAlready', { name: person.name }));
       return;
@@ -786,18 +853,19 @@ export default function CalendarScreen() {
   const coworkerEntriesByMonth = useMemo(() => {
     return windowMonths
       .map((ym) => {
-        const personIds = new Set<string>();
+        const entries = new Map<string, { name: string; color: string; personId: string }>();
         (shiftsByMonth[ym] || []).forEach((s) => {
           if (isPersonalMonthShift(s)) return;
-          if (s.person_id) personIds.add(s.person_id);
+          if (!s.person_id) return;
+          const person = displayPersonByRawId.get(s.person_id);
+          if (person && person.id !== 'g-person-1') {
+            entries.set(person.id, { name: person.name, color: person.color, personId: person.id });
+          }
         });
-        const list = persons
-          .filter((p) => p.id !== 'g-person-1' && personIds.has(p.id))
-          .map((p) => ({ name: p.name, color: p.color, personId: p.id }));
-        return { yearMonth: ym, list };
+        return { yearMonth: ym, list: Array.from(entries.values()) };
       })
       .filter((m) => m.list.length > 0);
-  }, [persons, shiftsByMonth, windowMonths, isPersonalMonthShift]);
+  }, [displayPersonByRawId, shiftsByMonth, windowMonths, isPersonalMonthShift]);
 
   // Flattened + deduped across the window — drives the "select all
   // coworkers" toggle and any code that just needs "who's visible at all".
@@ -950,7 +1018,8 @@ export default function CalendarScreen() {
         <Card style={styles.calendarCard} padding="small">
           <Calendar
             key={`cal-${filteredShifts.length}-${[...visiblePersonIds].sort().join(',')}-${showShiftCodes}-${showCoworkerShifts}-${locale}`}
-            current={selectedDate}
+            current={`${currentMonth}-01`}
+            enableSwipeMonths={true}
             onDayPress={handleDayPress}
             onMonthChange={handleMonthChange}
             markedDates={markedDates}

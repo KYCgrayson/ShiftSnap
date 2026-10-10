@@ -35,7 +35,7 @@ import { usePersonStore } from '../../src/stores/personStore';
 import { useGroupStore } from '../../src/stores/groupStore';
 import { supabase } from '../../src/services/supabase';
 import * as Clipboard from 'expo-clipboard';
-import { APP_VERSION, SUPPORTED_LOCALES, LOCALE_NAMES, PERSON_COLOR_HEX, ALARM_OPTIONS, DEFAULT_ALARM_MINUTES } from '@shiftsnap/shared';
+import { APP_VERSION, SUPPORTED_LOCALES, LOCALE_NAMES, PERSON_COLOR_HEX, ALARM_OPTIONS, DEFAULT_ALARM_MINUTES, rosterComparisonKey, type RosterNameMatchingMode, type RosterNameSensitivity } from '@shiftsnap/shared';
 import { useShiftStore } from '../../src/stores/shiftStore';
 import { useShiftCodeStore } from '../../src/stores/shiftCodeStore';
 import { useScheduleStore } from '../../src/stores/scheduleStore';
@@ -80,12 +80,12 @@ export default function SettingsScreen() {
     loading: calendarLoading,
   } = useCalendarStore();
 
-  const { persons, fetchPersons, createPerson, updatePerson, deletePerson } = usePersonStore();
+  const { persons, aliases, rosterMerges, rosterSuggestions, fetchPersons, fetchAliases, fetchRosterMerges, fetchRosterSuggestions, createPerson, updatePerson, deletePerson, mergeRosterPeople, undoRosterPeopleMerge } = usePersonStore();
   const {
     groups, currentGroup, members,
     fetchMembers, switchGroup,
     joinGroupByInvite, leaveGroup, updateGroupName, removeMember,
-    claimPersonInSchedule, unclaimPersonInSchedule,
+    claimPersonInSchedule, unclaimPersonInSchedule, setRosterNameMatching,
   } = useGroupStore();
 
   const [editingProfile, setEditingProfile] = useState(false);
@@ -115,6 +115,7 @@ export default function SettingsScreen() {
   const [showGroupNameModal, setShowGroupNameModal] = useState(false);
   const [groupName, setGroupName] = useState('');
   const [calendarDestinationName, setCalendarDestinationName] = useState<string | null>(null);
+  const [mergeLoading, setMergeLoading] = useState(false);
 
   // Claim-my-schedule modal state. claimRows lists the distinct name +
   // shift count tuples extracted from the latest group schedule, so the
@@ -188,6 +189,8 @@ export default function SettingsScreen() {
   useEffect(() => {
     if (currentGroup?.id && !isGuest) {
       fetchMembers(currentGroup.id);
+      void fetchAliases(currentGroup.id);
+      void fetchRosterMerges(currentGroup.id);
     }
   }, [currentGroup?.id, isGuest]);
 
@@ -216,25 +219,141 @@ export default function SettingsScreen() {
     }
   };
 
-  // The coworker list used to render every Person record ever created —
-  // one per (name, month) as schedules were imported — so the same
-  // colleague showed up many times and it grew without bound. Collapse to
-  // one entry per distinct name (trimmed, case-insensitive), keeping the
-  // most recently created record so its color is the current one.
+  const savedRosterMatching = currentGroup?.settings?.roster_name_matching as {
+    mode?: RosterNameMatchingMode;
+    sensitivity?: RosterNameSensitivity;
+  } | undefined;
+  const rosterMatching: { mode: RosterNameMatchingMode; sensitivity: RosterNameSensitivity } = {
+    mode: savedRosterMatching?.mode ?? 'exact',
+    sensitivity: savedRosterMatching?.sensitivity ?? 'standard',
+  };
+
+  const identityPersons = useMemo(
+    () => currentGroup?.id ? persons.filter((person) => person.group_id === currentGroup.id) : persons,
+    [currentGroup?.id, persons],
+  );
+
+  useEffect(() => {
+    if (currentGroup?.id && !isGuest && rosterMatching.mode === 'fuzzy_suggestions') {
+      void fetchRosterSuggestions(currentGroup.id, rosterMatching.sensitivity);
+    }
+  }, [currentGroup?.id, isGuest, rosterMatching.mode, rosterMatching.sensitivity, persons, aliases]);
+
+  // One visual row per canonical identity. Numeric-code mode additionally
+  // collapses legacy 0/1 identities for display only; it never deletes data.
   const dedupedPersons = useMemo(() => {
     const byName = new Map<string, (typeof persons)[number]>();
-    for (const p of persons) {
-      const key = (p.name || '').trim().toLowerCase();
+    for (const p of identityPersons) {
+      const canonicalId = p.canonical_person_id ?? p.id;
+      if (p.canonical_person_id && canonicalId !== p.id) continue;
+      const key = rosterComparisonKey(p.name, rosterMatching.mode);
       if (!key) continue;
       const existing = byName.get(key);
-      if (!existing || (p.created_at || '') > (existing.created_at || '')) {
+      if (
+        !existing
+        || (p.created_at || '').localeCompare(existing.created_at || '') < 0
+        || (p.created_at === existing.created_at && p.id.localeCompare(existing.id) < 0)
+      ) {
         byName.set(key, p);
       }
     }
     return Array.from(byName.values());
-  }, [persons]);
+  }, [identityPersons, rosterMatching.mode]);
+
+  const aliasesForPerson = (personId: string, personName: string) => {
+    const canonicalId = identityPersons.find((person) => person.id === personId)?.canonical_person_id ?? personId;
+    const names = new Set(aliases
+      .filter((alias) => alias.canonical_person_id === canonicalId)
+      .map((alias) => alias.alias));
+    if (rosterMatching.mode === 'ignore_trailing_numbers') {
+      const comparisonKey = rosterComparisonKey(personName, rosterMatching.mode);
+      identityPersons
+        .filter((person) => rosterComparisonKey(person.name, rosterMatching.mode) === comparisonKey)
+        .forEach((person) => names.add(person.name));
+    }
+    names.add(personName);
+    return Array.from(names).filter((name) => name !== personName);
+  };
+
+  const updateRosterMatching = async (mode: RosterNameMatchingMode, sensitivity = rosterMatching.sensitivity) => {
+    if (!currentGroup?.id) return;
+    try {
+      await setRosterNameMatching(currentGroup.id, mode, sensitivity);
+    } catch {
+      Alert.alert(t('common.error'), t('settings.rosterMatchingSaveFailed'));
+    }
+  };
+
+  const chooseRosterMatchingMode = () => {
+    const options: Array<{ value: RosterNameMatchingMode; label: string; detail: string }> = [
+      { value: 'exact', label: t('settings.rosterMatchingExact'), detail: t('settings.rosterMatchingExactHint') },
+      { value: 'ignore_trailing_numbers', label: t('settings.rosterMatchingNumeric'), detail: t('settings.rosterMatchingNumericHint') },
+      { value: 'fuzzy_suggestions', label: t('settings.rosterMatchingFuzzy'), detail: t('settings.rosterMatchingFuzzyHint') },
+    ];
+    setOptionList({ title: t('settings.rosterMatchingTitle'), options, selectedValue: rosterMatching.mode, onSelect: (value) => {
+      setOptionList(null);
+      void updateRosterMatching(value as RosterNameMatchingMode);
+    } });
+  };
+
+  const chooseRosterSensitivity = () => {
+    const options: Array<{ value: RosterNameSensitivity; label: string; detail: string }> = [
+      { value: 'strict', label: t('settings.rosterSensitivityStrict'), detail: t('settings.rosterSensitivityStrictHint') },
+      { value: 'standard', label: t('settings.rosterSensitivityStandard'), detail: t('settings.rosterSensitivityStandardHint') },
+      { value: 'loose', label: t('settings.rosterSensitivityLoose'), detail: t('settings.rosterSensitivityLooseHint') },
+    ];
+    setOptionList({ title: t('settings.rosterSensitivityTitle'), options, selectedValue: rosterMatching.sensitivity, onSelect: (value) => {
+      setOptionList(null);
+      void updateRosterMatching(rosterMatching.mode, value as RosterNameSensitivity);
+    } });
+  };
+
+  const chooseMergePrimary = (secondary: (typeof persons)[number]) => {
+    const candidates = dedupedPersons.filter((person) => person.id !== secondary.id);
+    setOptionList({
+      title: t('settings.mergeRosterTitle', { name: secondary.name }),
+      options: candidates.map((person) => ({ value: person.id, label: person.name, detail: t('settings.mergeRosterPrimaryHint') })),
+      onSelect: (primaryId) => {
+        setOptionList(null);
+        Alert.alert(t('settings.mergeRosterConfirmTitle'), t('settings.mergeRosterConfirmBody', { primary: candidates.find((person) => person.id === primaryId)?.name ?? '', secondary: secondary.name }), [
+          { text: t('common.cancel'), style: 'cancel' },
+          { text: t('settings.mergeRosterConfirm'), onPress: () => void (async () => {
+            setMergeLoading(true);
+            try {
+              await mergeRosterPeople(primaryId, secondary.id);
+              if (user?.id) await fetchPersons(user.id);
+              if (currentGroup?.id) {
+                await Promise.all([fetchAliases(currentGroup.id), fetchRosterMerges(currentGroup.id)]);
+              }
+            } catch {
+              Alert.alert(t('common.error'), t('settings.mergeRosterFailed'));
+            } finally { setMergeLoading(false); }
+          })() },
+        ]);
+      },
+    });
+  };
+
+  const handleUndoRosterMerge = (mergeId: string, primaryName: string, secondaryName: string) => {
+    Alert.alert(t('settings.undoRosterMergeTitle'), t('settings.undoRosterMergeBody', { primary: primaryName, secondary: secondaryName }), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('settings.undoRosterMergeConfirm'), style: 'destructive', onPress: () => void (async () => {
+        try {
+          await undoRosterPeopleMerge(mergeId);
+          if (user?.id) await fetchPersons(user.id);
+          if (currentGroup?.id) await Promise.all([fetchAliases(currentGroup.id), fetchRosterMerges(currentGroup.id)]);
+        } catch {
+          Alert.alert(t('common.error'), t('settings.undoRosterMergeFailed'));
+        }
+      })() },
+    ]);
+  };
 
   const handleDeleteCoworker = (personId: string, personName: string) => {
+    if (aliasesForPerson(personId, personName).length > 0 || rosterMerges.some((merge) => merge.primary_person_id === personId || merge.secondary_person_id === personId)) {
+      Alert.alert(t('common.error'), t('settings.deleteRosterIdentityProtected'));
+      return;
+    }
     Alert.alert(t('settings.deleteCoworker'), t('settings.deleteCoworkerConfirm'), [
       { text: t('common.cancel'), style: 'cancel' },
       {
@@ -244,7 +363,7 @@ export default function SettingsScreen() {
           // Remove every Person record sharing this name so the deduped row
           // doesn't reappear from a leftover duplicate on the next fetch.
           const key = (personName || '').trim().toLowerCase();
-          const ids = persons
+          const ids = identityPersons
             .filter((p) => (p.name || '').trim().toLowerCase() === key)
             .map((p) => p.id);
           const targets = ids.length > 0 ? ids : [personId];
@@ -1370,6 +1489,101 @@ export default function SettingsScreen() {
             {t('settings.coworkersSection')}
           </Text>
           <Card padding="none">
+            {currentGroup && !isGuest && (
+              <>
+                <TouchableOpacity
+                  style={styles.settingsItem}
+                  onPress={chooseRosterMatchingMode}
+                  disabled={myGroupMembership?.role !== 'admin' && myGroupMembership?.role !== 'site_manager'}
+                >
+                  <View style={[styles.settingsIcon, { backgroundColor: theme.colors.primary + '15' }]}>
+                    <Ionicons name="git-compare-outline" size={20} color={theme.colors.primary} />
+                  </View>
+                  <View style={styles.settingsContent}>
+                    <Text style={[styles.settingsTitle, { color: theme.colors.textPrimary }]}>{t('settings.rosterMatchingTitle')}</Text>
+                    <Text style={[styles.settingsSubtitle, { color: theme.colors.textSecondary }]}>
+                      {rosterMatching.mode === 'exact' ? t('settings.rosterMatchingExact') : rosterMatching.mode === 'ignore_trailing_numbers' ? t('settings.rosterMatchingNumeric') : t('settings.rosterMatchingFuzzy')}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
+                </TouchableOpacity>
+                {rosterMatching.mode === 'fuzzy_suggestions' && (
+                  <>
+                    <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
+                    <TouchableOpacity
+                      style={styles.settingsItem}
+                      onPress={chooseRosterSensitivity}
+                      disabled={myGroupMembership?.role !== 'admin' && myGroupMembership?.role !== 'site_manager'}
+                    >
+                      <View style={styles.settingsContent}>
+                        <Text style={[styles.settingsTitle, { color: theme.colors.textPrimary }]}>{t('settings.rosterSensitivityTitle')}</Text>
+                        <Text style={[styles.settingsSubtitle, { color: theme.colors.textSecondary }]}>
+                          {rosterMatching.sensitivity === 'strict' ? t('settings.rosterSensitivityStrict') : rosterMatching.sensitivity === 'loose' ? t('settings.rosterSensitivityLoose') : t('settings.rosterSensitivityStandard')}
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
+                    </TouchableOpacity>
+                    {rosterSuggestions.length > 0 && (
+                      <>
+                        <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
+                        <View style={styles.settingsItem}>
+                          <View style={styles.settingsContent}>
+                            <Text style={[styles.settingsTitle, { color: theme.colors.textPrimary }]}>{t('settings.rosterSuggestionsTitle')}</Text>
+                            <Text style={[styles.settingsSubtitle, { color: theme.colors.textSecondary }]}>{t('settings.rosterSuggestionsHint')}</Text>
+                          </View>
+                        </View>
+                        {rosterSuggestions.map((suggestion) => {
+                          const source = persons.find((person) => person.id === suggestion.sourcePersonId);
+                          return (
+                            <TouchableOpacity
+                              key={`${suggestion.sourcePersonId}-${suggestion.candidatePersonId}`}
+                              style={styles.settingsItem}
+                              disabled={!source || (myGroupMembership?.role !== 'admin' && myGroupMembership?.role !== 'site_manager')}
+                              onPress={() => source && chooseMergePrimary(source)}
+                            >
+                              <View style={styles.settingsContent}>
+                                <Text style={[styles.settingsTitle, { color: theme.colors.textPrimary }]}>{suggestion.sourceName} · {suggestion.candidateName}</Text>
+                                <Text style={[styles.settingsSubtitle, { color: theme.colors.textSecondary }]}>{t('settings.rosterSuggestionReview')}</Text>
+                              </View>
+                              <Ionicons name="git-merge-outline" size={18} color={theme.colors.primary} />
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </>
+                    )}
+                  </>
+                )}
+                {rosterMerges.length > 0 && (
+                  <>
+                    <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
+                    <View style={styles.settingsItem}>
+                      <View style={styles.settingsContent}>
+                        <Text style={[styles.settingsTitle, { color: theme.colors.textPrimary }]}>{t('settings.rosterMergeHistoryTitle')}</Text>
+                      </View>
+                    </View>
+                    {rosterMerges.map((merge) => {
+                      const primary = persons.find((person) => person.id === merge.primary_person_id)?.name ?? t('settings.rosterUnknownName');
+                      const secondary = persons.find((person) => person.id === merge.secondary_person_id)?.name ?? t('settings.rosterUnknownName');
+                      return (
+                        <TouchableOpacity
+                          key={merge.id}
+                          style={styles.settingsItem}
+                          disabled={myGroupMembership?.role !== 'admin' && myGroupMembership?.role !== 'site_manager'}
+                          onPress={() => handleUndoRosterMerge(merge.id, primary, secondary)}
+                        >
+                          <View style={styles.settingsContent}>
+                            <Text style={[styles.settingsTitle, { color: theme.colors.textPrimary }]}>{primary} ← {secondary}</Text>
+                            <Text style={[styles.settingsSubtitle, { color: theme.colors.textSecondary }]}>{t('settings.undoRosterMergeHint')}</Text>
+                          </View>
+                          <Ionicons name="arrow-undo-outline" size={18} color={theme.colors.primary} />
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </>
+                )}
+                <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
+              </>
+            )}
             {/* My Schedule */}
             <View style={styles.settingsItem}>
               <TouchableOpacity
@@ -1401,7 +1615,17 @@ export default function SettingsScreen() {
                     <Text style={[styles.settingsTitle, { color: theme.colors.textPrimary }]}>
                       {person.name}
                     </Text>
+                    {aliasesForPerson(person.id, person.name).length > 0 && (
+                      <Text style={[styles.settingsSubtitle, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                        {t('settings.rosterAliases', { aliases: aliasesForPerson(person.id, person.name).join('、') })}
+                      </Text>
+                    )}
                   </View>
+                  {currentGroup && (myGroupMembership?.role === 'admin' || myGroupMembership?.role === 'site_manager') && dedupedPersons.length > 1 && (
+                    <TouchableOpacity disabled={mergeLoading} onPress={() => chooseMergePrimary(person)} style={styles.mergeButton}>
+                      <Ionicons name="git-merge-outline" size={18} color={theme.colors.primary} />
+                    </TouchableOpacity>
+                  )}
                   <TouchableOpacity onPress={() => handleDeleteCoworker(person.id, person.name)}>
                     <Ionicons name="trash-outline" size={18} color={theme.colors.error} />
                   </TouchableOpacity>
@@ -2057,6 +2281,10 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 14,
     marginRight: 12,
+  },
+  mergeButton: {
+    padding: 8,
+    marginRight: 4,
   },
   modalOverlay: {
     flex: 1,

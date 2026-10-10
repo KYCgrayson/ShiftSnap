@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../services/supabase';
 import type { OCRResult } from '@shiftsnap/shared';
-import { formatDateISO } from '@shiftsnap/shared';
+import { formatDateISO, reviewedRowPersonId } from '@shiftsnap/shared';
 import { getIsGuest } from './authStore';
 import { useGroupStore } from './groupStore';
 import { getGuestTodayShift, getGuestUpcomingShifts, generateGuestShiftsForMonth } from '../data/guestDemoData';
@@ -337,14 +337,10 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
       const rowUserId = taggedUserId ?? userId;
       const rowSource: 'self_scan' | 'reference_scan' =
         isSelf || taggedUserId ? 'self_scan' : 'reference_scan';
-      // person_id stays null only when the row really belongs to the
-      // uploader (untagged self). Whenever the row's user_id differs
-      // from the uploader's, attach the row's Person record so the
-      // uploader still sees a coworker bar with the right color in
-      // their own calendar — including the wife-uploaded-by-husband
-      // case where the tagged "self" row should render as wife on
-      // husband's calendar.
-      const rowPersonId = rowUserId === userId ? null : (personMap?.get(rowIndex) ?? null);
+      // Keep canonical identity for every reviewed row, including the
+      // uploader's own row. Self-vs-coworker rendering still uses source/user
+      // identity, while claims can now follow aliases across months.
+      const rowPersonId = reviewedRowPersonId(rowIndex, personMap);
 
       for (const ocrShift of row.shifts) {
         const codeInfo = shiftCodes.find((sc) => sc.code === ocrShift.code);

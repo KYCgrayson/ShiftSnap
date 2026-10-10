@@ -54,6 +54,7 @@ const DATE_CELL_PITCH = 50;
 // The name column on a paper schedule is roughly this many day-columns
 // wide; used to estimate the photo's per-day pixel width for scroll sync.
 const NAME_COL_EQUIV = 3;
+type GuideContrastMode = "low" | "normal" | "high";
 
 function getMonthDateRange(yearMonth: string): { startDate: string; endDate: string } {
   const [year, month] = yearMonth.split('-').map(Number);
@@ -85,7 +86,7 @@ export default function ReviewScheduleScreen() {
   const { createShiftsFromOCR } = useShiftStore();
   const { updateScheduleStatus, updateScheduleYearMonth } = useScheduleStore();
   const { isConnected, syncUserShifts } = useCalendarStore();
-  const { persons, createPerson, fetchPersons } = usePersonStore();
+  const { persons, createPerson, resolveRosterPerson, fetchPersons } = usePersonStore();
   const { currentGroup, members, fetchMembers } = useGroupStore();
 
   // Wizard state
@@ -131,6 +132,7 @@ export default function ReviewScheduleScreen() {
 
   // Step 1: Re-analyze
   const [reanalyzing, setReanalyzing] = useState(false);
+  const [guideContrastMode, setGuideContrastMode] = useState<GuideContrastMode>("normal");
 
   // Step 4: Saving
   const [saving, setSaving] = useState(false);
@@ -452,6 +454,23 @@ export default function ReviewScheduleScreen() {
     [theme]
   );
 
+  const guideContrastStyle = useMemo(() => {
+    const base = theme.colors.primary;
+    const highContrastLine = theme.isDark ? "#FFFFFF" : "#0F172A";
+    return {
+      bandColor: `${base}14`,
+      lineColor: guideContrastMode === "high"
+        ? highContrastLine
+        : `${base}${guideContrastMode === "low" ? "33" : "AA"}`,
+      markerColor: guideContrastMode === "high"
+        ? (theme.isDark ? "rgba(255,255,255,0.82)" : "rgba(15,23,42,0.82)")
+        : `${base}${guideContrastMode === "low" ? "33" : "AA"}`,
+      tagBg: base,
+      tagText: "#FFFFFF",
+      handleBg: base,
+    };
+  }, [guideContrastMode, theme]);
+
   // Selected person's row
   const selectedRow = useMemo(() => {
     if (ocrData && selectedPersonIndex !== null) {
@@ -645,6 +664,7 @@ export default function ReviewScheduleScreen() {
         body: {
           imageBase64: base64,
           imageMimeType: 'image/jpeg',
+          recognitionMode: 'accurate',
           hint: 'Please extract ALL rows/people from the schedule. Include every person visible in the image, even if partially visible.',
         },
       });
@@ -694,23 +714,43 @@ export default function ReviewScheduleScreen() {
       // Save self color
       await AsyncStorage.setItem(MY_COLOR_KEY, selfColor);
 
-      // Build personMap: create Person records for selected coworkers
+      // Each imported row retains its OCR label in name_on_schedule, while its
+      // person_id resolves through the active group's canonical/alias rule.
+      // Fuzzy mode intentionally resolves exact aliases only; it never merges.
       const personMap = new Map<number, string>();
+      const resolveReviewPerson = async (rowIndex: number, name: string, color: string) => {
+        if (currentGroup?.id) {
+          const personId = await resolveRosterPerson(currentGroup.id, name, color);
+          personMap.set(rowIndex, personId);
+          return;
+        }
+        const existingPerson = persons.find((person) => person.name === name);
+        const personId = existingPerson?.id ?? await createPerson(user.id, name, undefined, color);
+        personMap.set(rowIndex, personId);
+      };
+
+      const rowsToResolve = new Map<number, { name: string; color: string }>();
       for (const [rowIndex, isSelected] of selectedCoworkers.entries()) {
         if (!isSelected) continue;
         const row = ocrData.rows[rowIndex];
-        const coworkerName = row?.name || `Person ${rowIndex + 1}`;
-        const color = coworkerColors.get(rowIndex) || PERSON_COLOR_HEX[0];
-
-        // Check if a person with this name already exists
-        const existingPerson = persons.find((p) => p.name === coworkerName);
-        if (existingPerson) {
-          personMap.set(rowIndex, existingPerson.id);
-        } else {
-          const personId = await createPerson(user.id, coworkerName, undefined, color);
-          personMap.set(rowIndex, personId);
-        }
+        rowsToResolve.set(rowIndex, {
+          name: row?.name || `Person ${rowIndex + 1}`,
+          color: coworkerColors.get(rowIndex) || PERSON_COLOR_HEX[0],
+        });
       }
+
+      // Resolve the selected row as well. This lets a later claim follow the
+      // same person across months even when that row belongs to the uploader.
+      const selectedRow = ocrData.rows[selectedPersonIndex];
+      rowsToResolve.set(selectedPersonIndex, {
+        name: selectedRow?.name || `Person ${selectedPersonIndex + 1}`,
+        color: selfColor,
+      });
+      await Promise.all(
+        Array.from(rowsToResolve.entries()).map(([rowIndex, row]) =>
+          resolveReviewPerson(rowIndex, row.name, row.color),
+        ),
+      );
 
       const allCodes = useShiftCodeStore.getState().shiftCodes;
       const codeMap = [
@@ -740,40 +780,27 @@ export default function ReviewScheduleScreen() {
       });
       if (selfAssignedUser && selfAssignedUser !== user.id) {
         userMap.set(selectedPersonIndex, selfAssignedUser);
-        // The tagged self row should render as a coworker bar on the
-        // uploader's own calendar — give it a Person record so the
-        // legend shows the row's color and name. Without this, the
-        // wife's shifts would fall through to the "self" toggle on
-        // the husband's calendar.
-        const row = ocrData.rows[selectedPersonIndex];
-        const taggedName = row?.name || `Person ${selectedPersonIndex + 1}`;
-        const existing = persons.find((p) => p.name === taggedName);
-        if (existing) {
-          personMap.set(selectedPersonIndex, existing.id);
-        } else {
-          const newId = await createPerson(user.id, taggedName, undefined, selfColor);
-          personMap.set(selectedPersonIndex, newId);
-        }
       }
 
       await createShiftsFromOCR(scheduleId, user.id, ocrData, codeMap, yearMonth, selectedPersonIndex, personMap, userMap);
-      // Persist the (possibly user-edited) year-month back to the schedule
+      // The core shift write is complete. Persist schedule metadata before
+      // success; a legend refresh must not turn a completed save into a failure.
       if (yearMonth !== params.yearMonth) {
         await updateScheduleYearMonth(scheduleId, yearMonth);
       }
       await updateScheduleStatus(scheduleId, 'published');
 
-      // Refresh persons so calendar legend picks up new coworkers
-      await fetchPersons(user.id);
+      void fetchPersons(user.id).catch((error) => {
+        console.warn('Person refresh failed:', error);
+      });
 
       // Auto-sync to calendar if connected. Reconcile the whole month so a
-      // re-recognition overwrites old OS events and removes stale days.
+      // re-recognition overwrites old OS events and removes stale days. This
+      // is non-critical and must not delay the saved confirmation.
       if (isConnected) {
-        try {
-          await syncUserShifts(user.id, getMonthDateRange(yearMonth));
-        } catch {
-          // Calendar sync failure is non-critical
-        }
+        void syncUserShifts(user.id, getMonthDateRange(yearMonth)).catch((error) => {
+          console.warn('Calendar sync failed:', error);
+        });
       }
 
       Alert.alert(t('review.scheduleSaved'), t('review.scheduleSavedDesc'), [
@@ -1082,6 +1109,82 @@ export default function ReviewScheduleScreen() {
                     </Text>
                   </TouchableOpacity>
                 </View>
+                <View style={styles.guideContrastRow}>
+                  <Text style={[styles.sectionHint, { color: theme.colors.textSecondary }]}>
+                    {t('review.guideContrastLabel')}
+                  </Text>
+                  <View style={styles.guideContrastButtons}>
+                    <TouchableOpacity
+                      onPress={() => setGuideContrastMode("low")}
+                      style={[
+                        styles.guideContrastBtn,
+                        {
+                          backgroundColor:
+                            guideContrastMode === "low" ? theme.colors.primary : 'transparent',
+                          borderColor:
+                            guideContrastMode === "low" ? theme.colors.primary : theme.colors.border,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.guideContrastBtnText,
+                          { color: guideContrastMode === "low" ? "#FFFFFF" : theme.colors.textSecondary },
+                        ]}
+                      >
+                        {t('review.guideContrastLower')}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => setGuideContrastMode("normal")}
+                      style={[
+                        styles.guideContrastBtn,
+                        {
+                          backgroundColor:
+                            guideContrastMode === "normal" ? theme.colors.primary : 'transparent',
+                          borderColor:
+                            guideContrastMode === "normal" ? theme.colors.primary : theme.colors.border,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.guideContrastBtnText,
+                          {
+                            color:
+                              guideContrastMode === "normal" ? "#FFFFFF" : theme.colors.textSecondary,
+                          },
+                        ]}
+                      >
+                        {t('review.guideContrastNormal')}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => setGuideContrastMode("high")}
+                      style={[
+                        styles.guideContrastBtn,
+                        {
+                          backgroundColor:
+                            guideContrastMode === "high" ? theme.colors.primary : 'transparent',
+                          borderColor:
+                            guideContrastMode === "high" ? theme.colors.primary : theme.colors.border,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.guideContrastBtnText,
+                          {
+                            color:
+                              guideContrastMode === "high" ? "#FFFFFF" : theme.colors.textSecondary,
+                          },
+                        ]}
+                      >
+                        {t('review.guideContrastHigher')}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
                 <View style={[styles.imageStripCrop, {
                   height: IMAGE_STRIP_HEIGHT,
                   borderColor: theme.colors.primary,
@@ -1115,24 +1218,24 @@ export default function ReviewScheduleScreen() {
                           styles.rowGuideBand,
                           {
                             height: rowGuideHeight,
-                            borderColor: theme.colors.primary,
-                            backgroundColor: theme.colors.primary + '14',
+                            borderColor: guideContrastStyle.lineColor,
+                            backgroundColor: guideContrastStyle.bandColor,
                           },
                           animatedRowGuideStyle,
                         ]}
                       >
-                        <View style={[styles.rowGuideTag, { backgroundColor: theme.colors.primary }]}>
-                          <Text style={styles.rowGuideTagText} numberOfLines={1}>
+                        <View style={[styles.rowGuideTag, { backgroundColor: guideContrastStyle.tagBg }]}>
+                          <Text style={[styles.rowGuideTagText, { color: guideContrastStyle.tagText }]} numberOfLines={1}>
                             {selectedRow.name || t('review.alignRowTag')}
                           </Text>
                         </View>
-                        <View style={[styles.rowGuideHandle, { backgroundColor: theme.colors.primary }]}>
+                        <View style={[styles.rowGuideHandle, { backgroundColor: guideContrastStyle.handleBg }]}>
                           <Ionicons name="reorder-two" size={18} color="#FFFFFF" />
                         </View>
                       </Animated.View>
                     </GestureDetector>
                     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-                      <View style={[styles.colGuideLine, { backgroundColor: theme.colors.primary + 'AA' }]} />
+                      <View style={[styles.colGuideLine, { backgroundColor: guideContrastStyle.lineColor }]} />
                     </View>
                   </View>
                 </View>
@@ -1190,7 +1293,7 @@ export default function ReviewScheduleScreen() {
               {imageDims && params.imageUrl && !imageLoadFailed && (
                 <View
                   pointerEvents="none"
-                  style={[styles.dateStripMarker, { backgroundColor: theme.colors.primary + 'AA' }]}
+                  style={[styles.dateStripMarker, { backgroundColor: guideContrastStyle.markerColor }]}
                 />
               )}
             </View>
@@ -2120,6 +2223,25 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  guideContrastRow: {
+    gap: 8,
+    paddingHorizontal: 16,
+  },
+  guideContrastButtons: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  guideContrastBtn: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 7,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  guideContrastBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   colGuideLine: {
     position: 'absolute',

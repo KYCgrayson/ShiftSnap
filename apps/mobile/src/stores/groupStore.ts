@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../services/supabase';
 import { getIsGuest } from './authStore';
+import type { RosterNameMatchingMode, RosterNameSensitivity } from '@shiftsnap/shared';
 
 const VIEW_SCOPE_KEY = 'shiftsnap:group-view-scope';
 
@@ -49,6 +50,7 @@ interface GroupState {
   joinGroupByInvite: (userId: string, inviteCode: string) => Promise<void>;
   leaveGroup: (userId: string, groupId: string) => Promise<void>;
   updateGroupName: (groupId: string, name: string) => Promise<void>;
+  setRosterNameMatching: (groupId: string, mode: RosterNameMatchingMode, sensitivity: RosterNameSensitivity) => Promise<void>;
   removeMember: (groupId: string, targetUserId: string) => Promise<void>;
   claimPersonInSchedule: (scheduleId: string, nameOnSchedule: string) => Promise<number>;
   unclaimPersonInSchedule: (scheduleId: string) => Promise<void>;
@@ -292,6 +294,25 @@ export const useGroupStore = create<GroupState>((set, get) => ({
       console.error('Error updating group name:', error);
       throw error;
     }
+  },
+
+  setRosterNameMatching: async (groupId, mode, sensitivity) => {
+    if (getIsGuest()) return;
+    const { error } = await supabase.rpc('set_group_roster_name_matching', {
+      p_group_id: groupId,
+      p_mode: mode,
+      p_sensitivity: sensitivity,
+    });
+    if (error) throw error;
+    const roster_name_matching = { mode, sensitivity };
+    set((state) => ({
+      groups: state.groups.map((group) => group.id === groupId
+        ? { ...group, settings: { ...group.settings, roster_name_matching } }
+        : group),
+      currentGroup: state.currentGroup?.id === groupId
+        ? { ...state.currentGroup, settings: { ...state.currentGroup.settings, roster_name_matching } }
+        : state.currentGroup,
+    }));
   },
 
   removeMember: async (groupId: string, targetUserId: string) => {

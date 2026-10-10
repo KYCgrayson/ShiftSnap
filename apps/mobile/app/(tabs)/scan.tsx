@@ -18,9 +18,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../src/theme';
-import { Button, useToast } from '../../src/components/ui';
+import { Button } from '../../src/components/ui';
 import { supabase } from '../../src/services/supabase';
-import { getShiftImageStoragePath } from '../../src/services/shiftImages';
+import { buildScheduleImageStoragePath, getShiftImageStoragePath } from '../../src/services/shiftImages';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useScheduleStore } from '../../src/stores/scheduleStore';
 import { useLocaleStore } from '../../src/stores/localeStore';
@@ -52,7 +52,6 @@ const getSignedImageUrl = async (imageUrl: string): Promise<string> => {
 export default function ScanScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
-  const toast = useToast();
   const [permission, requestPermission] = useCameraPermissions();
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -61,7 +60,7 @@ export default function ScanScreen() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const locale = useLocaleStore((s) => s.locale);
   const { user, isGuest } = useAuthStore();
-  const { createScheduleFromOCR, schedules, fetchSchedules } = useScheduleStore();
+  const { createScheduleFromOCR, updateScheduleImage, schedules, fetchSchedules } = useScheduleStore();
   const currentGroupId = useGroupStore((s) => s.currentGroup?.id);
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
   const handledPickerUris = useRef(new Set<string>());
@@ -238,27 +237,47 @@ export default function ScanScreen() {
     });
   };
 
-  // Upload image to storage for record keeping (non-blocking, best-effort)
-  const uploadToStorage = async (uri: string): Promise<string | null> => {
+  // Persist only after OCR has supplied the month and the schedule row has a
+  // stable ID.  ArrayBuffer is required for reliable React Native uploads.
+  const uploadToStorage = async (
+    uri: string,
+    scheduleId: string,
+    yearMonth: string,
+  ): Promise<string> => {
     try {
-      if (!user?.id) return null;
+      if (!user?.id) throw new Error('NOT_AUTHENTICATED');
       const mimeType = getImageMimeType(uri);
       const extension = mimeType === 'image/png' ? 'png' : 'jpg';
-      const randomSuffix = Math.random().toString(36).slice(2, 10);
-      const storagePath = `${user.id}/schedule_${Date.now()}_${randomSuffix}.${extension}`;
+      const storagePath = buildScheduleImageStoragePath(
+        user.id,
+        currentGroupId,
+        yearMonth,
+        scheduleId,
+        extension,
+      );
       const response = await fetch(uri);
-      const blob = await response.blob();
+      const arrayBuffer = await response.arrayBuffer();
       const { error } = await supabase.storage
         .from('shift-images')
-        .upload(storagePath, blob, { contentType: mimeType });
+        // The path is deterministic. `upsert` makes retry safe when the
+        // previous attempt uploaded the object but failed during verification
+        // or while updating the schedule row.
+        .upload(storagePath, arrayBuffer, { contentType: mimeType, upsert: true });
       if (error) {
-        console.warn('Storage upload failed (non-critical):', error.message);
-        return null;
+        throw error;
       }
+
+      // A successful insert response does not guarantee that the current
+      // account can later reopen the object. Verify with the same private
+      // bucket read used by the calendar before marking it as saved.
+      const { error: verificationError } = await supabase.storage
+        .from('shift-images')
+        .download(storagePath);
+      if (verificationError) throw verificationError;
       return storagePath;
     } catch (e) {
-      console.warn('Storage upload error (non-critical):', e);
-      return null;
+      console.warn('Storage upload failed:', e);
+      throw e;
     }
   };
 
@@ -305,22 +324,10 @@ export default function ScanScreen() {
       // Always convert to base64 and send directly to Edge Function
       const base64 = await imageToBase64(capturedImage);
 
-      // Start OCR and storage upload in parallel
-      const ocrPromise = callOcrFunction({
+      const ocrData = await callOcrFunction({
         imageBase64: base64,
         imageMimeType: getImageMimeType(capturedImage),
       });
-
-      // For authenticated users, upload to storage for record keeping (non-blocking)
-      const storagePromise = !isGuest
-        ? uploadToStorage(capturedImage)
-        : Promise.resolve(null);
-
-      const [ocrData, storagePath] = await Promise.all([ocrPromise, storagePromise]);
-
-      // Authenticated records must only retain a persistent Storage reference.
-      // OCR/shifts remain useful even if an image upload failed.
-      const imagePathForDb = isGuest ? capturedImage : (storagePath || '');
 
       // Determine year-month from OCR or use current
       const yearMonth = ocrData.detected_year && ocrData.detected_month
@@ -330,13 +337,48 @@ export default function ScanScreen() {
       // Create schedule record (in-memory for guests, DB for authenticated)
       const scheduleId = await createScheduleFromOCR(
         user.id,
-        imagePathForDb,
+        isGuest ? capturedImage : '',
         yearMonth,
-        ocrData
+        ocrData,
+        isGuest ? 'uploaded' : 'pending',
       );
 
-      if (!isGuest && !storagePath) {
-        toast(t('scan.photoNotSavedMessage'), 5000);
+      if (!isGuest) {
+        let imageSaved = false;
+        const imageExtension = getImageMimeType(capturedImage) === 'image/png' ? 'png' : 'jpg';
+        const attemptedStoragePath = buildScheduleImageStoragePath(
+          user.id,
+          currentGroupId,
+          yearMonth,
+          scheduleId,
+          imageExtension,
+        );
+        while (!imageSaved) {
+          try {
+            const storagePath = await uploadToStorage(capturedImage, scheduleId, yearMonth);
+            await updateScheduleImage(scheduleId, storagePath, 'uploaded');
+            imageSaved = true;
+          } catch (uploadError) {
+            // OCR data is already safely stored. Keep an explicit failed state
+            // and let the user retry without re-running OCR or duplicating it.
+            // Preserve the deterministic attempted path even when upload or
+            // verification fails. An object may already exist there, and the
+            // audit/retry flow can recover it without guessing.
+            await updateScheduleImage(scheduleId, attemptedStoragePath, 'failed').catch(() => {});
+            const retry = await new Promise<boolean>((resolve) => {
+              Alert.alert(
+                t('scan.photoNotSavedTitle'),
+                t('scan.photoNotSavedMessage'),
+                [
+                  { text: t('common.close'), style: 'cancel', onPress: () => resolve(false) },
+                  { text: t('common.retry'), onPress: () => resolve(true) },
+                ],
+                { cancelable: true, onDismiss: () => resolve(false) },
+              );
+            });
+            if (!retry) break;
+          }
+        }
       }
 
       // Navigate to review screen — use local file URI for immediate display

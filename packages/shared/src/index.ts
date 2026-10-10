@@ -2,6 +2,7 @@
 
 // Types
 export * from './types';
+export * from './utils/rosterIdentity';
 
 // Constants
 export * from './constants';

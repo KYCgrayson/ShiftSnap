@@ -1,6 +1,14 @@
 {
   "ios": {
     "bundleIdentifier": "com.graysonkyc.shiftsnap",
-    "appleTeamId": "R9CKAABL8D"
+    "appleTeamId": "R9CKAABL8D",
+    "infoPlist": {
+      "ITSAppUsesNonExemptEncryption": false
+    }
+  },
+  "extra": {
+    "eas": {
+      "projectId": "abd14e6d-ee87-4a71-a31a-dec97ce3e3b2"
+    }
   }
 }

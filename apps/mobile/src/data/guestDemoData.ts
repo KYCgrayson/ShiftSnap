@@ -150,6 +150,7 @@ export interface GuestPerson {
   avatar_url: string | null;
   notes: string | null;
   created_at: string;
+  canonical_person_id: string | null;
 }
 
 export function getGuestPersons(): GuestPerson[] {
@@ -163,6 +164,7 @@ export function getGuestPersons(): GuestPerson[] {
       avatar_url: null,
       notes: null,
       created_at: new Date().toISOString(),
+      canonical_person_id: 'g-person-1',
     },
   ];
 }

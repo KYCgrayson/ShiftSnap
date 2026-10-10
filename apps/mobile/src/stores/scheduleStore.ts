@@ -5,6 +5,7 @@ import type { OCRResult } from '@shiftsnap/shared';
 import { getIsGuest } from './authStore';
 import { getGuestSchedules } from '../data/guestDemoData';
 import { useGroupStore } from './groupStore';
+import { buildScheduleImageStoragePath, getShiftImageExtension, getShiftImageStoragePath } from '../services/shiftImages';
 
 const GUEST_SCHEDULES_KEY = 'shiftsnap:guest-schedules';
 
@@ -14,6 +15,7 @@ interface ScheduleItem {
   person_id: string | null;
   group_id: string | null;
   image_url: string;
+  image_status: 'pending' | 'uploaded' | 'failed' | 'missing' | 'unverified';
   year_month: string;
   raw_ocr_result: OCRResult | null;
   status: 'draft' | 'published' | 'archived';
@@ -31,8 +33,14 @@ interface ScheduleState {
     userId: string,
     imageUrl: string,
     yearMonth: string,
-    ocrResult: OCRResult
+    ocrResult: OCRResult,
+    imageStatus?: ScheduleItem['image_status'],
   ) => Promise<string>;
+  updateScheduleImage: (
+    scheduleId: string,
+    imageUrl: string,
+    imageStatus: ScheduleItem['image_status'],
+  ) => Promise<void>;
   updateScheduleStatus: (scheduleId: string, status: 'draft' | 'published' | 'archived') => Promise<void>;
   updateScheduleYearMonth: (scheduleId: string, yearMonth: string) => Promise<void>;
   getUnsharedCount: (userId: string, groupId: string) => Promise<number>;
@@ -95,7 +103,8 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     userId: string,
     imageUrl: string,
     yearMonth: string,
-    ocrResult: OCRResult
+    ocrResult: OCRResult,
+    imageStatus: ScheduleItem['image_status'] = 'pending',
   ) => {
     if (getIsGuest()) {
       const localSchedule: ScheduleItem = {
@@ -104,6 +113,7 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
         person_id: null,
         group_id: 'guest-group',
         image_url: imageUrl,
+        image_status: imageStatus,
         year_month: yearMonth,
         raw_ocr_result: ocrResult,
         status: 'draft',
@@ -130,6 +140,7 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
           owner_id: userId,
           group_id: currentGroup?.id || null,
           image_url: imageUrl,
+          image_status: imageStatus,
           year_month: yearMonth,
           raw_ocr_result: ocrResult,
           status: 'draft',
@@ -151,6 +162,41 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
       set({ loading: false, error: message });
       throw error;
     }
+  },
+
+  updateScheduleImage: async (scheduleId, imageUrl, imageStatus) => {
+    if (getIsGuest()) {
+      const schedules = get().schedules.map((schedule) =>
+        schedule.id === scheduleId
+          ? { ...schedule, image_url: imageUrl, image_status: imageStatus }
+          : schedule,
+      );
+      set({
+        schedules,
+        currentSchedule: get().currentSchedule?.id === scheduleId
+          ? { ...get().currentSchedule!, image_url: imageUrl, image_status: imageStatus }
+          : get().currentSchedule,
+      });
+      await AsyncStorage.setItem(GUEST_SCHEDULES_KEY, JSON.stringify(schedules));
+      return;
+    }
+
+    const { error } = await supabase
+      .from('schedules')
+      .update({ image_url: imageUrl, image_status: imageStatus })
+      .eq('id', scheduleId);
+    if (error) throw error;
+
+    set((state) => ({
+      schedules: state.schedules.map((schedule) =>
+        schedule.id === scheduleId
+          ? { ...schedule, image_url: imageUrl, image_status: imageStatus }
+          : schedule,
+      ),
+      currentSchedule: state.currentSchedule?.id === scheduleId
+        ? { ...state.currentSchedule, image_url: imageUrl, image_status: imageStatus }
+        : state.currentSchedule,
+    }));
   },
 
   updateScheduleStatus: async (scheduleId: string, status: 'draft' | 'published' | 'archived') => {
@@ -212,20 +258,76 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
       return;
     }
     try {
+      const existing = get().schedules.find((schedule) => schedule.id === scheduleId)
+        || (await supabase.from('schedules')
+          .select('id, owner_id, group_id, image_url, image_status')
+          .eq('id', scheduleId)
+          .single()).data;
+      let imageUrl = existing?.image_url;
+      let imageStatus = existing?.image_status;
+      const oldPath = imageUrl ? getShiftImageStoragePath(imageUrl) : null;
+      let movedFromPath: string | null = null;
+      let movedToPath: string | null = null;
+
+      // New images use their persisted schedule ID, so moving the month keeps
+      // the object namespace truthful when a reviewer corrects OCR's month.
+      if (existing && oldPath && imageStatus === 'uploaded') {
+        const nextPath = buildScheduleImageStoragePath(
+          existing.owner_id,
+          existing.group_id,
+          yearMonth,
+          scheduleId,
+          getShiftImageExtension(oldPath),
+        );
+        if (oldPath !== nextPath) {
+          const { error: moveError } = await supabase.storage
+            .from('shift-images')
+            .move(oldPath, nextPath);
+          if (moveError) {
+            // Keep the only known object reference. It is still readable at
+            // its old month path and can be retried/repaired later; blanking
+            // it here would turn a recoverable move failure into data loss.
+            imageStatus = 'unverified';
+          } else {
+            imageUrl = nextPath;
+            movedFromPath = oldPath;
+            movedToPath = nextPath;
+          }
+        }
+      }
       const { error } = await supabase
         .from('schedules')
-        .update({ year_month: yearMonth })
+        .update({
+          year_month: yearMonth,
+          ...(imageUrl !== undefined ? { image_url: imageUrl } : {}),
+          ...(imageStatus !== undefined ? { image_status: imageStatus } : {}),
+        })
         .eq('id', scheduleId);
 
-      if (error) throw error;
+      if (error) {
+        // Storage and Postgres cannot share one transaction. If the object was
+        // moved but the row update failed, restore the old path so the
+        // persisted schedule reference never points at a missing object.
+        if (movedFromPath && movedToPath) {
+          const { error: rollbackError } = await supabase.storage
+            .from('shift-images')
+            .move(movedToPath, movedFromPath);
+          if (rollbackError) {
+            console.warn('Failed to roll back schedule image move:', rollbackError);
+          }
+        }
+        throw error;
+      }
 
       set((state) => ({
         schedules: state.schedules.map((s) =>
-          s.id === scheduleId ? { ...s, year_month: yearMonth } : s
+          s.id === scheduleId
+            ? { ...s, year_month: yearMonth, ...(imageUrl !== undefined ? { image_url: imageUrl } : {}), ...(imageStatus !== undefined ? { image_status: imageStatus } : {}) }
+            : s
         ),
         currentSchedule:
           state.currentSchedule?.id === scheduleId
-            ? { ...state.currentSchedule, year_month: yearMonth }
+            ? { ...state.currentSchedule, year_month: yearMonth, ...(imageUrl !== undefined ? { image_url: imageUrl } : {}), ...(imageStatus !== undefined ? { image_status: imageStatus } : {}) }
             : state.currentSchedule,
       }));
     } catch (error) {

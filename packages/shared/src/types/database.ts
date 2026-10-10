@@ -161,9 +161,62 @@ export type Database = {
           },
         ]
       }
+      person_aliases: {
+        Row: {
+          alias: string
+          canonical_person_id: string
+          created_at: string
+          created_by: string | null
+          group_id: string
+          id: string
+          normalized_alias: string
+        }
+        Insert: {
+          alias: string
+          canonical_person_id: string
+          created_at?: string
+          created_by?: string | null
+          group_id: string
+          id?: string
+          normalized_alias: string
+        }
+        Update: {
+          alias?: string
+          canonical_person_id?: string
+          created_at?: string
+          created_by?: string | null
+          group_id?: string
+          id?: string
+          normalized_alias?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "person_aliases_canonical_person_id_fkey"
+            columns: ["canonical_person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "person_aliases_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "person_aliases_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       persons: {
         Row: {
           avatar_url: string | null
+          canonical_person_id: string | null
           color: string
           created_at: string
           group_id: string | null
@@ -175,6 +228,7 @@ export type Database = {
         }
         Insert: {
           avatar_url?: string | null
+          canonical_person_id?: string | null
           color?: string
           created_at?: string
           group_id?: string | null
@@ -186,6 +240,7 @@ export type Database = {
         }
         Update: {
           avatar_url?: string | null
+          canonical_person_id?: string | null
           color?: string
           created_at?: string
           group_id?: string | null
@@ -197,6 +252,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "persons_canonical_person_id_fkey"
+            columns: ["canonical_person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "persons_group_id_fkey"
             columns: ["group_id"]
             isOneToOne: false
@@ -206,6 +268,198 @@ export type Database = {
           {
             foreignKeyName: "persons_owner_id_fkey"
             columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      roster_identity_merge_claim_movements: {
+        Row: {
+          group_member_id: string
+          merge_id: string
+          previous_person_id: string
+        }
+        Insert: {
+          group_member_id: string
+          merge_id: string
+          previous_person_id: string
+        }
+        Update: {
+          group_member_id?: string
+          merge_id?: string
+          previous_person_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "roster_identity_merge_claim_movements_group_member_id_fkey"
+            columns: ["group_member_id"]
+            isOneToOne: false
+            referencedRelation: "group_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "roster_identity_merge_claim_movements_merge_id_fkey"
+            columns: ["merge_id"]
+            isOneToOne: false
+            referencedRelation: "roster_identity_merges"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "roster_identity_merge_claim_movements_previous_person_id_fkey"
+            columns: ["previous_person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      roster_identity_merge_person_movements: {
+        Row: {
+          merge_id: string
+          person_id: string
+          previous_canonical_person_id: string
+        }
+        Insert: {
+          merge_id: string
+          person_id: string
+          previous_canonical_person_id: string
+        }
+        Update: {
+          merge_id?: string
+          person_id?: string
+          previous_canonical_person_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "roster_identity_merge_person__previous_canonical_person_id_fkey"
+            columns: ["previous_canonical_person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "roster_identity_merge_person_movements_merge_id_fkey"
+            columns: ["merge_id"]
+            isOneToOne: false
+            referencedRelation: "roster_identity_merges"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "roster_identity_merge_person_movements_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      roster_identity_merge_shift_movements: {
+        Row: {
+          merge_id: string
+          previous_person_id: string
+          shift_id: string
+        }
+        Insert: {
+          merge_id: string
+          previous_person_id: string
+          shift_id: string
+        }
+        Update: {
+          merge_id?: string
+          previous_person_id?: string
+          shift_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "roster_identity_merge_shift_movements_merge_id_fkey"
+            columns: ["merge_id"]
+            isOneToOne: false
+            referencedRelation: "roster_identity_merges"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "roster_identity_merge_shift_movements_previous_person_id_fkey"
+            columns: ["previous_person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "roster_identity_merge_shift_movements_shift_id_fkey"
+            columns: ["shift_id"]
+            isOneToOne: false
+            referencedRelation: "shifts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      roster_identity_merges: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          group_id: string
+          id: string
+          moved_alias_ids: string[]
+          primary_person_id: string
+          secondary_person_id: string
+          undone_at: string | null
+          undone_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          group_id: string
+          id?: string
+          moved_alias_ids?: string[]
+          primary_person_id: string
+          secondary_person_id: string
+          undone_at?: string | null
+          undone_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          group_id?: string
+          id?: string
+          moved_alias_ids?: string[]
+          primary_person_id?: string
+          secondary_person_id?: string
+          undone_at?: string | null
+          undone_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "roster_identity_merges_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "roster_identity_merges_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "roster_identity_merges_primary_person_id_fkey"
+            columns: ["primary_person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "roster_identity_merges_secondary_person_id_fkey"
+            columns: ["secondary_person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "roster_identity_merges_undone_by_fkey"
+            columns: ["undone_by"]
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
@@ -277,6 +531,7 @@ export type Database = {
           created_at: string
           group_id: string | null
           id: string
+          image_status: string
           image_url: string
           owner_id: string
           person_id: string | null
@@ -289,6 +544,7 @@ export type Database = {
           created_at?: string
           group_id?: string | null
           id?: string
+          image_status?: string
           image_url: string
           owner_id: string
           person_id?: string | null
@@ -301,6 +557,7 @@ export type Database = {
           created_at?: string
           group_id?: string | null
           id?: string
+          image_status?: string
           image_url?: string
           owner_id?: string
           person_id?: string | null
@@ -486,6 +743,13 @@ export type Database = {
             foreignKeyName: "shifts_schedule_id_fkey"
             columns: ["schedule_id"]
             isOneToOne: false
+            referencedRelation: "schedule_image_audit"
+            referencedColumns: ["schedule_id"]
+          },
+          {
+            foreignKeyName: "shifts_schedule_id_fkey"
+            columns: ["schedule_id"]
+            isOneToOne: false
             referencedRelation: "schedules"
             referencedColumns: ["id"]
           },
@@ -536,7 +800,35 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      schedule_image_audit: {
+        Row: {
+          group_id: string | null
+          image_status: string | null
+          image_url: string | null
+          owner_id: string | null
+          reference_kind: string | null
+          schedule_id: string | null
+          storage_object_present: boolean | null
+          storage_owner_id: string | null
+          year_month: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "schedules_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "schedules_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       auto_match_shifts: {
@@ -566,18 +858,64 @@ export type Database = {
         }[]
       }
       get_my_schedule_shifts: {
-        Args: { p_end_date?: string | null; p_start_date?: string | null }
-        Returns: Database["public"]["Tables"]["shifts"]["Row"][]
+        Args: { p_end_date?: string; p_start_date?: string }
+        Returns: {
+          calendar_event_id: string | null
+          comparison_status:
+            | Database["public"]["Enums"]["comparison_status"]
+            | null
+          created_at: string
+          date: string
+          end_time: string | null
+          id: string
+          is_day_off: boolean | null
+          name_on_schedule: string | null
+          paired_shift_id: string | null
+          person_id: string | null
+          schedule_id: string
+          shift_code: string
+          source: Database["public"]["Enums"]["shift_source"]
+          start_time: string | null
+          synced_at: string | null
+          updated_at: string
+          user_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "shifts"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       get_user_group_ids: { Args: { uid: string }; Returns: string[] }
       is_group_admin: { Args: { gid: string; uid: string }; Returns: boolean }
       join_group_by_invite_code: { Args: { code: string }; Returns: string }
+      merge_roster_people: {
+        Args: { p_primary_person_id: string; p_secondary_person_id: string }
+        Returns: string
+      }
       remove_group_member: {
         Args: { gid: string; target_user_id: string }
         Returns: boolean
       }
+      resolve_roster_person: {
+        Args: { p_color?: string; p_group_id: string; p_name: string }
+        Returns: string
+      }
+      roster_normalize_name: {
+        Args: { p_ignore_trailing_number?: boolean; p_name: string }
+        Returns: string
+      }
+      set_group_roster_name_matching: {
+        Args: { p_group_id: string; p_mode: string; p_sensitivity?: string }
+        Returns: undefined
+      }
       unclaim_person_in_schedule: {
         Args: { p_schedule_id: string }
+        Returns: undefined
+      }
+      undo_roster_people_merge: {
+        Args: { p_merge_id: string }
         Returns: undefined
       }
     }
@@ -923,10 +1261,6 @@ export type Database = {
         Args: { bucketid: string; metadata: Json; name: string; owner: string }
         Returns: undefined
       }
-      delete_leaf_prefixes: {
-        Args: { bucket_ids: string[]; names: string[] }
-        Returns: undefined
-      }
       extension: { Args: { name: string }; Returns: string }
       filename: { Args: { name: string }; Returns: string }
       foldername: { Args: { name: string }; Returns: string[] }
@@ -934,9 +1268,6 @@ export type Database = {
         Args: { p_delimiter: string; p_key: string; p_prefix: string }
         Returns: string
       }
-      get_level: { Args: { name: string }; Returns: number }
-      get_prefix: { Args: { name: string }; Returns: string }
-      get_prefixes: { Args: { name: string }; Returns: string[] }
       get_size_by_bucket: {
         Args: never
         Returns: {
@@ -1014,26 +1345,6 @@ export type Database = {
           created_at: string
           id: string
           key: string
-          last_accessed_at: string
-          metadata: Json
-          name: string
-          updated_at: string
-        }[]
-      }
-      search_legacy_v1: {
-        Args: {
-          bucketname: string
-          levels?: number
-          limits?: number
-          offsets?: number
-          prefix: string
-          search?: string
-          sortcolumn?: string
-          sortorder?: string
-        }
-        Returns: {
-          created_at: string
-          id: string
           last_accessed_at: string
           metadata: Json
           name: string

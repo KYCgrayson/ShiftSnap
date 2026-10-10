@@ -16,6 +16,21 @@ export function getShiftImageStoragePath(imageUrl: string): string | null {
   }
 }
 
+/** Canonical private object name for a newly scanned schedule image. */
+export function buildScheduleImageStoragePath(
+  ownerId: string,
+  groupId: string | null | undefined,
+  yearMonth: string,
+  scheduleId: string,
+  extension: 'jpg' | 'png' = 'jpg',
+): string {
+  return `${ownerId}/${groupId || 'personal'}/${yearMonth}/${scheduleId}.${extension}`;
+}
+
+export function getShiftImageExtension(storagePath: string): 'jpg' | 'png' {
+  return storagePath.toLowerCase().endsWith('.png') ? 'png' : 'jpg';
+}
+
 /** True only for values an authenticated account can reopen after this session. */
 export function isPersistentShiftImageReference(value: string | null | undefined): value is string {
   const imageUrl = value?.trim();

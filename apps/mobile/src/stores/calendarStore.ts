@@ -14,8 +14,10 @@ import {
   type CalendarSyncDateRange,
   type CalendarSyncResult,
   type CalendarRemovalResult,
+  type CalendarTitleMode,
   type WritableCalendarDestination,
 } from '../services/calendarSync';
+import { useAuthStore } from './authStore';
 import { supabase } from '../services/supabase';
 import { useShiftCodeStore } from './shiftCodeStore';
 import { useShiftStore } from './shiftStore';
@@ -26,6 +28,7 @@ const CALENDAR_CONNECTED_KEY_PREFIX = 'shiftsnap_calendar_connected:';
 const CALENDAR_ALARMS_KEY_PREFIX = 'shiftsnap_calendar_alarms_enabled:';
 export const ALARM_MINUTES_KEY = 'shiftsnap_default_alarm_minutes';
 const CALENDAR_SYNC_FILTER_KEY_PREFIX = 'shiftsnap_calendar_sync_filter:';
+const CALENDAR_TITLE_MODE_KEY_PREFIX = 'shiftsnap_calendar_title_mode:';
 export type CalendarSyncFilter = 'all' | 'work_days' | 'days_off';
 
 function getSingleMonthRange(
@@ -91,6 +94,24 @@ export function calendarAlarmsKey(userId: string): string {
 
 export function calendarSyncFilterKey(userId: string): string {
   return `${CALENDAR_SYNC_FILTER_KEY_PREFIX}${userId}`;
+}
+
+export function calendarTitleModeKey(userId: string): string {
+  return `${CALENDAR_TITLE_MODE_KEY_PREFIX}${userId}`;
+}
+
+export async function getCalendarTitleMode(userId?: string): Promise<CalendarTitleMode> {
+  if (!userId) return 'shift_first';
+  try {
+    const value = await AsyncStorage.getItem(calendarTitleModeKey(userId));
+    return value === 'shift_only' || value === 'name_first' ? value : 'shift_first';
+  } catch {
+    return 'shift_first';
+  }
+}
+
+function isOfflineReadOnly(): boolean {
+  return useAuthStore.getState().isOfflineReadOnly === true;
 }
 
 async function resolveCalendarId(userId: string | undefined, currentId: string | null): Promise<string | null> {
@@ -236,16 +257,21 @@ export const useCalendarStore = create<CalendarState>((set, get) => ({
 
   removeSyncedEvents: async (userId, range) => {
     const { isConnected, activeUserId } = get();
-    if (!isConnected || activeUserId !== userId) return null;
+    if (isOfflineReadOnly() || !isConnected || activeUserId !== userId) return null;
     const calendarId = await resolveCalendarId(userId, get().calendarId);
     if (!calendarId) return null;
     if (calendarId !== get().calendarId) {
       await AsyncStorage.setItem(destinationKey(userId), calendarId);
       set({ calendarId, isConnected: true });
     }
+    if (isOfflineReadOnly() || get().activeUserId !== userId) return null;
 
     set({ loading: true, error: null });
     try {
+      if (isOfflineReadOnly() || get().activeUserId !== userId) {
+        set({ loading: false });
+        return null;
+      }
       const result = await removeManagedEventsForUser(
         calendarId,
         userId,
@@ -262,7 +288,7 @@ export const useCalendarStore = create<CalendarState>((set, get) => ({
 
   syncShift: async (shift, codeInfo) => {
     const { isConnected, activeUserId } = get();
-    if (!isConnected || activeUserId !== shift.user_id) return null;
+    if (isOfflineReadOnly() || !isConnected || activeUserId !== shift.user_id) return null;
     const calendarId = await resolveCalendarId(shift.user_id, get().calendarId);
     if (!calendarId) return null;
     if (calendarId !== get().calendarId) {
@@ -272,7 +298,10 @@ export const useCalendarStore = create<CalendarState>((set, get) => ({
 
     try {
       const alarmMinutes = await getCalendarAlarmMinutes(shift.user_id);
-      const eventId = await syncShiftToCalendar(shift, codeInfo, calendarId, alarmMinutes);
+      const titleMode = await getCalendarTitleMode(shift.user_id);
+      if (isOfflineReadOnly() || get().activeUserId !== shift.user_id) return null;
+      const eventId = await syncShiftToCalendar(shift, codeInfo, calendarId, alarmMinutes, titleMode);
+      if (isOfflineReadOnly() || get().activeUserId !== shift.user_id) return null;
       await persistEventIds(new Map([[shift.id, eventId]]));
       return eventId;
     } catch (error) {
@@ -284,7 +313,7 @@ export const useCalendarStore = create<CalendarState>((set, get) => ({
   syncShifts: async (shifts, shiftCodes, range) => {
     const syncUserId = range?.userId || shifts[0]?.user_id;
     const { isConnected, activeUserId } = get();
-    if (!isConnected || !syncUserId || activeUserId !== syncUserId) return null;
+    if (isOfflineReadOnly() || !isConnected || !syncUserId || activeUserId !== syncUserId) return null;
     const calendarId = await resolveCalendarId(syncUserId, get().calendarId);
     if (!calendarId) return null;
     if (calendarId !== get().calendarId) {
@@ -301,12 +330,15 @@ export const useCalendarStore = create<CalendarState>((set, get) => ({
         (shift) => shift.date >= monthRange.startDate && shift.date <= monthRange.endDate,
       );
       const alarmMinutes = await getCalendarAlarmMinutes(syncUserId);
+      const titleMode = await getCalendarTitleMode(syncUserId);
+      if (isOfflineReadOnly() || get().activeUserId !== syncUserId) return null;
       const result = await reconcileShiftsToCalendar(
         monthShifts,
         shiftCodes,
         calendarId,
-        { ...monthRange, alarmMinutes },
+        { ...monthRange, alarmMinutes, titleMode },
       );
+      if (isOfflineReadOnly() || get().activeUserId !== syncUserId) return null;
       await persistEventIds(result.eventIdsByShiftId);
       return result;
     } catch (error) {
@@ -317,7 +349,7 @@ export const useCalendarStore = create<CalendarState>((set, get) => ({
 
   syncUserShifts: async (userId, range) => {
     const { isConnected, activeUserId } = get();
-    if (!isConnected || activeUserId !== userId) return null;
+    if (isOfflineReadOnly() || !isConnected || activeUserId !== userId) return null;
     const calendarId = await resolveCalendarId(userId, get().calendarId);
     if (!calendarId) {
       set({ isConnected: false, calendarId: null, error: 'No writable calendar available' });
@@ -353,7 +385,9 @@ export const useCalendarStore = create<CalendarState>((set, get) => ({
         ...monthRange,
         userId,
         alarmMinutes: await getCalendarAlarmMinutes(userId),
+        titleMode: await getCalendarTitleMode(userId),
       };
+      if (isOfflineReadOnly() || get().activeUserId !== userId) return null;
 
       const result = await reconcileShiftsToCalendar(
         shifts,
@@ -361,6 +395,7 @@ export const useCalendarStore = create<CalendarState>((set, get) => ({
         calendarId,
         reconcileRange,
       );
+      if (isOfflineReadOnly() || get().activeUserId !== userId) return null;
       // calendar_event_id is a single legacy column and cannot represent the
       // same canonical shift synced by several accounts/devices. Persist only
       // events whose canonical shift is owned by the current account; shared

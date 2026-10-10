@@ -1,0 +1,10 @@
+{
+  "migration": "20261010000001_atomic_schedule_shift_replacement.sql",
+  "prior_july_30_migrations": "confirmed applied by linked migration list",
+  "dry_run": "only this migration pending",
+  "applied": true,
+  "scope": "three function definitions; no top-level table or schedule-data changes",
+  "types": "regenerated using supabase gen types typescript --linked",
+  "production_user_data_used_in_tests": false,
+  "testflight_submitted": false
+}

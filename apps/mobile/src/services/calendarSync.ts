@@ -35,7 +35,10 @@ export interface CalendarSyncDateRange {
   endDate?: string;
   userId?: string;
   alarmMinutes?: number | null;
+  titleMode?: CalendarTitleMode;
 }
+
+export type CalendarTitleMode = 'shift_first' | 'shift_only' | 'name_first';
 
 export interface CalendarSyncResult {
   created: number;
@@ -223,7 +226,8 @@ function normalizeTime(time?: string | null): string | null {
   if (!match) return null;
   const hour = Number(match[1]);
   const minute = Number(match[2]);
-  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  const second = match[3] === undefined ? 0 : Number(match[3]);
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59) return null;
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
 }
 
@@ -246,13 +250,13 @@ function getEventSyncKey(event: Calendar.Event): string | null {
 
 function getUserIdFromSyncKey(syncKey: string): string | null {
   const parts = syncKey.split(':');
-  return parts.length >= 4 && parts[0] === 'IShift' && /^v\\d+$/.test(parts[1])
+  return parts.length === 4 && parts[0] === 'IShift' && /^v\d+$/.test(parts[1])
     ? parts[2]
     : null;
 }
 
 function isIShiftSyncKey(syncKey: string): boolean {
-  return /^IShift:v\\d+:/.test(syncKey);
+  return /^IShift:v\d+:[^:\s]+:[^:\s]+$/.test(syncKey);
 }
 
 function isIShiftManagedEvent(event: Calendar.Event): boolean {
@@ -273,12 +277,20 @@ function buildEventDetails(
   calendarId: string,
   alarmMinutes?: number | null,
   syncOwnerUserId?: string,
+  titleMode: CalendarTitleMode = 'shift_first',
 ): Omit<Partial<Calendar.Event>, 'id'> {
   const shiftTitle = codeInfo?.meaning
     ? `${codeInfo.meaning} (${shift.shift_code})`
     : `Shift ${shift.shift_code}`;
   const rowName = shift.name_on_schedule?.trim();
-  const title = rowName ? `${rowName} · ${shiftTitle}` : shiftTitle;
+  const effectiveMode = ['shift_first', 'shift_only', 'name_first'].includes(titleMode)
+    ? titleMode
+    : 'shift_first';
+  const title = effectiveMode === 'shift_only' || !rowName
+    ? shiftTitle
+    : effectiveMode === 'name_first'
+      ? `${rowName} · ${shiftTitle}`
+      : `${shiftTitle} · ${rowName}`;
 
   const startTime = normalizeTime(shift.start_time) || normalizeTime(codeInfo?.start_time);
   const endTime = normalizeTime(shift.end_time) || normalizeTime(codeInfo?.end_time);
@@ -360,6 +372,7 @@ export async function syncShiftToCalendar(
   codeInfo: CalendarShiftCodeForSync | undefined,
   calendarId: string,
   alarmMinutes?: number | null,
+  titleMode: CalendarTitleMode = 'shift_first',
 ): Promise<string> {
   const shiftCodes = codeInfo
     ? [{ ...codeInfo, code: codeInfo.code ?? shift.shift_code }]
@@ -369,6 +382,7 @@ export async function syncShiftToCalendar(
     endDate: shift.date,
     userId: shift.user_id,
     alarmMinutes,
+    titleMode,
   });
   const eventId = result.eventIdsByShiftId.get(shift.id);
   if (!eventId) {
@@ -498,6 +512,7 @@ export async function reconcileShiftsToCalendar(
       calendarId,
       range?.alarmMinutes,
       range?.userId,
+      range?.titleMode ?? 'shift_first',
     );
     const keyedCandidates = eventsBySyncKey.get(syncKey) ?? [];
     // calendar_event_id predates multi-user claims and only has room for one
@@ -552,6 +567,11 @@ export async function reconcileShiftsToCalendar(
       console.error(`Failed to reconcile shift ${shift.id}:`, error);
     }
   }
+
+  // A partial native write means this pass did not establish the complete
+  // desired calendar state. Skip stale-event cleanup so a retry can finish
+  // without removing events during an incomplete reconciliation.
+  if (result.failed > 0) return result;
 
   for (const event of events) {
     if (touchedEventIds.has(event.id)) continue;

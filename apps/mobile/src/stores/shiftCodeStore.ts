@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 import { supabase } from '../services/supabase';
-import { getIsGuest } from './authStore';
+import { getIsGuest, getIsOfflineReadOnly, useAuthStore } from './authStore';
 import { getGuestShiftCodes } from '../data/guestDemoData';
 import { useShiftStore } from './shiftStore';
-import { useGroupStore } from './groupStore';
+import { hydrateCachedGroups, useGroupStore } from './groupStore';
+import { getOfflineReadGeneration, isOfflineReadRequestCurrent, readOfflineSnapshot, saveOfflineSnapshotPatch, withReadTimeout } from '../services/offlineReadCache';
 
 interface ShiftCodeItem {
   id: string;
@@ -99,6 +100,15 @@ export const useShiftCodeStore = create<ShiftCodeState>((set, get) => ({
       set({ shiftCodes: [...getGuestShiftCodes()], loading: false });
       return;
     }
+    await hydrateCachedGroups(userId);
+    const groups = useGroupStore.getState().groups.map((g) => g.id).filter((id) => id !== 'guest-group');
+    const viewScope = useGroupStore.getState().viewScope;
+    const scope = { groupIds: groups, viewScope };
+    const generation = getOfflineReadGeneration();
+    const snapshot = await readOfflineSnapshot(userId, scope);
+    if (!isOfflineReadRequestCurrent(generation, userId)) return;
+    set({ shiftCodes: snapshot?.shiftCodes ? snapshot.shiftCodes as ShiftCodeItem[] : [], loading: getIsOfflineReadOnly(), error: null });
+    if (getIsOfflineReadOnly()) return;
     set({ loading: true, error: null });
     try {
       // Resolve which group_ids worth of shared codes to include based
@@ -131,11 +141,10 @@ export const useShiftCodeStore = create<ShiftCodeState>((set, get) => ({
         query = query.eq('user_id', userId);
       }
 
-      const { data, error } = await query;
+      const { data, error } = await withReadTimeout(query);
       if (error) throw error;
-
-      set({
-        shiftCodes: data?.map((item) => ({
+      if (!isOfflineReadRequestCurrent(generation, userId)) return;
+      const shiftCodes = data?.map((item) => ({
           id: item.id,
           code: item.code,
           meaning: item.meaning,
@@ -145,12 +154,19 @@ export const useShiftCodeStore = create<ShiftCodeState>((set, get) => ({
           is_confirmed: item.is_confirmed,
           group_id: item.group_id,
           is_group_shared: item.is_group_shared,
-        })) || [],
+        })) || [];
+      set({
+        shiftCodes,
         loading: false,
       });
+      await saveOfflineSnapshotPatch(userId, scope, { shiftCodes }, generation);
     } catch (error) {
+      if (!isOfflineReadRequestCurrent(generation, userId)) return;
       const message = error instanceof Error ? error.message : 'Failed to fetch shift codes';
       set({ loading: false, error: message });
+      useAuthStore.getState().setOfflineReadOnly(true);
+      const snapshot = await readOfflineSnapshot(userId, scope);
+      if (isOfflineReadRequestCurrent(generation, userId) && snapshot?.shiftCodes) set({ shiftCodes: snapshot.shiftCodes as ShiftCodeItem[] });
     }
   },
 
@@ -200,6 +216,7 @@ export const useShiftCodeStore = create<ShiftCodeState>((set, get) => ({
       });
       return;
     }
+    if (getIsOfflineReadOnly()) throw new Error('Offline mode is read-only. Reconnect to edit shift codes.');
     try {
       const currentGroup = useGroupStore.getState().currentGroup;
 
@@ -279,6 +296,7 @@ export const useShiftCodeStore = create<ShiftCodeState>((set, get) => ({
       }));
       return;
     }
+    if (getIsOfflineReadOnly()) throw new Error('Offline mode is read-only. Reconnect to edit shift codes.');
     try {
       const { error } = await supabase.from('shift_codes').delete().eq('id', id);
       if (error) throw error;

@@ -39,6 +39,7 @@ import { APP_VERSION, SUPPORTED_LOCALES, LOCALE_NAMES, PERSON_COLOR_HEX, ALARM_O
 import { useShiftStore } from '../../src/stores/shiftStore';
 import { useShiftCodeStore } from '../../src/stores/shiftCodeStore';
 import { useScheduleStore } from '../../src/stores/scheduleStore';
+import { CalendarTitleSettings } from '../../src/components/settings/CalendarTitleSettings';
 import {
   requestNotificationPermissions,
   scheduleShiftReminder,
@@ -1290,6 +1291,10 @@ export default function SettingsScreen() {
                   />
                 </>}
                 <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
+                {!!user?.id && !isGuest && <>
+                  <CalendarTitleSettings userId={user.id} connected={calendarConnected} />
+                  <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
+                </>}
                 <SettingsItem
                   icon="options-outline"
                   title={t('settings.calendarSyncContent')}

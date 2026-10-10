@@ -3,9 +3,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../services/supabase';
 import { getNextPersonColor } from '@shiftsnap/shared';
 import { canSuggestRosterMatch, rosterNameSimilarity, type RosterNameSensitivity } from '@shiftsnap/shared';
-import { getIsGuest } from './authStore';
+import { getIsGuest, getIsOfflineReadOnly, useAuthStore } from './authStore';
 import { getGuestPersons } from '../data/guestDemoData';
-import { useGroupStore } from './groupStore';
+import { hydrateCachedGroups, useGroupStore } from './groupStore';
+import { getOfflineReadGeneration, isOfflineReadRequestCurrent, readOfflineSnapshot, saveOfflineSnapshotPatch, withReadTimeout } from '../services/offlineReadCache';
 
 const GUEST_PERSONS_KEY = 'shiftsnap:guest-persons';
 
@@ -96,6 +97,15 @@ export const usePersonStore = create<PersonState>((set, get) => ({
       set({ persons: getGuestPersons(), loading: false });
       return;
     }
+    await hydrateCachedGroups(userId);
+    const { groups, viewScope } = useGroupStore.getState();
+    const groupIds = groups.map((group) => group.id).filter((id) => id !== 'guest-group');
+    const scope = { groupIds, viewScope };
+    const generation = getOfflineReadGeneration();
+    const snapshot = await readOfflineSnapshot(userId, scope);
+    if (!isOfflineReadRequestCurrent(generation, userId)) return;
+    set({ persons: snapshot?.persons ? snapshot.persons as PersonItem[] : [], loading: getIsOfflineReadOnly(), error: null });
+    if (getIsOfflineReadOnly()) return;
     set({ loading: true, error: null });
     try {
       const currentGroup = useGroupStore.getState().currentGroup;
@@ -111,12 +121,19 @@ export const usePersonStore = create<PersonState>((set, get) => ({
         query = query.eq('owner_id', userId);
       }
 
-      const { data, error } = await query;
+      const { data, error } = await withReadTimeout(query);
       if (error) throw error;
-      set({ persons: data || [], loading: false });
+      if (!isOfflineReadRequestCurrent(generation, userId)) return;
+      const persons = data || [];
+      set({ persons, loading: false });
+      await saveOfflineSnapshotPatch(userId, scope, { persons }, generation);
     } catch (error) {
+      if (!isOfflineReadRequestCurrent(generation, userId)) return;
       const message = error instanceof Error ? error.message : 'Failed to fetch persons';
       set({ loading: false, error: message });
+      useAuthStore.getState().setOfflineReadOnly(true);
+      const snapshot = await readOfflineSnapshot(userId, scope);
+      if (isOfflineReadRequestCurrent(generation, userId) && snapshot?.persons) set({ persons: snapshot.persons as PersonItem[] });
     }
   },
 
@@ -141,6 +158,7 @@ export const usePersonStore = create<PersonState>((set, get) => ({
       );
       return newPerson.id;
     }
+    if (getIsOfflineReadOnly()) throw new Error('Offline mode is read-only. Reconnect to edit people.');
     try {
       const currentGroup = useGroupStore.getState().currentGroup;
       if (currentGroup?.id) {
@@ -188,6 +206,7 @@ export const usePersonStore = create<PersonState>((set, get) => ({
       );
       return;
     }
+    if (getIsOfflineReadOnly()) throw new Error('Offline mode is read-only. Reconnect to edit people.');
     try {
       const { error } = await supabase.from('persons').update(updates).eq('id', id);
       if (error) throw error;
@@ -211,6 +230,7 @@ export const usePersonStore = create<PersonState>((set, get) => ({
       );
       return;
     }
+    if (getIsOfflineReadOnly()) throw new Error('Offline mode is read-only. Reconnect to edit people.');
     try {
       const { error } = await supabase.from('persons').delete().eq('id', id);
       if (error) throw error;
@@ -244,6 +264,7 @@ export const usePersonStore = create<PersonState>((set, get) => ({
       const existing = get().persons.find((person) => person.name === name);
       return existing?.id ?? get().createPerson('guest-user', name, undefined, color);
     }
+    if (getIsOfflineReadOnly()) throw new Error('Offline mode is read-only. Reconnect to edit people.');
     const { data, error } = await supabase.rpc('resolve_roster_person', {
       p_group_id: groupId,
       p_name: name,
@@ -254,6 +275,7 @@ export const usePersonStore = create<PersonState>((set, get) => ({
   },
 
   mergeRosterPeople: async (primaryPersonId: string, secondaryPersonId: string) => {
+    if (getIsOfflineReadOnly()) throw new Error('Offline mode is read-only. Reconnect to edit people.');
     const { data, error } = await supabase.rpc('merge_roster_people', {
       p_primary_person_id: primaryPersonId,
       p_secondary_person_id: secondaryPersonId,
@@ -263,6 +285,7 @@ export const usePersonStore = create<PersonState>((set, get) => ({
   },
 
   undoRosterPeopleMerge: async (mergeId: string) => {
+    if (getIsOfflineReadOnly()) throw new Error('Offline mode is read-only. Reconnect to edit people.');
     const { error } = await supabase.rpc('undo_roster_people_merge', { p_merge_id: mergeId });
     if (error) throw error;
   },

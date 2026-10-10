@@ -1,0 +1,185 @@
+{
+  "boundary": "Real PostgreSQL 17; local Supabase Auth/Storage schema stand-ins; historical expression-index adapter",
+  "results": [
+    {
+      "migration": "20260129000001_initial_schema.sql",
+      "passed": true
+    },
+    {
+      "migration": "20260201000001_storage_policies.sql",
+      "passed": true
+    },
+    {
+      "migration": "20260227000001_app_config.sql",
+      "passed": true
+    },
+    {
+      "migration": "20260228000001_reference_scan_and_matching.sql",
+      "passed": true
+    },
+    {
+      "migration": "20260301000001_group_foundation.sql",
+      "passed": true
+    },
+    {
+      "migration": "20260301000002_fix_storage_policies.sql",
+      "passed": true
+    },
+    {
+      "migration": "20260303000001_fix_group_members_rls.sql",
+      "passed": true
+    },
+    {
+      "migration": "20260303000002_fix_group_members_rls_v2.sql",
+      "passed": true
+    },
+    {
+      "migration": "20260303000003_create_storage_bucket.sql",
+      "passed": true
+    },
+    {
+      "migration": "20260303000004_fix_gemini_model.sql",
+      "passed": true
+    },
+    {
+      "migration": "20260303000005_use_gemini3_flash.sql",
+      "passed": true
+    },
+    {
+      "migration": "20260304000001_daily_notes.sql",
+      "passed": true
+    },
+    {
+      "migration": "20260426000001_seed_demo_account.sql",
+      "passed": true
+    },
+    {
+      "migration": "20260426000002_confirm_demo_email.sql",
+      "passed": true
+    },
+    {
+      "migration": "20260426000003_join_group_rpc.sql",
+      "passed": true
+    },
+    {
+      "migration": "20260426000004_group_member_rpcs.sql",
+      "passed": true
+    },
+    {
+      "migration": "20260426000005_enable_shifts_realtime.sql",
+      "passed": true
+    },
+    {
+      "migration": "20260426000006_note_images.sql",
+      "passed": true
+    },
+    {
+      "migration": "20260427000001_claim_person_in_group.sql",
+      "passed": true
+    },
+    {
+      "migration": "20260718000001_multi_user_schedule_claims.sql",
+      "passed": true
+    },
+    {
+      "migration": "20260719000001_remove_legacy_demo_account.sql",
+      "passed": true
+    },
+    {
+      "migration": "20260719000002_secure_schedule_claims.sql",
+      "passed": true
+    },
+    {
+      "migration": "20260721000001_secure_shift_images.sql",
+      "passed": true
+    },
+    {
+      "migration": "20260730000002_group_roster_identities.sql",
+      "passed": true
+    },
+    {
+      "migration": "20260730000003_schedule_image_integrity.sql",
+      "passed": true
+    },
+    {
+      "migration": "20260730000004_align_roster_representative.sql",
+      "passed": true
+    },
+    {
+      "migration": "20261010000001_atomic_schedule_shift_replacement.sql",
+      "passed": true
+    },
+    {
+      "scenario": "replacement RPC is installed",
+      "passed": true
+    },
+    {
+      "scenario": "empty OCR cannot erase existing month",
+      "passed": true
+    },
+    {
+      "scenario": "invalid second row preserves entire original month",
+      "passed": true
+    },
+    {
+      "scenario": "foreign person rejected without deleting originals",
+      "passed": true
+    },
+    {
+      "scenario": "non-member target rejected",
+      "passed": true
+    },
+    {
+      "scenario": "other uploader schedule rejected",
+      "passed": true
+    },
+    {
+      "scenario": "anonymous caller rejected",
+      "passed": true
+    },
+    {
+      "scenario": "valid replacement inserts complete payload and removes old scoped rows",
+      "passed": true
+    },
+    {
+      "scenario": "other group next month and other uploader survive",
+      "passed": true
+    },
+    {
+      "scenario": "retry does not duplicate rows",
+      "passed": true
+    },
+    {
+      "scenario": "invalid source rolls back valid first row",
+      "passed": true
+    },
+    {
+      "scenario": "database insert failure after deletion rolls back all rows",
+      "passed": true
+    },
+    {
+      "scenario": "concurrent uploads leave one complete winning month",
+      "passed": true
+    },
+    {
+      "scenario": "corrected OCR month updates schedule and removes its old-month rows",
+      "passed": true
+    },
+    {
+      "scenario": "month correction still preserves unrelated scopes",
+      "passed": true
+    },
+    {
+      "scenario": "existing roster merge assigns canonical identity",
+      "passed": true
+    },
+    {
+      "scenario": "existing roster merge undo restores independent identity",
+      "passed": true
+    },
+    {
+      "scenario": "removed membership cannot replace",
+      "passed": true
+    }
+  ]
+}

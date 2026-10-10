@@ -1,0 +1,39 @@
+{
+  "harness": "offline-read.integration.mjs",
+  "executedAt": "2026-10-10T02:53:19.616Z",
+  "scope": "real Zustand stores and offlineReadCache; mocked Supabase and local storage boundaries",
+  "records": [
+    {
+      "name": "complete adjacent-month fetch persists rows, metadata, and timestamps then cold store state hydrates offline",
+      "passed": true
+    },
+    {
+      "name": "scope A delayed response cannot overwrite scope B or persist into B scope",
+      "passed": true
+    },
+    {
+      "name": "account switch invalidates pending reads before they update state or cache",
+      "passed": true
+    },
+    {
+      "name": "partial query failure preserves complete cached month",
+      "passed": true
+    },
+    {
+      "name": "successful empty month is cached separately from an unvisited month",
+      "passed": true
+    },
+    {
+      "name": "local write failure does not claim offline month readiness",
+      "passed": true
+    },
+    {
+      "name": "parallel resource patches merge without losing fields",
+      "passed": true
+    },
+    {
+      "name": "corrupt snapshots are ignored without hiding valid snapshots",
+      "passed": true
+    }
+  ]
+}

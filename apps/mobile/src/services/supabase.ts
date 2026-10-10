@@ -3,9 +3,13 @@ import { createClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
+
 // Environment variables - these should be set in app.config.js or .env
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+// Keep this explicit so local sign-out can remove a persisted refresh token
+// even when the Supabase network request is unavailable.
+const SUPABASE_STORAGE_KEY = `sb-${new URL(SUPABASE_URL || 'https://invalid.local').hostname.split('.')[0]}-auth-token`;
 
 // Custom storage adapter for Expo
 const ExpoSecureStoreAdapter = {
@@ -45,12 +49,18 @@ const ExpoSecureStoreAdapter = {
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     storage: ExpoSecureStoreAdapter,
+    storageKey: SUPABASE_STORAGE_KEY,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
     flowType: 'pkce',
   },
 });
+
+export async function clearLocalSupabaseSession(): Promise<void> {
+  if (Platform.OS === 'web') return;
+  await SecureStore.deleteItemAsync(SUPABASE_STORAGE_KEY);
+}
 
 export async function signOut() {
   const { error } = await supabase.auth.signOut();

@@ -1,0 +1,161 @@
+{
+  "boundary": "Synthetic localhost Supabase HTTP; real iOS app, storage and views",
+  "requests": [
+    {
+      "at": "2026-10-10T02:44:24.141Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "offline": false
+    },
+    {
+      "at": "2026-10-10T02:44:24.950Z",
+      "method": "GET",
+      "path": "/rest/v1/group_members",
+      "offline": false
+    },
+    {
+      "at": "2026-10-10T02:44:24.958Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-10T02:44:24.963Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-10T02:44:24.964Z",
+      "method": "GET",
+      "path": "/rest/v1/shift_codes",
+      "offline": false
+    },
+    {
+      "at": "2026-10-10T02:44:24.964Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-10T02:44:25.887Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "offline": false
+    },
+    {
+      "at": "2026-10-10T02:44:27.917Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "offline": false
+    },
+    {
+      "at": "2026-10-10T02:44:32.965Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "offline": false
+    },
+    {
+      "at": "2026-10-10T02:44:43.059Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "offline": false
+    },
+    {
+      "at": "2026-10-10T02:44:53.167Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "offline": false
+    },
+    {
+      "at": "2026-10-10T02:45:03.328Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "offline": false
+    },
+    {
+      "at": "2026-10-10T02:45:13.439Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "offline": false
+    },
+    {
+      "at": "2026-10-10T02:45:23.558Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "offline": false
+    },
+    {
+      "at": "2026-10-10T02:45:33.669Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "offline": false
+    },
+    {
+      "at": "2026-10-10T02:45:44.009Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "offline": false
+    },
+    {
+      "at": "2026-10-10T02:45:54.104Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "offline": false
+    },
+    {
+      "at": "2026-10-10T02:46:04.375Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "offline": false
+    },
+    {
+      "at": "2026-10-10T02:46:14.488Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "offline": false
+    },
+    {
+      "at": "2026-10-10T02:46:24.595Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "offline": false
+    },
+    {
+      "at": "2026-10-10T02:46:34.696Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "offline": false
+    },
+    {
+      "at": "2026-10-10T02:46:44.837Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "offline": false
+    },
+    {
+      "at": "2026-10-10T02:46:54.960Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "offline": false
+    },
+    {
+      "at": "2026-10-10T02:47:05.107Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "offline": false
+    },
+    {
+      "at": "2026-10-10T02:47:15.237Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "offline": false
+    },
+    {
+      "at": "2026-10-10T02:47:25.342Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "offline": false
+    }
+  ]
+}

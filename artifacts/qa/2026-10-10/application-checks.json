@@ -1,0 +1,40 @@
+{
+  "tested_on": "2026-10-10",
+  "branch": "development",
+  "typecheck": {
+    "mobile": "passed",
+    "shared": "passed",
+    "method": "direct tsc --noEmit -p after pnpm wrapper EAGAIN"
+  },
+  "existing_tests": {
+    "passed": 8,
+    "failed": 0
+  },
+  "calendar_integration": {
+    "passed": 7,
+    "failed": 0,
+    "artifact": "apps/mobile/tests/artifacts/calendar-reconcile-latest.json"
+  },
+  "auth_integration": {
+    "passed": 7,
+    "failed": 0,
+    "artifact": "apps/mobile/tests/artifacts/offline-auth-coldstart-latest.json"
+  },
+  "offline_data_integration": {
+    "passed": 8,
+    "failed": 0,
+    "artifact": "apps/mobile/tests/artifacts/offline-read-integration-results.json"
+  },
+  "native_ui": "blocked: Mac locked; no acceptance claim",
+  "testflight_submitted": false,
+  "ios_javascript_bundle": {
+    "passed": true,
+    "modules": 2075,
+    "note": "final QA entry, one Metro worker; native UI not run"
+  },
+  "credential_pattern_scan": {
+    "files": 41,
+    "matches": 0,
+    "env_files": 0
+  }
+}

@@ -339,6 +339,17 @@ export default {
     inviteSignInRequiredDesc: '登入後我們會自動帶你加入這個群組。',
     sharing: '分享中...',
     shareFailed: '分享班表失敗',
+    calendarTitle: {
+      title: '日曆事件標題',
+      description: '連線時會立即更新目前月份；其他月份會在下次同步時套用。',
+      shiftFirst: '班別在前，姓名在後',
+      shiftOnly: '只顯示班別',
+      nameFirst: '姓名在前，班別在後',
+      shiftFirstExample: '白班 (D) · Alex',
+      shiftOnlyExample: '白班 (D)',
+      nameFirstExample: 'Alex · 白班 (D)',
+      syncFailed: '設定已儲存，但目前月份的日曆事件更新失敗；下次成功同步時會套用。',
+    },
   },
 
   notifications: {
@@ -465,6 +476,8 @@ export default {
     guideContrastHigher: '更高對比',
     scheduleSaved: '班表已儲存',
     scheduleSavedDesc: '您的班次已成功儲存！',
+    scheduleSavedPhoneCopyPending: '班次已儲存至帳戶，但此手機無法保存離線副本。請重新連線並重新整理日曆，將班次儲存到手機。',
+    scheduleSavedMetadataPending: '班次資料已儲存，但班表狀態尚未完成更新。請重新連線確認班表，避免重複匯入。',
     viewCalendar: '查看日曆',
     goHome: '回首頁',
     saveFailed: '儲存班次失敗，請再試一次。',
@@ -530,5 +543,12 @@ export default {
     title: '您目前為訪客模式',
     defaultMessage: '建立帳號以儲存資料並解鎖所有功能。',
     shiftsMessage: '班別代碼的變更僅儲存在本地，退出訪客模式後將會遺失。',
+  },
+  offline: {
+    readOnly: '離線模式：已儲存的班表僅供查看',
+    lastUpdated: '此手機最後儲存時間：{{time}}',
+    unavailableMonth: '此手機尚未儲存這個月份',
+    cachedSchedule: '顯示此手機上次儲存的班表。',
+    retry: '重試',
   },
 } as const;

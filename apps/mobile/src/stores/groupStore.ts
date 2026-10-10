@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../services/supabase';
-import { getIsGuest } from './authStore';
+import { getIsGuest, getIsOfflineReadOnly, useAuthStore } from './authStore';
+import { getOfflineReadGeneration, invalidateOfflineReadRequests, isOfflineReadRequestCurrent, readLatestOfflineSnapshot, saveOfflineSnapshotPatch, withReadTimeout } from '../services/offlineReadCache';
 import type { RosterNameMatchingMode, RosterNameSensitivity } from '@shiftsnap/shared';
 
 const VIEW_SCOPE_KEY = 'shiftsnap:group-view-scope';
@@ -29,6 +30,20 @@ export interface GroupMemberItem {
   display_name?: string;
   claimed_person_id?: string | null;
   claimed_name_on_schedule?: string | null;
+}
+
+/** Populate the last saved account scope immediately while an online refresh starts. */
+export async function hydrateCachedGroups(userId: string): Promise<void> {
+  if (useGroupStore.getState().groups.length > 0) return;
+  const snapshot = await readLatestOfflineSnapshot(userId);
+  if (!snapshot?.groups || useAuthStore.getState().user?.id !== userId) return;
+  const groups = snapshot.groups as GroupItem[];
+  useGroupStore.setState({
+    groups,
+    currentGroup: groups[0] || null,
+    viewScope: snapshot.viewScope,
+    loading: false,
+  });
 }
 
 interface GroupState {
@@ -90,14 +105,28 @@ export const useGroupStore = create<GroupState>((set, get) => ({
       });
       return;
     }
+    if (getIsOfflineReadOnly()) {
+      const generation = getOfflineReadGeneration();
+      const snapshot = await readLatestOfflineSnapshot(userId);
+      if (!isOfflineReadRequestCurrent(generation, userId)) return;
+      if (snapshot?.groups) {
+        const groups = snapshot.groups as GroupItem[];
+        const currentGroup = get().currentGroup;
+        set({ groups, currentGroup: groups.find((g) => g.id === currentGroup?.id) || groups[0] || null, viewScope: snapshot.viewScope, loading: false, error: null });
+      } else set({ loading: false });
+      return;
+    }
+    await hydrateCachedGroups(userId);
     set({ loading: true, error: null });
+    const generation = getOfflineReadGeneration();
     try {
-      const { data, error } = await supabase
+      const { data, error } = await withReadTimeout(supabase
         .from('group_members')
         .select('group_id, groups(*)')
-        .eq('user_id', userId);
+        .eq('user_id', userId));
 
       if (error) throw error;
+      if (!isOfflineReadRequestCurrent(generation, userId)) return;
 
       const groups: GroupItem[] = (data || [])
         .map((gm: any) => gm.groups)
@@ -111,8 +140,17 @@ export const useGroupStore = create<GroupState>((set, get) => ({
           : groups[0] || null,
         loading: false,
       });
+      const { groups: savedGroups, viewScope } = get();
+      await saveOfflineSnapshotPatch(userId, { groupIds: savedGroups.map((g) => g.id), viewScope }, { groups: savedGroups }, generation);
     } catch (error) {
+      if (!isOfflineReadRequestCurrent(generation, userId)) return;
       const message = error instanceof Error ? error.message : 'Failed to fetch groups';
+      const snapshot = await readLatestOfflineSnapshot(userId);
+      if (snapshot?.groups && isOfflineReadRequestCurrent(generation, userId)) {
+        const groups = snapshot.groups as GroupItem[];
+        set({ groups, currentGroup: groups[0] || null, viewScope: snapshot.viewScope });
+      }
+      useAuthStore.getState().setOfflineReadOnly(true);
       set({ loading: false, error: message });
     }
   },
@@ -122,15 +160,22 @@ export const useGroupStore = create<GroupState>((set, get) => ({
       await get().fetchGroups(userId);
       return;
     }
+    if (getIsOfflineReadOnly()) {
+      await get().fetchGroups(userId);
+      return;
+    }
+    await hydrateCachedGroups(userId);
+    const generation = getOfflineReadGeneration();
     set({ loading: true, error: null });
     try {
       // Try to fetch existing groups first
-      const { data: memberData, error: memberError } = await supabase
+      const { data: memberData, error: memberError } = await withReadTimeout(supabase
         .from('group_members')
         .select('group_id, groups(*)')
-        .eq('user_id', userId);
+        .eq('user_id', userId));
 
       if (memberError) throw memberError;
+      if (!isOfflineReadRequestCurrent(generation, userId)) return;
 
       const groups: GroupItem[] = (memberData || [])
         .map((gm: any) => gm.groups)
@@ -142,12 +187,14 @@ export const useGroupStore = create<GroupState>((set, get) => ({
           currentGroup: groups[0],
           loading: false,
         });
+        await saveOfflineSnapshotPatch(userId, { groupIds: groups.map((group) => group.id), viewScope: get().viewScope }, { groups }, generation);
         return;
       }
 
       // No groups — create a default one
+      if (!isOfflineReadRequestCurrent(generation, userId)) return;
       const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-      const { data: groupData, error: groupError } = await supabase
+      const { data: groupData, error: groupError } = await withReadTimeout(supabase
         .from('groups')
         .insert({
           name: 'My Team',
@@ -155,25 +202,29 @@ export const useGroupStore = create<GroupState>((set, get) => ({
           created_by: userId,
         })
         .select()
-        .single();
+        .single());
 
       if (groupError) throw groupError;
+      if (!isOfflineReadRequestCurrent(generation, userId)) return;
 
       // Add self as admin
-      await supabase
+      await withReadTimeout(supabase
         .from('group_members')
         .insert({
           group_id: groupData.id,
           user_id: userId,
           role: 'admin',
-        });
+        }));
+      if (!isOfflineReadRequestCurrent(generation, userId)) return;
 
       set({
         groups: [groupData],
         currentGroup: groupData,
         loading: false,
       });
+      await saveOfflineSnapshotPatch(userId, { groupIds: [groupData.id], viewScope: get().viewScope }, { groups: [groupData] }, generation);
     } catch (error) {
+      if (!isOfflineReadRequestCurrent(generation, userId)) return;
       const message = error instanceof Error ? error.message : 'Failed to create default group';
       set({ loading: false, error: message });
     }
@@ -181,6 +232,7 @@ export const useGroupStore = create<GroupState>((set, get) => ({
 
   switchGroup: (groupId: string) => {
     const group = get().groups.find((g) => g.id === groupId) || null;
+    invalidateOfflineReadRequests();
     set({ currentGroup: group, members: [] });
   },
 
@@ -215,6 +267,7 @@ export const useGroupStore = create<GroupState>((set, get) => ({
 
   joinGroupByInvite: async (userId: string, inviteCode: string) => {
     if (getIsGuest()) return;
+    if (getIsOfflineReadOnly()) throw new Error('Offline mode is read-only. Reconnect to manage groups.');
     set({ loading: true, error: null });
     try {
       // RPC bypasses the groups_select RLS policy, which only lets
@@ -247,6 +300,7 @@ export const useGroupStore = create<GroupState>((set, get) => ({
 
   leaveGroup: async (userId: string, groupId: string) => {
     if (getIsGuest()) return;
+    if (getIsOfflineReadOnly()) throw new Error('Offline mode is read-only. Reconnect to manage groups.');
     set({ loading: true, error: null });
     try {
       const { error } = await supabase
@@ -274,6 +328,7 @@ export const useGroupStore = create<GroupState>((set, get) => ({
   },
 
   updateGroupName: async (groupId: string, name: string) => {
+    if (getIsOfflineReadOnly()) throw new Error('Offline mode is read-only. Reconnect to manage groups.');
     if (getIsGuest()) return;
     try {
       const { error } = await supabase
@@ -297,6 +352,7 @@ export const useGroupStore = create<GroupState>((set, get) => ({
   },
 
   setRosterNameMatching: async (groupId, mode, sensitivity) => {
+    if (getIsOfflineReadOnly()) throw new Error('Offline mode is read-only. Reconnect to manage groups.');
     if (getIsGuest()) return;
     const { error } = await supabase.rpc('set_group_roster_name_matching', {
       p_group_id: groupId,
@@ -316,6 +372,7 @@ export const useGroupStore = create<GroupState>((set, get) => ({
   },
 
   removeMember: async (groupId: string, targetUserId: string) => {
+    if (getIsOfflineReadOnly()) throw new Error('Offline mode is read-only. Reconnect to manage groups.');
     if (getIsGuest()) return;
     const { error } = await supabase.rpc('remove_group_member', {
       gid: groupId,
@@ -335,6 +392,7 @@ export const useGroupStore = create<GroupState>((set, get) => ({
   },
 
   claimPersonInSchedule: async (scheduleId: string, nameOnSchedule: string) => {
+    if (getIsOfflineReadOnly()) throw new Error('Offline mode is read-only. Reconnect to manage groups.');
     if (getIsGuest()) return 0;
     const { data, error } = await supabase.rpc('claim_person_in_schedule', {
       p_schedule_id: scheduleId,
@@ -353,6 +411,7 @@ export const useGroupStore = create<GroupState>((set, get) => ({
   },
 
   unclaimPersonInSchedule: async (scheduleId: string) => {
+    if (getIsOfflineReadOnly()) throw new Error('Offline mode is read-only. Reconnect to manage groups.');
     if (getIsGuest()) return;
     const { error } = await supabase.rpc('unclaim_person_in_schedule', {
       p_schedule_id: scheduleId,
@@ -381,6 +440,7 @@ export const useGroupStore = create<GroupState>((set, get) => ({
     const order: GroupViewScope[] = ['all', ...groups.map((g) => g.id)];
     const idx = order.indexOf(viewScope);
     const next = order[(idx + 1) % order.length] ?? 'all';
+    invalidateOfflineReadRequests();
     set({ viewScope: next });
     AsyncStorage.setItem(VIEW_SCOPE_KEY, next).catch(() => {});
     const label =

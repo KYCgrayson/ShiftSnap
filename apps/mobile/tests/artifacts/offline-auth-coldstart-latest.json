@@ -1,0 +1,35 @@
+{
+  "harness": "offline-auth-coldstart.integration.mjs",
+  "executedAt": "2026-10-10T02:53:16.405Z",
+  "boundary": "Real authStore and offlineReadCache; AsyncStorage, SecureStore, Supabase session/provider/network mocked",
+  "results": [
+    {
+      "name": "hung session restore falls back to cached identity and schedule",
+      "passed": true
+    },
+    {
+      "name": "INITIAL_SESSION with null preserves offline identity",
+      "passed": true
+    },
+    {
+      "name": "offline logout immediately clears local identity and snapshots",
+      "passed": true
+    },
+    {
+      "name": "fresh process does not restore stale session after local logout",
+      "passed": true
+    },
+    {
+      "name": "late in-flight SecureStore refresh write cannot restore account after logout",
+      "passed": true
+    },
+    {
+      "name": "provider session event for the same new account does not cancel sign-in",
+      "passed": true
+    },
+    {
+      "name": "late older provider response cannot replace newer account",
+      "passed": true
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../services/supabase';
-import { getIsGuest } from './authStore';
+import { getIsGuest, getIsOfflineReadOnly } from './authStore';
 import type { DailyNote } from '@shiftsnap/shared';
 
 const GUEST_NOTES_KEY = 'shiftsnap_daily_notes';
@@ -107,6 +107,7 @@ export const useDailyNoteStore = create<DailyNoteState>((set, get) => ({
       set({ notesByDate: filtered });
       return;
     }
+    if (getIsOfflineReadOnly()) throw new Error('Offline mode is read-only. Reconnect before saving notes.');
 
     try {
       if (!hasContent) {

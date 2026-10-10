@@ -25,7 +25,7 @@ import { useLocaleStore } from '../../src/stores/localeStore';
 export default function HomeScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
-  const { user } = useAuthStore();
+  const { user, session, isOfflineReadOnly, offlineLastUpdatedAt, setOfflineReadOnly, retryOnlineSession } = useAuthStore();
   const locale = useLocaleStore((s) => s.locale);
   const { todayShift, upcomingShifts, fetchTodayShift, fetchUpcomingShifts } = useShiftStore();
   const { shiftCodes, fetchShiftCodes, getCodeInfo } = useShiftCodeStore();
@@ -53,6 +53,8 @@ export default function HomeScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
+    if (!session && isOfflineReadOnly) await retryOnlineSession();
+    if (session) setOfflineReadOnly(false);
     await loadData();
     setRefreshing(false);
   };
@@ -126,6 +128,23 @@ export default function HomeScreen() {
         </View>
 
         <GuestUpgradeBanner />
+
+        {isOfflineReadOnly && (
+          <View style={styles.offlineBanner} accessibilityRole="summary">
+            <Ionicons name="cloud-offline-outline" size={18} color="#8A5A00" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.offlineTitle}>{t('offline.readOnly')}</Text>
+              <Text style={styles.offlineDetail}>
+                {offlineLastUpdatedAt
+                  ? t('offline.lastUpdated', { time: new Date(offlineLastUpdatedAt).toLocaleString() })
+                  : t('offline.cachedSchedule')}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={onRefresh} accessibilityRole="button" accessibilityLabel={t('common.retry')}>
+              <Text style={styles.offlineRetry}>{t('common.retry')}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Today's Shift Card */}
         <Card style={styles.todayCard}>
@@ -297,6 +316,18 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 16,
   },
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FFF2D6',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  offlineTitle: { color: '#6B4700', fontSize: 13, fontWeight: '700' },
+  offlineDetail: { color: '#765B25', fontSize: 12, marginTop: 2 },
+  offlineRetry: { color: '#5B4309', fontSize: 12, fontWeight: '700' },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',

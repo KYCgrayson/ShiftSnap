@@ -59,7 +59,7 @@ export default function ScanScreen() {
   const cameraRef = useRef<CameraView>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const locale = useLocaleStore((s) => s.locale);
-  const { user, isGuest } = useAuthStore();
+  const { user, isGuest, isOfflineReadOnly } = useAuthStore();
   const { createScheduleFromOCR, updateScheduleImage, schedules, fetchSchedules } = useScheduleStore();
   const currentGroupId = useGroupStore((s) => s.currentGroup?.id);
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
@@ -313,6 +313,10 @@ export default function ScanScreen() {
   };
 
   const processSchedule = async () => {
+    if (isOfflineReadOnly) {
+      Alert.alert(t('common.error'), t('offline.readOnly'));
+      return;
+    }
     if (!capturedImage) return;
     if (!user) {
       Alert.alert(t('common.error'), t('auth.signInRequired'));
@@ -440,7 +444,7 @@ export default function ScanScreen() {
             title={processing ? t('scan.processing') : t('scan.processSchedule')}
             onPress={processSchedule}
             loading={processing}
-            disabled={processing}
+            disabled={processing || isOfflineReadOnly}
             style={{ flex: 1, marginLeft: 8 }}
           />
         </View>

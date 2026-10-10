@@ -101,8 +101,8 @@ export default function CalendarScreen() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const locale = useLocaleStore((s) => s.locale);
-  const { user } = useAuthStore();
-  const { monthShifts, shiftsByMonth, fetchShiftsWindow, updateShift, loading } = useShiftStore();
+  const { user, session, isOfflineReadOnly, offlineLastUpdatedAt, setOfflineReadOnly, retryOnlineSession } = useAuthStore();
+  const { monthShifts, shiftsByMonth, monthUpdatedAt, fetchShiftsWindow, updateShift, loading } = useShiftStore();
   const { shiftCodes, fetchShiftCodes, getCodeInfo } = useShiftCodeStore();
   const { persons, fetchPersons, updatePerson } = usePersonStore();
   const { isConnected: calendarConnected, syncUserShifts } = useCalendarStore();
@@ -478,6 +478,8 @@ export default function CalendarScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
+    if (!session && isOfflineReadOnly) await retryOnlineSession();
+    if (session) setOfflineReadOnly(false);
     await loadMonth(currentMonth);
     setRefreshing(false);
   };
@@ -1014,6 +1016,27 @@ export default function CalendarScreen() {
           />
         }
       >
+        {isOfflineReadOnly && (
+          <View style={styles.offlineBanner} accessibilityRole="summary">
+            <Ionicons name="cloud-offline-outline" size={18} color="#8A5A00" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.offlineTitle}>
+                {monthUpdatedAt[currentMonth] ? t('offline.readOnly') : t('offline.unavailableMonth')}
+              </Text>
+              <Text style={styles.offlineDetail}>
+                {monthUpdatedAt[currentMonth]
+                  ? t('offline.lastUpdated', { time: new Date(monthUpdatedAt[currentMonth]).toLocaleString() })
+                  : offlineLastUpdatedAt
+                    ? t('offline.lastUpdated', { time: new Date(offlineLastUpdatedAt).toLocaleString() })
+                    : t('offline.cachedSchedule')}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={onRefresh} accessibilityRole="button" accessibilityLabel={t('common.retry')}>
+              <Text style={styles.offlineRetry}>{t('common.retry')}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Calendar */}
         <Card style={styles.calendarCard} padding="small">
           <Calendar
@@ -1804,6 +1827,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FFF2D6',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  offlineTitle: { color: '#6B4700', fontSize: 13, fontWeight: '700' },
+  offlineDetail: { color: '#765B25', fontSize: 12, marginTop: 2 },
+  offlineRetry: { color: '#5B4309', fontSize: 12, fontWeight: '700' },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',

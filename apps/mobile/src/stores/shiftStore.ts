@@ -3,9 +3,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../services/supabase';
 import type { OCRResult } from '@shiftsnap/shared';
 import { formatDateISO, reviewedRowPersonId } from '@shiftsnap/shared';
-import { getIsGuest } from './authStore';
-import { useGroupStore } from './groupStore';
+import { getIsGuest, getIsOfflineReadOnly, useAuthStore } from './authStore';
+import { hydrateCachedGroups, useGroupStore } from './groupStore';
 import { getGuestTodayShift, getGuestUpcomingShifts, generateGuestShiftsForMonth } from '../data/guestDemoData';
+import { getOfflineReadGeneration, isOfflineReadRequestCurrent, readOfflineSnapshot, readLatestOfflineSnapshot, saveOfflineSnapshotPatch, withReadTimeout } from '../services/offlineReadCache';
 
 const GUEST_SHIFTS_KEY = 'shiftsnap:guest-shifts';
 
@@ -44,13 +45,13 @@ function getAdjacentMonths(yearMonth: string): [string, string, string] {
   return [fmt(prev), yearMonth, fmt(next)];
 }
 
-async function fetchAuthedMonthShifts(userId: string, yearMonth: string): Promise<ShiftItem[]> {
+async function fetchAuthedMonthShifts(userId: string, yearMonth: string, scope: { groupIds: string[]; viewScope: string }): Promise<ShiftItem[]> {
   const [year, month] = yearMonth.split('-').map(Number);
   const startDate = `${yearMonth}-01`;
   const lastDay = new Date(year, month, 0).getDate();
   const endDate = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
 
-  const [ownResult, personalResult] = await Promise.all([
+  const [ownResult, personalResult] = await withReadTimeout(Promise.all([
     supabase
       .from('shifts')
       .select('*, schedules(group_id)')
@@ -62,7 +63,7 @@ async function fetchAuthedMonthShifts(userId: string, yearMonth: string): Promis
       p_start_date: startDate,
       p_end_date: endDate,
     }),
-  ]);
+  ]));
 
   if (ownResult.error) throw ownResult.error;
   if (personalResult.error) throw personalResult.error;
@@ -78,22 +79,22 @@ async function fetchAuthedMonthShifts(userId: string, yearMonth: string): Promis
       is_personal: personalShiftIds.has(shift.id),
     };
   });
-  const { groups, viewScope } = useGroupStore.getState();
-  const realGroupIds = groups.map((g) => g.id).filter((id) => id !== 'guest-group');
+  const realGroupIds = scope.groupIds.filter((id) => id !== 'guest-group');
   const targetGroupIds =
-    viewScope === 'all' ? realGroupIds : realGroupIds.includes(viewScope) ? [viewScope] : [];
+    scope.viewScope === 'all' ? realGroupIds : realGroupIds.includes(scope.viewScope) ? [scope.viewScope] : [];
 
   if (targetGroupIds.length > 0) {
-    const { data: groupShifts, error: groupError } = await supabase
+    const { data: groupShifts, error: groupError } = await withReadTimeout(supabase
       .from('shifts')
       .select('*, schedules!inner(group_id)')
       .in('schedules.group_id', targetGroupIds)
       .neq('user_id', userId)
       .gte('date', startDate)
       .lte('date', endDate)
-      .order('date', { ascending: true });
+      .order('date', { ascending: true }));
 
-    if (!groupError && groupShifts) {
+    if (groupError) throw groupError;
+    if (groupShifts) {
       const ownIds = new Set(allShifts.map((s) => s.id));
       const uniqueGroupShifts = groupShifts
         .filter((s: any) => !ownIds.has(s.id))
@@ -116,10 +117,10 @@ async function fetchMyScheduleShifts(
   startDate: string | null,
   endDate: string | null,
 ): Promise<ShiftItem[]> {
-  const { data, error } = await supabase.rpc('get_my_schedule_shifts', {
+  const { data, error } = await withReadTimeout(supabase.rpc('get_my_schedule_shifts', {
     p_start_date: startDate,
     p_end_date: endDate,
-  });
+  }));
   if (error) throw error;
   return (data || []) as ShiftItem[];
 }
@@ -129,6 +130,10 @@ interface ShiftState {
   upcomingShifts: ShiftItem[];
   monthShifts: ShiftItem[];
   shiftsByMonth: Record<string, ShiftItem[]>;
+  monthUpdatedAt: Record<string, string>;
+  activeScopeKey: string | null;
+  offlineCacheWarning: boolean;
+  lastMonthRefreshStatus: { yearMonth: string; refreshed: boolean; persisted: boolean } | null;
   allOcrShifts: ShiftItem[];
   hasOcrData: boolean;
   loading: boolean;
@@ -158,6 +163,10 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
   upcomingShifts: [],
   monthShifts: [],
   shiftsByMonth: {},
+  monthUpdatedAt: {},
+  activeScopeKey: null,
+  offlineCacheWarning: false,
+  lastMonthRefreshStatus: null,
   allOcrShifts: [],
   hasOcrData: false,
   loading: false,
@@ -189,15 +198,41 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
       }
       return;
     }
+    await hydrateCachedGroups(userId);
+    const groupState = useGroupStore.getState();
+    const scope = { groupIds: groupState.groups.map((g) => g.id).filter((id) => id !== 'guest-group'), viewScope: groupState.viewScope };
+    const scopeKey = `${userId}|${scope.viewScope}|${[...scope.groupIds].sort().join(',')}`;
+    if (get().activeScopeKey !== scopeKey) set({ activeScopeKey: scopeKey, shiftsByMonth: {}, monthUpdatedAt: {}, monthShifts: [] });
+    const generation = getOfflineReadGeneration();
+    const cached = await readOfflineSnapshot(userId, scope);
+    if (!isOfflineReadRequestCurrent(generation, userId) || get().activeScopeKey !== scopeKey) return;
+    if (cached && Object.prototype.hasOwnProperty.call(cached, 'todayShift')) {
+      const today = formatDateISO(new Date());
+      const candidate = cached.todayShift as ShiftItem | null;
+      set({ todayShift: candidate?.date === today ? candidate : null });
+    }
+    if (getIsOfflineReadOnly()) {
+      return;
+    }
     try {
       const today = formatDateISO(new Date());
       const shifts = await fetchMyScheduleShifts(today, today);
       // Home currently has one primary card. Prefer a canonical shift already
       // owned by this account, then fall back to a shared/claimed row.
       const todayShift = shifts.find((shift) => shift.user_id === userId) ?? shifts[0] ?? null;
+      if (!isOfflineReadRequestCurrent(generation, userId)) return;
       set({ todayShift });
+      await saveOfflineSnapshotPatch(userId, scope, { todayShift }, generation);
     } catch (error) {
       console.error('Error fetching today shift:', error);
+      if (!isOfflineReadRequestCurrent(generation, userId)) return;
+      useAuthStore.getState().setOfflineReadOnly(true);
+      const cached = await readOfflineSnapshot(userId, scope);
+      if (isOfflineReadRequestCurrent(generation, userId) && cached && Object.prototype.hasOwnProperty.call(cached, 'todayShift')) {
+        const today = formatDateISO(new Date());
+        const candidate = cached.todayShift as ShiftItem | null;
+        set({ todayShift: candidate?.date === today ? candidate : null });
+      }
     }
   },
 
@@ -215,19 +250,44 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
       }
       return;
     }
+    await hydrateCachedGroups(userId);
+    const groupState = useGroupStore.getState();
+    const scope = { groupIds: groupState.groups.map((g) => g.id).filter((id) => id !== 'guest-group'), viewScope: groupState.viewScope };
+    const scopeKey = `${userId}|${scope.viewScope}|${[...scope.groupIds].sort().join(',')}`;
+    if (get().activeScopeKey !== scopeKey) set({ activeScopeKey: scopeKey, shiftsByMonth: {}, monthUpdatedAt: {}, monthShifts: [] });
+    const generation = getOfflineReadGeneration();
+    const cached = await readOfflineSnapshot(userId, scope);
+    if (!isOfflineReadRequestCurrent(generation, userId)) return;
+    if (cached?.upcomingShifts) {
+      const today = formatDateISO(new Date());
+      set({ upcomingShifts: (cached.upcomingShifts as ShiftItem[]).filter((shift) => shift.date >= today).slice(0, limit) });
+    }
+    if (getIsOfflineReadOnly()) {
+      return;
+    }
     try {
       const today = formatDateISO(new Date());
       const shifts = await fetchMyScheduleShifts(today, null);
       const upcoming = shifts
         .sort((a, b) => a.date.localeCompare(b.date))
         .slice(0, limit);
+      if (!isOfflineReadRequestCurrent(generation, userId)) return;
       set({ upcomingShifts: upcoming });
+      await saveOfflineSnapshotPatch(userId, scope, { upcomingShifts: upcoming }, generation);
     } catch (error) {
       console.error('Error fetching upcoming shifts:', error);
+      if (!isOfflineReadRequestCurrent(generation, userId)) return;
+      useAuthStore.getState().setOfflineReadOnly(true);
+      const cached = await readOfflineSnapshot(userId, scope);
+      if (isOfflineReadRequestCurrent(generation, userId) && cached?.upcomingShifts) {
+        const today = formatDateISO(new Date());
+        set({ upcomingShifts: (cached.upcomingShifts as ShiftItem[]).filter((shift) => shift.date >= today).slice(0, limit) });
+      }
     }
   },
 
   fetchShiftsForMonth: async (userId: string, yearMonth: string) => {
+    set({ lastMonthRefreshStatus: null });
     if (getIsGuest()) {
       // If OCR data already in memory, use it
       if (get().hasOcrData) {
@@ -253,17 +313,46 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
       set({ monthShifts: generateGuestShiftsForMonth(yearMonth), loading: false });
       return;
     }
-    set({ loading: true });
+    await hydrateCachedGroups(userId);
+    const groupState = useGroupStore.getState();
+    const scope = { groupIds: groupState.groups.map((g) => g.id).filter((id) => id !== 'guest-group'), viewScope: groupState.viewScope };
+    const scopeKey = `${userId}|${scope.viewScope}|${[...scope.groupIds].sort().join(',')}`;
+    if (get().activeScopeKey !== scopeKey) set({ activeScopeKey: scopeKey, shiftsByMonth: {}, monthUpdatedAt: {}, monthShifts: [] });
+    const generation = getOfflineReadGeneration();
+    const cached = await readOfflineSnapshot(userId, scope);
+    if (!isOfflineReadRequestCurrent(generation, userId)) return;
+    if (cached?.shiftsByMonth && Object.prototype.hasOwnProperty.call(cached.shiftsByMonth, yearMonth)) {
+      const shifts = cached.shiftsByMonth[yearMonth] as ShiftItem[];
+      set((state) => ({ monthShifts: shifts, shiftsByMonth: { ...state.shiftsByMonth, [yearMonth]: shifts }, monthUpdatedAt: { ...state.monthUpdatedAt, ...(cached.monthUpdatedAt || {}) } }));
+    }
+    if (getIsOfflineReadOnly()) {
+      set({ loading: false });
+      return;
+    }
+    set({ loading: true, lastMonthRefreshStatus: null });
     try {
-      const allShifts = await fetchAuthedMonthShifts(userId, yearMonth);
+      const allShifts = await fetchAuthedMonthShifts(userId, yearMonth, scope);
+      if (!isOfflineReadRequestCurrent(generation, userId) || get().activeScopeKey !== scopeKey) return;
+      const updatedAt = new Date().toISOString();
       set((state) => ({
         monthShifts: allShifts,
         shiftsByMonth: { ...state.shiftsByMonth, [yearMonth]: allShifts },
         loading: false,
       }));
+      const persisted = await saveOfflineSnapshotPatch(userId, scope, { shiftsByMonth: { [yearMonth]: allShifts }, monthUpdatedAt: { [yearMonth]: updatedAt } }, generation);
+      if (isOfflineReadRequestCurrent(generation, userId) && get().activeScopeKey === scopeKey) {
+        set((state) => ({ monthUpdatedAt: persisted ? { ...state.monthUpdatedAt, [yearMonth]: updatedAt } : state.monthUpdatedAt, offlineCacheWarning: !persisted, lastMonthRefreshStatus: { yearMonth, refreshed: true, persisted } }));
+      }
     } catch (error) {
       console.error('Error fetching month shifts:', error);
-      set({ loading: false });
+      if (!isOfflineReadRequestCurrent(generation, userId) || get().activeScopeKey !== scopeKey) return;
+      set({ loading: false, lastMonthRefreshStatus: { yearMonth, refreshed: false, persisted: false } });
+      useAuthStore.getState().setOfflineReadOnly(true);
+      const cached = await readOfflineSnapshot(userId, scope);
+      if (isOfflineReadRequestCurrent(generation, userId) && get().activeScopeKey === scopeKey && cached?.shiftsByMonth && Object.prototype.hasOwnProperty.call(cached.shiftsByMonth, yearMonth)) {
+        const shifts = cached.shiftsByMonth[yearMonth] as ShiftItem[];
+        set((state) => ({ monthShifts: shifts, shiftsByMonth: { ...state.shiftsByMonth, [yearMonth]: shifts }, monthUpdatedAt: { ...state.monthUpdatedAt, ...(cached.monthUpdatedAt || {}) } }));
+      }
     }
   },
 
@@ -290,19 +379,54 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
       return;
     }
 
+    await hydrateCachedGroups(userId);
+    const groupState = useGroupStore.getState();
+    const scope = { groupIds: groupState.groups.map((g) => g.id).filter((id) => id !== 'guest-group'), viewScope: groupState.viewScope };
+    const scopeKey = `${userId}|${scope.viewScope}|${[...scope.groupIds].sort().join(',')}`;
+    if (get().activeScopeKey !== scopeKey) set({ activeScopeKey: scopeKey, shiftsByMonth: {}, monthUpdatedAt: {}, monthShifts: [] });
+    const generation = getOfflineReadGeneration();
+    const cached = await readOfflineSnapshot(userId, scope);
+    if (!isOfflineReadRequestCurrent(generation, userId)) return;
+    const cachedMonths = cached?.shiftsByMonth as Record<string, ShiftItem[]> | undefined;
+    const cachedWindow: Record<string, ShiftItem[]> = {};
+    months.forEach((ym) => { if (cachedMonths && Object.prototype.hasOwnProperty.call(cachedMonths, ym)) cachedWindow[ym] = cachedMonths[ym]; });
+    if (cached) {
+      set({ shiftsByMonth: cachedWindow, monthUpdatedAt: cached.monthUpdatedAt || {}, monthShifts: cachedWindow[centerYearMonth] || [] });
+    }
+    if (getIsOfflineReadOnly()) {
+      set({ loading: false });
+      return;
+    }
+
     set({ loading: true });
     try {
       const results = await Promise.all(
-        months.map((ym) => fetchAuthedMonthShifts(userId, ym))
+        months.map((ym) => fetchAuthedMonthShifts(userId, ym, scope))
       );
+      if (!isOfflineReadRequestCurrent(generation, userId) || get().activeScopeKey !== scopeKey) return;
+      const updatedAt = new Date().toISOString();
       set((state) => {
         const byMonth = { ...state.shiftsByMonth };
         months.forEach((ym, i) => { byMonth[ym] = results[i]; });
         return { shiftsByMonth: byMonth, monthShifts: byMonth[centerYearMonth] || [], loading: false };
       });
+      const persisted = await saveOfflineSnapshotPatch(userId, scope, { shiftsByMonth: Object.fromEntries(months.map((ym, i) => [ym, results[i]])), monthUpdatedAt: Object.fromEntries(months.map((ym) => [ym, updatedAt])) }, generation);
+      if (isOfflineReadRequestCurrent(generation, userId) && get().activeScopeKey === scopeKey) {
+        set((state) => {
+          const monthUpdatedAt = { ...state.monthUpdatedAt };
+          if (persisted) months.forEach((ym) => { monthUpdatedAt[ym] = updatedAt; });
+          return { monthUpdatedAt, offlineCacheWarning: !persisted };
+        });
+      }
     } catch (error) {
       console.error('Error fetching shift window:', error);
+      if (!isOfflineReadRequestCurrent(generation, userId) || get().activeScopeKey !== scopeKey) return;
       set({ loading: false });
+      useAuthStore.getState().setOfflineReadOnly(true);
+      const cached = await readOfflineSnapshot(userId, scope);
+      if (!isOfflineReadRequestCurrent(generation, userId) || get().activeScopeKey !== scopeKey) return;
+      const byMonth = cached?.shiftsByMonth as Record<string, ShiftItem[]> | undefined;
+      if (byMonth) set((state) => ({ shiftsByMonth: byMonth, monthUpdatedAt: cached?.monthUpdatedAt || {}, monthShifts: byMonth[centerYearMonth] || [] }));
     }
   },
 
@@ -316,6 +440,7 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
     personMap?: Map<number, string>,
     userMap?: Map<number, string>
   ) => {
+    set({ lastMonthRefreshStatus: null });
     set({ loading: true, error: null });
 
     const [year, month] = yearMonth.split('-').map(Number);
@@ -401,43 +526,24 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
     }
 
     try {
-      // Delete existing shifts for the uploader AND any tagged group
-      // members in the target month, so a re-upload (e.g. correcting
-      // the wife's row) replaces both her old shifts and the uploader's
-      // own. RLS allows this for the uploader: they own the schedule, so
-      // the schedule-owner branch of shifts_delete grants access.
-      const [yr, mo] = yearMonth.split('-').map(Number);
-      const startDate = `${yearMonth}-01`;
-      const lastDay = new Date(yr, mo, 0).getDate();
-      const endDate = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
-      const affectedUserIds = Array.from(
-        new Set<string>([userId, ...Array.from(userMap?.values() ?? [])]),
-      );
-      const { error: deleteError } = await supabase
-        .from('shifts')
-        .delete()
-        .in('user_id', affectedUserIds)
-        .gte('date', startDate)
-        .lte('date', endDate);
-      if (deleteError) throw deleteError;
-
-      if (newShifts.length > 0) {
-        const rows = newShifts.map((s) => ({
-          schedule_id: s.schedule_id,
-          user_id: s.user_id,
-          person_id: s.person_id,
-          date: s.date,
-          shift_code: s.shift_code,
-          start_time: s.start_time,
-          end_time: s.end_time,
-          is_day_off: s.is_day_off,
-          source: s.source,
-          name_on_schedule: s.name_on_schedule,
-          comparison_status: 'pending',
-        }));
-        const { error } = await supabase.from('shifts').insert(rows);
-        if (error) throw error;
-      }
+      if (getIsOfflineReadOnly()) throw new Error('Cannot save schedule while offline');
+      const rows = newShifts.map((shift) => ({
+        user_id: shift.user_id,
+        person_id: shift.person_id,
+        date: shift.date,
+        shift_code: shift.shift_code,
+        start_time: shift.start_time,
+        end_time: shift.end_time,
+        is_day_off: shift.is_day_off,
+        source: shift.source,
+        name_on_schedule: shift.name_on_schedule,
+      }));
+      const { error: replaceError } = await supabase.rpc('replace_schedule_shifts', {
+        p_schedule_id: scheduleId,
+        p_year_month: yearMonth,
+        p_shifts: rows,
+      });
+      if (replaceError) throw replaceError;
 
       // Auto-match with other users' reference scans
       const selfPersonName = ocrResult.rows[selectedPersonIndex]?.name;
@@ -485,6 +591,7 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
       );
       return;
     }
+    if (getIsOfflineReadOnly()) throw new Error('Offline mode is read-only. Reconnect to edit shifts.');
     try {
       const { error } = await supabase
         .from('shifts')
@@ -544,7 +651,7 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
   },
 
   reset: () => {
-    set({ todayShift: null, upcomingShifts: [], monthShifts: [], shiftsByMonth: {}, allOcrShifts: [], hasOcrData: false, loading: false, error: null });
+    set({ todayShift: null, upcomingShifts: [], monthShifts: [], shiftsByMonth: {}, monthUpdatedAt: {}, activeScopeKey: null, offlineCacheWarning: false, lastMonthRefreshStatus: null, allOcrShifts: [], hasOcrData: false, loading: false, error: null });
     AsyncStorage.removeItem(GUEST_SHIFTS_KEY).catch(() => {});
   },
 }));

@@ -81,7 +81,7 @@ export default function ReviewScheduleScreen() {
     yearMonth: string;
     imageUrl: string;
   }>();
-  const { user } = useAuthStore();
+  const { user, isOfflineReadOnly } = useAuthStore();
   const { shiftCodes, fetchShiftCodes, saveShiftCode } = useShiftCodeStore();
   const { createShiftsFromOCR } = useShiftStore();
   const { updateScheduleStatus, updateScheduleYearMonth } = useScheduleStore();
@@ -643,6 +643,10 @@ export default function ReviewScheduleScreen() {
 
   // Re-analyze the schedule image
   const handleReanalyze = async () => {
+    if (isOfflineReadOnly) {
+      Alert.alert(t('common.error'), t('offline.readOnly'));
+      return;
+    }
     if (!params.imageUrl || reanalyzing) return;
     setReanalyzing(true);
     try {
@@ -707,6 +711,10 @@ export default function ReviewScheduleScreen() {
 
   // --- Step 4: Confirm & Save ---
   const handleConfirmAndSave = async () => {
+    if (isOfflineReadOnly) {
+      Alert.alert(t('common.error'), t('offline.readOnly'));
+      return;
+    }
     if (!user || !ocrData || !scheduleId || !yearMonth || selectedPersonIndex === null) return;
 
     setSaving(true);
@@ -785,10 +793,21 @@ export default function ReviewScheduleScreen() {
       await createShiftsFromOCR(scheduleId, user.id, ocrData, codeMap, yearMonth, selectedPersonIndex, personMap, userMap);
       // The core shift write is complete. Persist schedule metadata before
       // success; a legend refresh must not turn a completed save into a failure.
+      let scheduleMetadataSaved = true;
       if (yearMonth !== params.yearMonth) {
-        await updateScheduleYearMonth(scheduleId, yearMonth);
+        try {
+          await updateScheduleYearMonth(scheduleId, yearMonth);
+        } catch (error) {
+          scheduleMetadataSaved = false;
+          console.warn('Shift rows saved, but schedule month metadata was not updated:', error);
+        }
       }
-      await updateScheduleStatus(scheduleId, 'published');
+      try {
+        await updateScheduleStatus(scheduleId, 'published');
+      } catch (error) {
+        scheduleMetadataSaved = false;
+        console.warn('Shift rows saved, but schedule status was not updated:', error);
+      }
 
       void fetchPersons(user.id).catch((error) => {
         console.warn('Person refresh failed:', error);
@@ -803,7 +822,14 @@ export default function ReviewScheduleScreen() {
         });
       }
 
-      Alert.alert(t('review.scheduleSaved'), t('review.scheduleSavedDesc'), [
+      const { lastMonthRefreshStatus } = useShiftStore.getState();
+      const phoneCopyReady = lastMonthRefreshStatus?.yearMonth === yearMonth
+        && lastMonthRefreshStatus.refreshed && lastMonthRefreshStatus.persisted;
+      const confirmation = [
+        !scheduleMetadataSaved ? t('review.scheduleSavedMetadataPending') : null,
+        !phoneCopyReady ? t('review.scheduleSavedPhoneCopyPending') : null,
+      ].filter(Boolean).join('\n\n') || t('review.scheduleSavedDesc');
+      Alert.alert(t('review.scheduleSaved'), confirmation, [
         { text: t('review.viewCalendar'), onPress: () => router.replace('/(tabs)/calendar') },
         { text: t('review.goHome'), onPress: () => router.replace('/(tabs)/home') },
       ]);

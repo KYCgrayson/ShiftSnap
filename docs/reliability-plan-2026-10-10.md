@@ -29,12 +29,12 @@ Preserve the existing uncommitted work, synchronize it to GitHub, then make save
 ## Checklist and progress
 - [x] Inspect current source and Git baseline (development matches origin).
 - [x] Archive all 29 pre-existing changed/untracked files and verify SHA-256 against archive contents.
-- [ ] Review and push scoped WIP checkpoint (exclude local agent configuration and backups).
-- [ ] Implement P0 safety changes.
-- [ ] Implement title preference with UI preview and persistence.
-- [ ] Implement authenticated offline read and reconnect behavior.
-- [ ] Independent review and repairs.
-- [ ] Run typecheck, existing tests, meaningful integration/database tests, native E2E where environment supports it.
+- [x] Review and push WIP checkpoint `e331b3b` (exclude local agent configuration and backups).
+- [x] Implement atomic replacement and sync identity fixes; local PostgreSQL authenticated-role scenarios pass.
+- [x] Implement title preference with UI preview and persistence; native UI acceptance pending.
+- [x] Implement authenticated offline read and reconnect behavior.
+- [x] Independent review and repairs; final two guards independently reread.
+- [x] Run typecheck, existing tests, meaningful integration/database tests. Native E2E remains blocked by locked Mac (not passed).
 - [ ] Save reproducible QA artifact and push final reviewed commits.
 
 ## QA and passing criteria
@@ -46,3 +46,20 @@ Preserve the existing uncommitted work, synchronize it to GitHub, then make save
 
 ## Backup
 Private ignored archive: `.local-backups/2026-10-10-before-reliability/`. Includes binary Git patch and hash manifest. Do not publish the archive or local `.codex` configuration.
+
+## Verified database state
+- Live migration list confirmed all three July 30 migrations already applied.
+- October 10 migration dry run included only `20261010000001_atomic_schedule_shift_replacement.sql`.
+- After independent review and 45 local migration/scenario checks, applied the function-only migration successfully.
+- Regenerated types from linked database; no production schedule rows were used in tests.
+
+## Supabase free-tier decision
+Verified official policy on October 10: Free projects with low database activity over seven days can be paused; a few genuine user requests daily typically suffice, but opening the app once is not a guarantee. Normal online startup/foreground refresh already performs database reads. No dummy write or scheduled keepalive was added. Offline availability is implemented as a user benefit independent of hosting-plan policy.
+Source: https://supabase.com/docs/guides/platform/free-project-pausing
+
+## Delivery boundaries
+- Local copies cover successfully loaded schedule months plus group/person/code metadata. This is not a complete backup of every historical month or original photo.
+- Offline mode is read-only: recognition, cloud edits, and system-calendar reconciliation require a restored connection.
+- A cloud save and a verified phone copy are separate states; a failed refresh/storage write must not be described as an offline-ready save.
+- Title preferences apply on this device/account. Changing the preference reconciles the current month when connected; other months take effect on their next sync.
+- Native visual/interaction acceptance remains gated on access to the unlocked Mac. Mocked-boundary integration and real PostgreSQL checks do not replace it.

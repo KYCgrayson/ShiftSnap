@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../services/supabase';
 import type { OCRResult } from '@shiftsnap/shared';
-import { getIsGuest } from './authStore';
+import { getIsGuest, getIsOfflineReadOnly } from './authStore';
 import { getGuestSchedules } from '../data/guestDemoData';
 import { useGroupStore } from './groupStore';
 import { buildScheduleImageStoragePath, getShiftImageExtension, getShiftImageStoragePath } from '../services/shiftImages';
@@ -131,6 +131,7 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
       );
       return localSchedule.id;
     }
+    if (getIsOfflineReadOnly()) throw new Error('Offline mode is read-only. Reconnect before creating a schedule.');
     set({ loading: true, error: null });
     try {
       const currentGroup = useGroupStore.getState().currentGroup;
@@ -180,6 +181,7 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
       await AsyncStorage.setItem(GUEST_SCHEDULES_KEY, JSON.stringify(schedules));
       return;
     }
+    if (getIsOfflineReadOnly()) throw new Error('Offline mode is read-only. Reconnect before changing a schedule photo.');
 
     const { error } = await supabase
       .from('schedules')
@@ -216,6 +218,7 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
       );
       return;
     }
+    if (getIsOfflineReadOnly()) throw new Error('Offline mode is read-only. Reconnect before changing a schedule.');
     try {
       const { error } = await supabase
         .from('schedules')
@@ -257,6 +260,7 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
       );
       return;
     }
+    if (getIsOfflineReadOnly()) throw new Error('Offline mode is read-only. Reconnect before changing a schedule.');
     try {
       const existing = get().schedules.find((schedule) => schedule.id === scheduleId)
         || (await supabase.from('schedules')
@@ -353,6 +357,7 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
 
   shareSchedulesWithGroup: async (userId: string, groupId: string) => {
     if (getIsGuest()) return 0;
+    if (getIsOfflineReadOnly()) throw new Error('Offline mode is read-only. Reconnect before sharing schedules.');
     // Get unshared schedules
     const { data, error: fetchError } = await supabase
       .from('schedules')

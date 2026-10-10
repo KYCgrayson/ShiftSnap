@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, AppState } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SplashScreen from 'expo-splash-screen';
@@ -17,6 +17,7 @@ import { useRealtimeNotifications } from '../src/hooks/useRealtimeNotifications'
 import { ToastProvider } from '../src/components/ui';
 import { NotificationBanner } from '../src/components/NotificationBanner';
 import i18n from '../src/i18n';
+import { getOfflineReadGeneration, isOfflineReadRequestCurrent } from '../src/services/offlineReadCache';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -44,6 +45,48 @@ function RootLayoutInner() {
     if (initialized && user?.id) {
       fetchOrCreateDefaultGroup(user.id);
     }
+  }, [initialized, user?.id]);
+
+  useEffect(() => {
+    if (!initialized || !user?.id) return;
+    let previousState = AppState.currentState;
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      const cameToForeground = previousState !== 'active' && nextState === 'active';
+      previousState = nextState;
+      if (!cameToForeground) return;
+      let auth = useAuthStore.getState();
+      if (auth.isGuest || !auth.user?.id) return;
+      void (async () => {
+        if (!auth.session) {
+          const restored = await useAuthStore.getState().retryOnlineSession();
+          if (!restored) return;
+          auth = useAuthStore.getState();
+        }
+        const activeUserId = auth.user?.id;
+        if (!activeUserId || !auth.session) return;
+        const generation = getOfflineReadGeneration();
+        if (!isOfflineReadRequestCurrent(generation, activeUserId)) return;
+        auth.setOfflineReadOnly(false);
+        try {
+        await useGroupStore.getState().fetchGroups(activeUserId);
+        if (!isOfflineReadRequestCurrent(generation, activeUserId)) return;
+        if (useAuthStore.getState().isOfflineReadOnly) return;
+        const { useShiftStore } = require('../src/stores/shiftStore');
+        const { useShiftCodeStore } = require('../src/stores/shiftCodeStore');
+        const { usePersonStore } = require('../src/stores/personStore');
+        const month = new Date();
+        const yearMonth = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`;
+        await Promise.all([
+          useShiftStore.getState().fetchShiftsWindow(activeUserId, yearMonth),
+          useShiftCodeStore.getState().fetchShiftCodes(activeUserId),
+          usePersonStore.getState().fetchPersons(activeUserId),
+        ]);
+        } catch {
+          if (isOfflineReadRequestCurrent(generation, activeUserId)) useAuthStore.getState().setOfflineReadOnly(true);
+        }
+      })();
+    });
+    return () => subscription.remove();
   }, [initialized, user?.id]);
 
   // Wait for both auth and theme to load before rendering UI, otherwise

@@ -339,6 +339,17 @@ export default {
     inviteSignInRequiredDesc: 'Sign in and we will join you to the group automatically.',
     sharing: 'Sharing...',
     shareFailed: 'Failed to share schedules',
+    calendarTitle: {
+      title: 'Calendar event title',
+      description: 'Choosing a mode updates the current month when connected; other months apply it on their next sync.',
+      shiftFirst: 'Shift first, then name',
+      shiftOnly: 'Shift only',
+      nameFirst: 'Name first, then shift',
+      shiftFirstExample: 'Day (D) · Alex',
+      shiftOnlyExample: 'Day (D)',
+      nameFirstExample: 'Alex · Day (D)',
+      syncFailed: 'Preference saved, but current-month calendar events could not be updated. They will update on the next successful sync.',
+    },
   },
 
   notifications: {
@@ -465,6 +476,8 @@ export default {
     guideContrastHigher: 'Higher',
     scheduleSaved: 'Schedule Saved',
     scheduleSavedDesc: 'Your shifts have been saved successfully!',
+    scheduleSavedPhoneCopyPending: 'Your shifts were saved to your account, but this phone could not save an offline copy. Reconnect and refresh the calendar to store them here.',
+    scheduleSavedMetadataPending: 'Your shift rows were saved, but the schedule status could not be finalized. Reconnect and check the schedule before importing it again.',
     viewCalendar: 'View Calendar',
     goHome: 'Go Home',
     saveFailed: 'Failed to save shifts. Please try again.',
@@ -532,5 +545,12 @@ export default {
     title: "You're in guest mode",
     defaultMessage: 'Create an account to save your data and unlock all features.',
     shiftsMessage: 'Changes to shift codes are local-only and will be lost when you exit guest mode.',
+  },
+  offline: {
+    readOnly: 'Offline mode: saved schedules are read-only',
+    lastUpdated: 'Last saved on this phone: {{time}}',
+    unavailableMonth: 'This month has not been saved on this phone',
+    cachedSchedule: 'Showing the last schedule saved on this phone.',
+    retry: 'Retry',
   },
 } as const;

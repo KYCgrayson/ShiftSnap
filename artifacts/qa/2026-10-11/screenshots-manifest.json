@@ -1,0 +1,38 @@
+[
+  {
+    "file": "01-online-home.png",
+    "sha256": "bc45b320f3a82eae4d7e62eb9a38ed366ddb065547086a831ce2c0686cc0d0ea"
+  },
+  {
+    "file": "02-online-calendar.png",
+    "sha256": "c3b0cab5c485edc8559f19d9861d69fc1890fbdfc0c360ce43539fd08e4feb6d"
+  },
+  {
+    "file": "03-offline-cold-calendar.png",
+    "sha256": "9736f87a1fe7add84ddccb42e4fc426d56acd39726c5a9ef62fec8f8f0cb6bd2"
+  },
+  {
+    "file": "04-unvisited-month.png",
+    "sha256": "066c8be5cfe6f3bad795897e74893207f041fa9e6857ab6760fb0849f18ea54b"
+  },
+  {
+    "file": "05-offline-edit-blocked.png",
+    "sha256": "3dba15c29fbd93af30925454100917748b856dd01c81fad18cd051ee1901365e"
+  },
+  {
+    "file": "06-reconnected-calendar.png",
+    "sha256": "b7c27f1ed44bf8282dddcefc210a1cd041414fc3cce21a22d17df44101f9e8a2"
+  },
+  {
+    "file": "07-native-calendar-event.png",
+    "sha256": "989e549b91183c70c4364c060dc457a96ae850dc63a75a826b158fb003a6a42f"
+  },
+  {
+    "file": "08-offline-logout.png",
+    "sha256": "243e84a3439c65f2b31a95dbe3e806c7548c75e7372869baec55db1cd76f94f6"
+  },
+  {
+    "file": "09-after-logout-restart.png",
+    "sha256": "dfb0014512fcacd8f79e66e832b832770d43661061a86aedfe4bdb38cafb96f5"
+  }
+]

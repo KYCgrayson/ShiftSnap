@@ -31,10 +31,10 @@ Preserve the existing uncommitted work, synchronize it to GitHub, then make save
 - [x] Archive all 29 pre-existing changed/untracked files and verify SHA-256 against archive contents.
 - [x] Review and push WIP checkpoint `e331b3b` (exclude local agent configuration and backups).
 - [x] Implement atomic replacement and sync identity fixes; local PostgreSQL authenticated-role scenarios pass.
-- [x] Implement title preference with UI preview and persistence; native UI acceptance pending.
+- [x] Implement title preference with UI preview and persistence; native simulator acceptance completed October 11 (see linked evidence below).
 - [x] Implement authenticated offline read and reconnect behavior.
 - [x] Independent review and repairs; final two guards independently reread.
-- [x] Run typecheck, existing tests, meaningful integration/database tests. Native E2E remains blocked by locked Mac (not passed).
+- [x] Run typecheck, existing tests, meaningful integration/database tests. Native simulator scenarios completed October 11; original integration results remain separately recorded.
 - [x] Save reproducible QA artifact and push reviewed implementation `1960d65`; local/remote alignment verified.
 
 ## QA and passing criteria
@@ -62,4 +62,4 @@ Source: https://supabase.com/docs/guides/platform/free-project-pausing
 - Offline mode is read-only: recognition, cloud edits, and system-calendar reconciliation require a restored connection.
 - A cloud save and a verified phone copy are separate states; a failed refresh/storage write must not be described as an offline-ready save.
 - Title preferences apply on this device/account. Changing the preference reconciles the current month when connected; other months take effect on their next sync.
-- Native visual/interaction acceptance remains gated on access to the unlocked Mac. Mocked-boundary integration and real PostgreSQL checks do not replace it.
+- Native simulator visual/interaction acceptance completed October 11: seven bounded scenarios passed, with one minor uncached-month wording/date inconsistency recorded. Evidence: `artifacts/qa/2026-10-11/README.md`. This used a compatible Release shell with final QA JavaScript and a synthetic HTTP backend; physical-device, production OAuth and fresh full native build acceptance remain unclaimed.

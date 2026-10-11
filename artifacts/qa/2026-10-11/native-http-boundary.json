@@ -1,0 +1,588 @@
+{
+  "boundary": "Synthetic localhost Supabase HTTP; real iOS app, storage and views",
+  "requests": [
+    {
+      "at": "2026-10-11T05:02:47.636Z",
+      "method": "GET",
+      "path": "/rest/v1/group_members",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:02:47.667Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:02:47.681Z",
+      "method": "GET",
+      "path": "/rest/v1/shift_codes",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:02:47.682Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:02:47.683Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:03:25.436Z",
+      "method": "GET",
+      "path": "/rest/v1/group_members",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:03:25.438Z",
+      "method": "GET",
+      "path": "/rest/v1/shift_codes",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:03:25.440Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:03:25.448Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:03:25.448Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:04:02.350Z",
+      "method": "GET",
+      "path": "/rest/v1/schedules",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:04:02.354Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_group_member_profiles",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:04:02.355Z",
+      "method": "GET",
+      "path": "/rest/v1/persons",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:04:02.356Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:04:02.357Z",
+      "method": "GET",
+      "path": "/rest/v1/shift_codes",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:04:02.358Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:04:02.363Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:04:02.363Z",
+      "method": "GET",
+      "path": "/rest/v1/daily_notes",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:04:02.365Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:04:02.365Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:04:02.366Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:04:02.522Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:04:02.523Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:04:02.523Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:04:31.264Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "offline": true
+    },
+    {
+      "at": "2026-10-11T05:04:31.267Z",
+      "method": "GET",
+      "path": "/rest/v1/group_members",
+      "offline": true
+    },
+    {
+      "at": "2026-10-11T05:04:31.277Z",
+      "method": "GET",
+      "path": "/rest/v1/shift_codes",
+      "offline": true
+    },
+    {
+      "at": "2026-10-11T05:04:31.286Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "offline": true
+    },
+    {
+      "at": "2026-10-11T05:04:31.287Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "offline": true
+    },
+    {
+      "at": "2026-10-11T05:04:43.708Z",
+      "method": "GET",
+      "path": "/rest/v1/schedules",
+      "offline": true
+    },
+    {
+      "at": "2026-10-11T05:04:43.710Z",
+      "method": "GET",
+      "path": "/rest/v1/daily_notes",
+      "offline": true
+    },
+    {
+      "at": "2026-10-11T05:04:43.723Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_group_member_profiles",
+      "offline": true
+    },
+    {
+      "at": "2026-10-11T05:05:02.190Z",
+      "method": "GET",
+      "path": "/rest/v1/schedules",
+      "offline": true
+    },
+    {
+      "at": "2026-10-11T05:05:02.191Z",
+      "method": "GET",
+      "path": "/rest/v1/daily_notes",
+      "offline": true
+    },
+    {
+      "at": "2026-10-11T05:05:13.281Z",
+      "method": "GET",
+      "path": "/rest/v1/schedules",
+      "offline": true
+    },
+    {
+      "at": "2026-10-11T05:05:13.283Z",
+      "method": "GET",
+      "path": "/rest/v1/daily_notes",
+      "offline": true
+    },
+    {
+      "at": "2026-10-11T05:05:39.168Z",
+      "method": "GET",
+      "path": "/rest/v1/schedules",
+      "offline": true
+    },
+    {
+      "at": "2026-10-11T05:05:39.169Z",
+      "method": "GET",
+      "path": "/rest/v1/daily_notes",
+      "offline": true
+    },
+    {
+      "at": "2026-10-11T05:05:47.603Z",
+      "method": "GET",
+      "path": "/rest/v1/schedules",
+      "offline": true
+    },
+    {
+      "at": "2026-10-11T05:05:47.604Z",
+      "method": "GET",
+      "path": "/rest/v1/daily_notes",
+      "offline": true
+    },
+    {
+      "at": "2026-10-11T05:07:13.392Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:07:13.397Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:07:13.399Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:07:13.408Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:07:13.409Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:07:13.411Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:07:13.416Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:07:13.435Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:07:13.436Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:07:30.104Z",
+      "method": "GET",
+      "path": "/rest/v1/person_aliases",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:07:30.111Z",
+      "method": "GET",
+      "path": "/rest/v1/roster_identity_merges",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:07:30.174Z",
+      "method": "GET",
+      "path": "/rest/v1/persons",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:07:30.197Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_group_member_profiles",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:09:03.395Z",
+      "method": "GET",
+      "path": "/rest/v1/group_members",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:09:03.600Z",
+      "method": "GET",
+      "path": "/rest/v1/schedules",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:09:03.861Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:09:03.866Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:09:03.919Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:09:03.989Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:09:03.992Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:09:04.011Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:09:04.041Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:09:04.048Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:09:04.052Z",
+      "method": "GET",
+      "path": "/rest/v1/shift_codes",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:09:04.070Z",
+      "method": "GET",
+      "path": "/rest/v1/persons",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:09:04.294Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:11:48.862Z",
+      "method": "GET",
+      "path": "/rest/v1/group_members",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:11:48.866Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:11:48.869Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:11:48.873Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:11:48.874Z",
+      "method": "GET",
+      "path": "/rest/v1/shift_codes",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:12:12.889Z",
+      "method": "GET",
+      "path": "/rest/v1/person_aliases",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:12:12.967Z",
+      "method": "GET",
+      "path": "/rest/v1/roster_identity_merges",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:12:13.048Z",
+      "method": "GET",
+      "path": "/rest/v1/persons",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:12:13.105Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_group_member_profiles",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:12:36.857Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:12:37.331Z",
+      "method": "PATCH",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:12:37.433Z",
+      "method": "PATCH",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:12:37.494Z",
+      "method": "PATCH",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:13:32.805Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:13:33.776Z",
+      "method": "PATCH",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:13:33.861Z",
+      "method": "PATCH",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:13:33.932Z",
+      "method": "PATCH",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:13:54.454Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:13:54.778Z",
+      "method": "PATCH",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:13:54.953Z",
+      "method": "PATCH",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:13:55.036Z",
+      "method": "PATCH",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:14:28.605Z",
+      "method": "GET",
+      "path": "/rest/v1/shift_codes",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:14:28.608Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:14:28.610Z",
+      "method": "GET",
+      "path": "/rest/v1/group_members",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:14:28.614Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:14:28.617Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:14:38.185Z",
+      "method": "GET",
+      "path": "/rest/v1/person_aliases",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:14:38.196Z",
+      "method": "GET",
+      "path": "/rest/v1/roster_identity_merges",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:14:38.197Z",
+      "method": "GET",
+      "path": "/rest/v1/persons",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:14:38.202Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_group_member_profiles",
+      "offline": false
+    },
+    {
+      "at": "2026-10-11T05:17:49.281Z",
+      "method": "GET",
+      "path": "/rest/v1/group_members",
+      "offline": true
+    }
+  ],
+  "excluded_realtime_requests": 76
+}

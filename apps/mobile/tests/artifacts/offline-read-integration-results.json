@@ -1,6 +1,6 @@
 {
   "harness": "offline-read.integration.mjs",
-  "executedAt": "2026-10-10T02:53:19.616Z",
+  "executedAt": "2026-10-11T10:51:50.380Z",
   "scope": "real Zustand stores and offlineReadCache; mocked Supabase and local storage boundaries",
   "records": [
     {

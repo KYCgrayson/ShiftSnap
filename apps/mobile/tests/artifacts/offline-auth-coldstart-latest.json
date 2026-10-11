@@ -1,6 +1,6 @@
 {
   "harness": "offline-auth-coldstart.integration.mjs",
-  "executedAt": "2026-10-10T02:53:16.405Z",
+  "executedAt": "2026-10-11T10:51:49.968Z",
   "boundary": "Real authStore and offlineReadCache; AsyncStorage, SecureStore, Supabase session/provider/network mocked",
   "results": [
     {

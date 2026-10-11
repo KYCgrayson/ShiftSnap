@@ -11,7 +11,6 @@ import {
   ActionSheetIOS,
   Platform,
   Modal,
-  Linking,
   Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -25,10 +24,7 @@ import { useAuthStore } from '../../src/stores/authStore';
 import { useThemeStore } from '../../src/stores/themeStore';
 import {
   useCalendarStore,
-  calendarAlarmsKey,
   ALARM_MINUTES_KEY,
-  calendarSyncFilterKey,
-  type CalendarSyncFilter,
 } from '../../src/stores/calendarStore';
 import { useLocaleStore } from '../../src/stores/localeStore';
 import { usePersonStore } from '../../src/stores/personStore';
@@ -39,7 +35,7 @@ import { APP_VERSION, SUPPORTED_LOCALES, LOCALE_NAMES, PERSON_COLOR_HEX, ALARM_O
 import { useShiftStore } from '../../src/stores/shiftStore';
 import { useShiftCodeStore } from '../../src/stores/shiftCodeStore';
 import { useScheduleStore } from '../../src/stores/scheduleStore';
-import { CalendarTitleSettings } from '../../src/components/settings/CalendarTitleSettings';
+import { CalendarExportSettings } from '../../src/components/settings/CalendarExportSettings';
 import {
   requestNotificationPermissions,
   scheduleShiftReminder,
@@ -72,12 +68,9 @@ export default function SettingsScreen() {
   const { locale, setLocale } = useLocaleStore();
   const {
     isConnected: calendarConnected,
-    connectCalendar,
     disconnectCalendar,
     removeSyncedEvents,
     syncUserShifts,
-    getWritableCalendars,
-    calendarId,
     loading: calendarLoading,
   } = useCalendarStore();
 
@@ -104,8 +97,6 @@ export default function SettingsScreen() {
   const [unsharedCount, setUnsharedCount] = useState(0);
   const [sharingSchedules, setSharingSchedules] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
-  const [calendarAlarmsEnabled, setCalendarAlarmsEnabled] = useState(false);
-  const [calendarSyncFilter, setCalendarSyncFilter] = useState<CalendarSyncFilter>('all');
   const [alarmMinutes, setAlarmMinutes] = useState(DEFAULT_ALARM_MINUTES);
   const [optionList, setOptionList] = useState<{
     title: string;
@@ -115,7 +106,6 @@ export default function SettingsScreen() {
   } | null>(null);
   const [showGroupNameModal, setShowGroupNameModal] = useState(false);
   const [groupName, setGroupName] = useState('');
-  const [calendarDestinationName, setCalendarDestinationName] = useState<string | null>(null);
   const [mergeLoading, setMergeLoading] = useState(false);
 
   // Claim-my-schedule modal state. claimRows lists the distinct name +
@@ -148,40 +138,8 @@ export default function SettingsScreen() {
   }, []);
 
   useEffect(() => {
-    if (!user?.id || isGuest) {
-      setCalendarAlarmsEnabled(false);
-      setCalendarSyncFilter('all');
-      return;
-    }
-    let active = true;
-    void Promise.all([
-      AsyncStorage.getItem(calendarAlarmsKey(user.id)),
-      AsyncStorage.getItem(calendarSyncFilterKey(user.id)),
-    ]).then(([alarms, filter]) => {
-      if (!active) return;
-      setCalendarAlarmsEnabled(alarms === 'true');
-      setCalendarSyncFilter(filter === 'work_days' || filter === 'days_off' ? filter : 'all');
-    });
-    return () => { active = false; };
-  }, [isGuest, user?.id]);
-
-  useEffect(() => {
     if (user?.id) void useCalendarStore.getState().initialize(user.id);
   }, [user?.id]);
-
-  useEffect(() => {
-    if (Platform.OS !== 'android' || !calendarConnected || !calendarId) {
-      setCalendarDestinationName(null);
-      return;
-    }
-    void getWritableCalendars()
-      .then((destinations) => {
-        setCalendarDestinationName(
-          destinations.find((calendar) => calendar.id === calendarId)?.title ?? null,
-        );
-      })
-      .catch(() => setCalendarDestinationName(null));
-  }, [calendarConnected, calendarId, getWritableCalendars]);
 
   useEffect(() => {
     if (user?.id) fetchPersons(user.id);
@@ -484,92 +442,13 @@ export default function SettingsScreen() {
     }
   };
 
-  const askCalendarAlarmPreference = () =>
-    new Promise<boolean>((resolve) => {
-      let settled = false;
-      const finish = (value: boolean) => {
-        if (settled) return;
-        settled = true;
-        resolve(value);
-      };
-
-      Alert.alert(
-        t('settings.calendarAlarmPromptTitle'),
-        t('settings.calendarAlarmPromptDesc', { time: getAlarmLabel(alarmMinutes) }),
-        [
-          {
-            text: t('settings.noCalendarAlarm'),
-            style: 'cancel',
-            onPress: () => finish(false),
-          },
-          {
-            text: t('settings.addCalendarAlarm'),
-            onPress: () => finish(true),
-          },
-        ],
-        { cancelable: true, onDismiss: () => finish(false) },
-      );
-    });
-
-  const finishCalendarConnect = async (destinationId?: string) => {
-    const success = await connectCalendar(user?.id, destinationId);
-    if (success) {
-      if (Platform.OS === 'android') {
-        const destinations = await getWritableCalendars().catch(() => []);
-        setCalendarDestinationName(destinations.find((calendar) => calendar.id === useCalendarStore.getState().calendarId)?.title ?? null);
-      }
-      if (user && !isGuest) {
-        try {
-          const savedAlarmPreference = await AsyncStorage.getItem(calendarAlarmsKey(user.id));
-          const wantsCalendarAlarms = savedAlarmPreference === null ? await askCalendarAlarmPreference() : savedAlarmPreference === 'true';
-          setCalendarAlarmsEnabled(wantsCalendarAlarms);
-          await AsyncStorage.setItem(calendarAlarmsKey(user.id), wantsCalendarAlarms ? 'true' : 'false');
-          await syncUserShifts(user.id);
-        } catch { /* Calendar backfill is best-effort. */ }
-      }
-      Alert.alert(t('settings.connected'), t('settings.calendarConnected'));
-      return;
-    }
-    const reason = useCalendarStore.getState().error || '';
-    if (reason.includes('permission')) {
-      Alert.alert(t('common.error'), t('settings.calendarPermDenied'), [{ text: t('common.cancel'), style: 'cancel' }, { text: t('settings.openSystemSettings'), onPress: () => Linking.openSettings() }]);
-    } else if (reason === 'CALENDAR_ACCOUNT_READONLY') {
-      Alert.alert(t('common.error'), t('settings.calendarAccountReadonly'), [{ text: t('common.cancel'), style: 'cancel' }, { text: t('settings.openSystemSettings'), onPress: () => Linking.openSettings() }]);
-    } else Alert.alert(t('common.error'), reason ? `${t('settings.calendarConnectFailed')}\n${reason}` : t('settings.calendarConnectFailed'));
-  };
-
-  const showAndroidCalendarDestinations = async () => {
-    try {
-      const destinations = await getWritableCalendars();
-      if (destinations.length === 0) {
-        await finishCalendarConnect();
-        return;
-      }
-      setOptionList({
-        title: t('settings.chooseCalendar'),
-        options: destinations.map((calendar) => ({ value: calendar.id, label: calendar.title, detail: calendar.sourceName })),
-        selectedValue: calendarId,
-        onSelect: (value) => { setOptionList(null); void finishCalendarConnect(value); },
-      });
-    } catch { await finishCalendarConnect(); }
-  };
-
-  const handleCalendarConnect = async () => {
-    if (calendarConnected) {
-      Alert.alert(t('settings.disconnectCalendar'), t('settings.disconnectDesc'), [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('settings.disconnect'),
-          onPress: () => disconnectCalendar(user?.id),
-        },
-        {
-          text: t('settings.removeAndDisconnect'),
-          style: 'destructive',
-          onPress: () => void removeSyncedCalendarEvents(true),
-        },
-      ]);
-    } else if (Platform.OS === 'android') await showAndroidCalendarDestinations();
-    else await finishCalendarConnect();
+  const handleCalendarConnect = () => {
+    if (!calendarConnected) return;
+    Alert.alert(t('settings.disconnectCalendar'), t('settings.disconnectDesc'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('settings.disconnect'), onPress: () => void disconnectCalendar(user?.id) },
+      { text: t('settings.removeAndDisconnect'), style: 'destructive', onPress: () => void removeSyncedCalendarEvents(true) },
+    ]);
   };
 
   const removeSyncedCalendarEvents = async (disconnectAfter: boolean) => {
@@ -610,66 +489,6 @@ export default function SettingsScreen() {
         },
       ],
     );
-  };
-
-  const handleToggleCalendarAlarms = async (enabled: boolean) => {
-    setCalendarAlarmsEnabled(enabled);
-    if (user?.id && !isGuest) {
-      await AsyncStorage.setItem(calendarAlarmsKey(user.id), enabled ? 'true' : 'false');
-    }
-
-    if (!calendarConnected || !user || isGuest) return;
-
-    try {
-      await syncUserShifts(user.id);
-    } catch (e) {
-      console.warn('Failed to rewrite calendar alarms:', e);
-      Alert.alert(t('common.error'), t('settings.calendarAlarmSyncFailed'));
-    }
-  };
-
-  const getCalendarSyncFilterLabel = (filter: CalendarSyncFilter): string => {
-    if (filter === 'work_days') return t('settings.calendarSyncWorkDays');
-    if (filter === 'days_off') return t('settings.calendarSyncDaysOff');
-    return t('settings.calendarSyncAll');
-  };
-
-  const applyCalendarSyncFilter = async (filter: CalendarSyncFilter) => {
-    setCalendarSyncFilter(filter);
-    try {
-      if (!user?.id || isGuest) return;
-      await AsyncStorage.setItem(calendarSyncFilterKey(user.id), filter);
-      if (!calendarConnected || !user || isGuest) return;
-      const result = await syncUserShifts(user.id);
-      if (!result) Alert.alert(t('common.error'), t('settings.calendarFilterSyncFailed'));
-    } catch {
-      Alert.alert(t('common.error'), t('settings.calendarFilterSyncFailed'));
-    }
-  };
-
-  const handleCalendarSyncFilterChange = () => {
-    const choices: Array<{ value: CalendarSyncFilter; label: string }> = [
-      { value: 'all', label: t('settings.calendarSyncAll') },
-      { value: 'work_days', label: t('settings.calendarSyncWorkDays') },
-      { value: 'days_off', label: t('settings.calendarSyncDaysOff') },
-    ];
-
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          title: t('settings.calendarSyncContent'),
-          options: [...choices.map((choice) => choice.label), t('common.cancel')],
-          cancelButtonIndex: choices.length,
-        },
-        (buttonIndex) => {
-          const choice = choices[buttonIndex];
-          if (choice) void applyCalendarSyncFilter(choice.value);
-        },
-      );
-      return;
-    }
-
-    setOptionList({ title: t('settings.calendarSyncContent'), options: choices.map((choice) => ({ value: choice.value, label: choice.label })), selectedValue: calendarSyncFilter, onSelect: (value) => { setOptionList(null); void applyCalendarSyncFilter(value as CalendarSyncFilter); } });
   };
 
   const scheduleAllReminders = async (minutes: number) => {
@@ -735,14 +554,11 @@ export default function SettingsScreen() {
             if (notificationsEnabled) {
               await scheduleAllReminders(selected);
             }
-            if (calendarConnected && calendarAlarmsEnabled && user && !isGuest) {
-              await syncUserShifts(user.id);
-            }
           }
         }
       );
     } else {
-      setOptionList({ title: t('settings.selectAlarm'), options: ALARM_OPTIONS.map((opt) => ({ value: String(opt.value), label: opt.label })), selectedValue: String(alarmMinutes), onSelect: (value) => { setOptionList(null); const selected = Number(value); setAlarmMinutes(selected); void AsyncStorage.setItem(ALARM_MINUTES_KEY, String(selected)); if (notificationsEnabled) void scheduleAllReminders(selected); if (calendarConnected && calendarAlarmsEnabled && user && !isGuest) void syncUserShifts(user.id); } });
+      setOptionList({ title: t('settings.selectAlarm'), options: ALARM_OPTIONS.map((opt) => ({ value: String(opt.value), label: opt.label })), selectedValue: String(alarmMinutes), onSelect: (value) => { setOptionList(null); const selected = Number(value); setAlarmMinutes(selected); void AsyncStorage.setItem(ALARM_MINUTES_KEY, String(selected)); if (notificationsEnabled) void scheduleAllReminders(selected); } });
     }
   };
 
@@ -1262,7 +1078,7 @@ export default function SettingsScreen() {
             {t('settings.calendarSection')}
           </Text>
           <Card padding="none">
-            <SettingsItem
+            {calendarConnected && <SettingsItem
               icon={Platform.OS === 'ios' ? 'logo-apple' : 'calendar-outline'}
               title={Platform.OS === 'ios' ? t('settings.appleCalendar') : t('settings.deviceCalendar')}
               subtitle={calendarConnected ? t('settings.connected') : t('settings.notConnected')}
@@ -1278,48 +1094,10 @@ export default function SettingsScreen() {
                   <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
                 )
               }
-            />
+            />}
+            {!!user?.id && !isGuest && <CalendarExportSettings userId={user.id} />}
             {calendarConnected && (
               <>
-                {Platform.OS === 'android' && <>
-                  <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
-                  <SettingsItem
-                    icon="calendar-outline"
-                    title={t('settings.calendarDestination')}
-                    subtitle={calendarDestinationName || t('settings.chooseCalendar')}
-                    onPress={showAndroidCalendarDestinations}
-                  />
-                </>}
-                <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
-                {!!user?.id && !isGuest && <>
-                  <CalendarTitleSettings userId={user.id} connected={calendarConnected} />
-                  <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
-                </>}
-                <SettingsItem
-                  icon="options-outline"
-                  title={t('settings.calendarSyncContent')}
-                  subtitle={getCalendarSyncFilterLabel(calendarSyncFilter)}
-                  onPress={handleCalendarSyncFilterChange}
-                  rightElement={<Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />}
-                />
-                <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
-                <SettingsItem
-                  icon="alarm-outline"
-                  title={t('settings.calendarAlarms')}
-                  subtitle={
-                    calendarAlarmsEnabled
-                      ? t('settings.calendarAlarmsEnabled', { time: getAlarmLabel(alarmMinutes) })
-                      : t('settings.calendarAlarmsDisabled')
-                  }
-                  rightElement={
-                    <Switch
-                      value={calendarAlarmsEnabled}
-                      onValueChange={handleToggleCalendarAlarms}
-                      trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
-                      thumbColor={theme.colors.white}
-                    />
-                  }
-                />
                 <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
                 <SettingsItem
                   icon="trash-outline"

@@ -1,8 +1,9 @@
 import * as Calendar from 'expo-calendar';
 import { Platform } from 'react-native';
 
-const CALENDAR_NAME = 'IShift';
-const CALENDAR_COLOR = '#4A9DAD';
+export const CALENDAR_NAME = 'IShift';
+export const CALENDAR_COLOR = '#4A9DAD';
+export const CALENDAR_COLORS = ['#E5484D', '#F28C28', '#F2C94C', '#43A66A', '#4A90E2', '#9765C9', '#9B7653', CALENDAR_COLOR] as const;
 const DEFAULT_SHIFT_HOURS = 8;
 const SYNC_KEY_PREFIX = 'IShift:v2';
 const SYNC_KEY_NOTE_LABEL = 'IShift-Sync-Key';
@@ -56,6 +57,7 @@ export interface CalendarRemovalResult {
 export interface WritableCalendarDestination {
   id: string;
   title: string;
+  color?: string;
   sourceName?: string;
 }
 
@@ -64,9 +66,19 @@ export async function requestCalendarPermissions(): Promise<boolean> {
   return status === 'granted';
 }
 
+export async function hasCalendarPermissions(): Promise<boolean> {
+  const { status } = await Calendar.getCalendarPermissionsAsync();
+  return status === 'granted';
+}
+
 export async function getWritableCalendars(): Promise<WritableCalendarDestination[]> {
   const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
-  return calendars.filter((calendar) => calendar.allowsModifications).map((calendar) => ({ id: calendar.id, title: calendar.title || calendar.name || CALENDAR_NAME, sourceName: calendar.source?.name || calendar.ownerAccount || undefined }));
+  return calendars.filter((calendar) => calendar.allowsModifications).map((calendar) => ({ id: calendar.id, title: calendar.title || calendar.name || CALENDAR_NAME, color: calendar.color || undefined, sourceName: calendar.source?.name || calendar.ownerAccount || undefined }));
+}
+
+export async function getCalendarDestination(calendarId: string): Promise<WritableCalendarDestination | null> {
+  const calendars = await getWritableCalendars();
+  return calendars.find((calendar) => calendar.id === calendarId) || null;
 }
 
 export async function isWritableCalendar(calendarId: string): Promise<boolean> {
@@ -74,22 +86,21 @@ export async function isWritableCalendar(calendarId: string): Promise<boolean> {
   return calendars.some((calendar) => calendar.id === calendarId && calendar.allowsModifications);
 }
 
-// Thrown when the OS refuses to create a calendar under every source we
-// try AND there is no writable calendar to fall back to. Callers map this
+// Thrown when the OS refuses to create a calendar under every source. Callers map this
 // to a user-facing "your account doesn't allow calendars" message instead
 // of a bare native error string.
 export const CALENDAR_ACCOUNT_READONLY = 'CALENDAR_ACCOUNT_READONLY';
 
-async function createNamedCalendarWithSource(source: Calendar.Source): Promise<string> {
+async function createNamedCalendarWithSource(source: Calendar.Source, title: string, color: string): Promise<string> {
   // iOS keys off sourceId; the source object is passed too so Android and
   // older iOS paths both resolve the owning account.
   return Calendar.createCalendarAsync({
-    title: CALENDAR_NAME,
-    color: CALENDAR_COLOR,
+    title,
+    color,
     entityType: Calendar.EntityTypes.EVENT,
     sourceId: source.id,
     source,
-    name: CALENDAR_NAME,
+    name: title,
     ownerAccount: 'personal',
     accessLevel: Calendar.CalendarAccessLevel.OWNER,
   });
@@ -139,13 +150,7 @@ async function getIosCandidateSources(): Promise<Calendar.Source[]> {
   return ordered;
 }
 
-export async function getOrCreateShiftSnapCalendar(): Promise<string | null> {
-  const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
-
-  // Look for existing ShiftSnap calendar
-  const existing = calendars.find((cal) => cal.title === CALENDAR_NAME && cal.allowsModifications);
-  if (existing) return existing.id;
-
+export async function getOrCreateShiftSnapCalendar(title = CALENDAR_NAME, color = CALENDAR_COLOR): Promise<string | null> {
   if (Platform.OS === 'ios') {
     const candidates = await getIosCandidateSources();
     const seen = new Set<string>();
@@ -153,35 +158,43 @@ export async function getOrCreateShiftSnapCalendar(): Promise<string | null> {
       if (!src.id || seen.has(src.id)) continue;
       seen.add(src.id);
       try {
-        return await createNamedCalendarWithSource(src);
+        return await createNamedCalendarWithSource(src, title, color);
       } catch {
         // This source rejected creation — try the next one.
       }
     }
-
-    // Last resort: reuse an existing writable calendar so events still land
-    // somewhere rather than failing outright. Intrusive (mixes into a
-    // personal calendar), only reached when no source accepts a new calendar.
-    const writable = calendars.find((c) => c.allowsModifications);
-    if (writable) return writable.id;
 
     throw new Error(CALENDAR_ACCOUNT_READONLY);
   }
 
   // Android: a synthesized local account is the expected pattern here.
   return Calendar.createCalendarAsync({
-    title: CALENDAR_NAME,
-    color: CALENDAR_COLOR,
+    title,
+    color,
     entityType: Calendar.EntityTypes.EVENT,
     source: {
       isLocalAccount: true,
-      name: CALENDAR_NAME,
+      name: title,
       type: undefined as any,
     },
-    name: CALENDAR_NAME,
+    name: title,
     ownerAccount: 'personal',
     accessLevel: Calendar.CalendarAccessLevel.OWNER,
   });
+}
+
+export async function updateIShiftCalendar(calendarId: string, title: string, color: string): Promise<WritableCalendarDestination> {
+  const before = await getCalendarDestination(calendarId);
+  if (!before) throw new Error('Calendar is no longer writable');
+  const colorChanged = Platform.OS === 'ios' && before.color?.toLowerCase() !== color.toLowerCase();
+  if (before.title !== title || colorChanged) {
+    await Calendar.updateCalendarAsync(calendarId, Platform.OS === 'ios' ? { title, color } : { title });
+  }
+  const after = await getCalendarDestination(calendarId);
+  if (!after || after.title !== title || (Platform.OS === 'ios' && after.color?.toLowerCase() !== color.toLowerCase())) {
+    throw new Error('Calendar name or color was not applied by the device');
+  }
+  return after;
 }
 
 function parseISODate(date: string): { year: number; month: number; day: number } | null {
@@ -560,7 +573,7 @@ export async function reconcileShiftsToCalendar(
         if (deleted) {
           touchedEventIds.add(duplicate.id);
           result.deleted += 1;
-        }
+        } else result.failed += 1;
       }
     } catch (error) {
       result.failed += 1;
@@ -596,6 +609,7 @@ export async function reconcileShiftsToCalendar(
 
     const deleted = await deleteManagedEvent(event);
     if (deleted) result.deleted += 1;
+    else result.failed += 1;
   }
 
   return result;

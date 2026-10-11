@@ -1,0 +1,13 @@
+{
+  "passed": true,
+  "boundary": "Recorded native E2E snapshot comparison; UI observations documented in README",
+  "checks": [
+    "cancel preserves native state",
+    "rename and recolor preserve calendar UUID",
+    "unrelated calendars unchanged",
+    "three event UUIDs preserved",
+    "shift-first titles applied",
+    "repeat sync is idempotent",
+    "offline export and logout leave native events unchanged"
+  ]
+}

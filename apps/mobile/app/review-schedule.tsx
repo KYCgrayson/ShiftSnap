@@ -813,15 +813,6 @@ export default function ReviewScheduleScreen() {
         console.warn('Person refresh failed:', error);
       });
 
-      // Auto-sync to calendar if connected. Reconcile the whole month so a
-      // re-recognition overwrites old OS events and removes stale days. This
-      // is non-critical and must not delay the saved confirmation.
-      if (isConnected) {
-        void syncUserShifts(user.id, getMonthDateRange(yearMonth)).catch((error) => {
-          console.warn('Calendar sync failed:', error);
-        });
-      }
-
       const { lastMonthRefreshStatus } = useShiftStore.getState();
       const phoneCopyReady = lastMonthRefreshStatus?.yearMonth === yearMonth
         && lastMonthRefreshStatus.refreshed && lastMonthRefreshStatus.persisted;
@@ -830,6 +821,9 @@ export default function ReviewScheduleScreen() {
         !phoneCopyReady ? t('review.scheduleSavedPhoneCopyPending') : null,
       ].filter(Boolean).join('\n\n') || t('review.scheduleSavedDesc');
       Alert.alert(t('review.scheduleSaved'), confirmation, [
+        ...(isConnected ? [{ text: t('settings.exportReview'), onPress: () => {
+          void syncUserShifts(user.id, getMonthDateRange(yearMonth));
+        } }] : []),
         { text: t('review.viewCalendar'), onPress: () => router.replace('/(tabs)/calendar') },
         { text: t('review.goHome'), onPress: () => router.replace('/(tabs)/home') },
       ]);

@@ -1,0 +1,96 @@
+{
+  "at": "2026-10-11T07:45:39.665944+00:00",
+  "device": "C03ECA22-BBD2-4CA9-837B-330A788CADF7",
+  "boundary": "Read-only synthetic simulator Calendar database",
+  "calendars": [
+    {
+      "row_id": 1,
+      "UUID": "01146441-78A7-48A4-B077-56A8F3A3C874",
+      "title": "Default",
+      "color": null
+    },
+    {
+      "row_id": 2,
+      "UUID": "276C3F80-5D34-408F-97CF-8E97E0723E1A",
+      "title": "DEFAULT_CALENDAR_NAME",
+      "color": "#0088FF"
+    },
+    {
+      "row_id": 3,
+      "UUID": "7B98CFE5-3E62-467D-A1B1-0CD1DE5CB11D",
+      "title": "DEFAULT_TASK_CALENDAR_NAME",
+      "color": "#0088FF"
+    },
+    {
+      "row_id": 5,
+      "UUID": "C6A9865C-49C8-4359-AC44-F88924785A9B",
+      "title": "Facebook Birthdays",
+      "color": "#8295AF"
+    },
+    {
+      "row_id": 6,
+      "UUID": "60603DB1-7CAA-41AB-9989-3D818787D4F5",
+      "title": "Found in Mail",
+      "color": "#8295AF"
+    },
+    {
+      "row_id": 7,
+      "UUID": "B7310C66-C272-4F60-9F21-7987E77EE4AC",
+      "title": "Found in Natural Language",
+      "color": "#8295AF"
+    },
+    {
+      "row_id": 8,
+      "UUID": "045AE745-BA67-499E-8576-A44E27178869",
+      "title": "生日",
+      "color": "#8295AF"
+    },
+    {
+      "row_id": 9,
+      "UUID": "196E7D9A-C5F9-4C18-B959-8CF3365605A8",
+      "title": "Scheduled Reminders",
+      "color": "#CB30E0"
+    },
+    {
+      "row_id": 10,
+      "UUID": "C864CA32-E7FF-4512-A0A2-FC3C7B07CA30",
+      "title": "Japan Holidays",
+      "color": "#CB30E0"
+    },
+    {
+      "row_id": 11,
+      "UUID": "4BC88A19-8B84-437D-903E-C9A5BB2ECF54",
+      "title": "IShift",
+      "color": "#4a9dad"
+    }
+  ],
+  "managedEvents": [
+    {
+      "UUID": "389D054C-1000-4E8D-BF37-E8C4DF20EA56",
+      "summary": "Alex QA · Day shift (D)",
+      "start_date": 813286800.0,
+      "end_date": 813315600.0,
+      "calendar_id": 11,
+      "calendar_uuid": "4BC88A19-8B84-437D-903E-C9A5BB2ECF54",
+      "calendar_title": "IShift"
+    },
+    {
+      "UUID": "E709FE63-EA12-42E6-9856-F3D5E2BDAEFB",
+      "summary": "Alex QA · Day shift (D)",
+      "start_date": 813373200.0,
+      "end_date": 813402000.0,
+      "calendar_id": 11,
+      "calendar_uuid": "4BC88A19-8B84-437D-903E-C9A5BB2ECF54",
+      "calendar_title": "IShift"
+    },
+    {
+      "UUID": "FBB1C091-E154-42A9-B418-1B3BA8E51565",
+      "summary": "Alex QA · Day shift (D)",
+      "start_date": 813459600.0,
+      "end_date": 813488400.0,
+      "calendar_id": 11,
+      "calendar_uuid": "4BC88A19-8B84-437D-903E-C9A5BB2ECF54",
+      "calendar_title": "IShift"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 {
   "harness": "calendar-reconcile.integration.mjs",
-  "executedAt": "2026-10-10T02:53:23.569Z",
+  "executedAt": "2026-10-11T10:51:49.567Z",
   "boundary": "Expo Calendar mocked; real calendarSync reconciliation invoked",
   "results": [
     {

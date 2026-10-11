@@ -2,8 +2,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 
 const CACHE_PREFIX = 'ishift:offline-read:v1:';
-const IDENTITY_KEY = 'ishift:offline-read:last-authenticated-user';
-const LOCAL_SIGNOUT_KEY = 'ishift:offline-read:local-signout';
+// SecureStore accepts only alphanumeric characters, '.', '-' and '_'.
+const IDENTITY_KEY = 'ishift.offline-read.last-authenticated-user';
+const LOCAL_SIGNOUT_KEY = 'ishift.offline-read.local-signout';
 const REQUEST_TIMEOUT_MS = 12_000;
 
 export interface OfflineReadSnapshot {

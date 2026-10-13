@@ -1,0 +1,16 @@
+{
+  "id": "e63bba01-1a8b-4801-90e8-fc151fd174e7",
+  "status": "FINISHED",
+  "appVersion": "1.0.0",
+  "appBuildVersion": "13",
+  "gitCommitHash": "4a1e6ab79e668115c622c350483560f3ee785152",
+  "createdAt": "2026-10-13T11:57:14.534Z",
+  "completedAt": "2026-10-13T12:02:21.476Z",
+  "submissionId": "c2de52a4-cc3b-4114-b433-b66dfd67bbe2",
+  "submissionResult": "Successfully uploaded to Apple App Store Connect (EAS CLI exit 0)",
+  "appleProcessing": "Processing per EAS submission result; completion not independently verified",
+  "testerAvailability": "Not independently verified",
+  "productionIsolation": "Clean clone at 4a1e6ab; locked dependencies; normal expo-router entry; no dotenv/native directories or temporary QA entry; production Supabase variable names verified and QA variables unset",
+  "nativeQA": "artifacts/qa/2026-10-13-share-display/README.md",
+  "authorization": "User explicitly requested: ok, send testflight"
+}

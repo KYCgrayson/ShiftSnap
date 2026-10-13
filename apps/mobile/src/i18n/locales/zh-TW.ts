@@ -119,6 +119,29 @@ export default {
     claimNoSchedule: '找不到可認領的班表',
   },
 
+  calendarShare: {
+    entry: '分享本月班表',
+    previewTitle: '分享班表預覽',
+    posterTitle: '我的班表',
+    posterMonth: '{{year}}年{{month}}月',
+    diaryStyle: '奶桃日記',
+    dayOff: '休',
+    nextDay: '隔日',
+    emptyMonth: '這個月沒有個人班次',
+    privacyNote: '圖片只包含你的本月班次，不含同事、備註或照片。',
+    shareTitle: '分享 IShift 班表圖片',
+    shareButton: '分享／儲存圖片',
+    monthUnavailable: '本月班表尚未載入，請稍後再試。',
+    offlineMonthUnavailable: '這個月沒有離線資料，請連線後再試。',
+    guestUnavailable: '請登入帳號後分享個人班表。',
+    quoteFailed: '短句無法儲存，請重試。',
+    modeSaveFailed: '短句模式無法儲存，請再選一次。',
+    logoFailed: '品牌圖案無法載入，請重開預覽。',
+    unavailable: '這台裝置目前無法開啟系統分享。',
+    shareFailed: '圖片分享未能完成，請再試一次。',
+    mode: { gentle: '溫柔', toxic: '毒舌', none: '不加短句' },
+  },
+
   // Scan screen
   scan: {
     title: '掃描班表',

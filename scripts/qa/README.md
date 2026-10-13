@@ -56,8 +56,10 @@ node scripts/qa/native-fixture-server.mjs
 Build from `apps/mobile/ios` (requires the generated workspace and installed Pods):
 
 ```sh
-EXPO_NO_DOTENV=1 EXPO_PUBLIC_SUPABASE_URL=http://127.0.0.1:55439 EXPO_PUBLIC_SUPABASE_ANON_KEY=local-qa-only ENTRY_FILE="$PWD/../tests/native-reliability.entry.js" xcodebuild -workspace ShiftSnap.xcworkspace -scheme ShiftSnap -configuration Release -sdk iphonesimulator -destination 'id=YOUR_QA_SIMULATOR_ID' ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO build
+EXPO_NO_DOTENV=1 EXPO_PUBLIC_SUPABASE_URL=http://127.0.0.1:55439 EXPO_PUBLIC_SUPABASE_ANON_KEY=local-qa-only ENTRY_FILE="$PWD/../tests/native-reliability.entry.js" xcodebuild -workspace ShiftSnap.xcworkspace -scheme ShiftSnap -configuration Release -sdk iphonesimulator -destination 'id=YOUR_QA_SIMULATOR_ID' ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- build
 ```
+
+SecureStore QA requires Xcode-managed simulator signing so Xcode can embed the simulated entitlements. Do not use `codesign --deep` manually.
 
 Install the resulting IShift.app on the QA simulator. Record these UI steps:
 
@@ -76,3 +78,32 @@ Record screenshots and observations in `artifacts/qa/2026-10-10/`. The HTTP
 artifact records method/path only, not authentication headers or tokens.
 This verifies a real native app against a controlled HTTP backend; it is not a
 production OAuth, real Supabase outage, or physical-device acceptance test.
+
+## Calendar PNG share fixture
+
+For calendar share QA, use the same `native-reliability.entry.js` and build
+command above, but start this fixture server instead of `native-fixture-server.mjs`:
+
+```sh
+node scripts/qa/calendar-share-fixture-server.mjs
+```
+
+Only one fixture server can own localhost port `55439` at a time. The new
+server uses the same synthetic Alex QA session. Start a new QA run with a new
+`EXPO_PUBLIC_QA_RUN_ID` in the build environment when the simulator already
+has a prior run's session or locale. See
+`scripts/qa/calendar-share-fixture-scenarios.md` for failure cases.
+
+The dataset covers the 31-day October 2026 month (October 6 and 21 are
+intentionally blank), with early/late/rest rows, two personal shifts on
+October 12, and a long code/name on October 17. November 2026 has last-day
+data. August 2026 begins on Saturday and uses six Sunday-first grid rows.
+Coworker and owner-created reference rows overlap personal dates but are absent
+from the personal RPC. Notes and source schedule photos carry conspicuous
+`NEVER_IN_SHARED_PNG` sentinels. None belong in a shared PNG.
+
+The fixture writes request method, path, and synthetic query string to
+`artifacts/qa/2026-10-12-calendar-share/native-http-boundary.json` without
+headers or request bodies. Save the native share screenshot and resulting PNG
+beside this log; the HTTP artifact alone cannot establish visual or share-sheet
+acceptance.

@@ -119,6 +119,29 @@ export default {
     claimNoSchedule: 'No claimable schedule found',
   },
 
+  calendarShare: {
+    entry: 'Share this month',
+    previewTitle: 'Schedule preview',
+    posterTitle: 'My Schedule',
+    posterMonth: '{{month}}/{{year}}',
+    diaryStyle: 'Peach Diary',
+    dayOff: 'Off',
+    nextDay: 'next day',
+    emptyMonth: 'No personal shifts this month',
+    privacyNote: 'The image includes only your shifts this month, without coworkers, notes, or photos.',
+    shareTitle: 'Share IShift schedule image',
+    shareButton: 'Share / Save Image',
+    monthUnavailable: 'This month has not loaded yet. Please try again shortly.',
+    offlineMonthUnavailable: 'This month is not saved offline. Connect and try again.',
+    guestUnavailable: 'Sign in to share your personal schedule.',
+    quoteFailed: 'Could not save the quote choice. Tap to retry.',
+    modeSaveFailed: 'Could not save the quote mode. Select it again.',
+    logoFailed: 'Could not load the IShift logo. Reopen the preview.',
+    unavailable: 'System sharing is unavailable on this device.',
+    shareFailed: 'Could not share the image. Please try again.',
+    mode: { gentle: 'Gentle', toxic: 'Dark humor', none: 'No quote' },
+  },
+
   // Scan screen
   scan: {
     title: 'Scan Schedule',

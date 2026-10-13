@@ -22,6 +22,7 @@
       "infoPlist": {
         "NSCameraUsageDescription": "IShift needs camera access to scan your work schedule",
         "NSPhotoLibraryUsageDescription": "IShift needs photo library access to select schedule images",
+        "NSPhotoLibraryAddUsageDescription": "IShift saves your shared schedule image to your photo library when you choose Save Image.",
         "NSCalendarsFullAccessUsageDescription": "IShift needs access to your calendar to sync shift schedules",
         "ITSAppUsesNonExemptEncryption": false
       },

@@ -33,6 +33,7 @@ import { useToast } from '../../src/components/ui';
 import { Card, TimePickerInput } from '../../src/components/ui';
 import { GuestUpgradeBanner } from '../../src/components/GuestUpgradeBanner';
 import { CalendarDayWithBars } from '../../src/components/CalendarDayWithBars';
+import { CalendarShareModal, type CalendarShareShift } from '../../src/components/CalendarShareModal';
 import { useRealtimeShifts } from '../../src/hooks/useRealtimeShifts';
 import { useLocaleStore } from '../../src/stores/localeStore';
 import { useDailyNoteStore } from '../../src/stores/dailyNoteStore';
@@ -102,7 +103,7 @@ export default function CalendarScreen() {
   const { t } = useTranslation();
   const locale = useLocaleStore((s) => s.locale);
   const { user, session, isOfflineReadOnly, offlineLastUpdatedAt, setOfflineReadOnly, retryOnlineSession } = useAuthStore();
-  const { monthShifts, shiftsByMonth, monthUpdatedAt, fetchShiftsWindow, updateShift, loading } = useShiftStore();
+  const { monthShifts, shiftsByMonth, monthUpdatedAt, activeScopeKey, fetchShiftsWindow, updateShift, loading } = useShiftStore();
   const { shiftCodes, fetchShiftCodes, getCodeInfo } = useShiftCodeStore();
   const { persons, fetchPersons, updatePerson } = usePersonStore();
   const { isConnected: calendarConnected, syncUserShifts } = useCalendarStore();
@@ -135,6 +136,7 @@ export default function CalendarScreen() {
   const [schedulePhotoError, setSchedulePhotoError] = useState<string | null>(null);
   const [monthSchedulePhotos, setMonthSchedulePhotos] = useState<SchedulePhoto[]>([]);
   const [failedSchedulePhotoIds, setFailedSchedulePhotoIds] = useState<Set<string>>(new Set());
+  const [shareVisible, setShareVisible] = useState(false);
 
   // Shift edit modal state
   const [showEditModal, setShowEditModal] = useState(false);
@@ -523,6 +525,47 @@ export default function CalendarScreen() {
     return shift.isMine;
   }, []);
 
+  // Share the current person's month only. The calendar view also contains
+  // adjacent months, coworkers, notes and photos, none of which belong in an
+  // image that leaves this device.
+  const shareShifts = useMemo<CalendarShareShift[]>(() => shifts
+    .filter((shift) => shift.isMine && shift.date.startsWith(`${currentMonth}-`))
+    .map((shift) => {
+      const codeInfo = getCodeInfo(shift.code);
+      return {
+        id: shift.id,
+        date: shift.date,
+        name: codeInfo?.meaning || shift.code,
+        // The saved shift times can be intentionally edited away from the
+        // code defaults; share the same times shown in the day detail.
+        startTime: shift.startTime,
+        endTime: shift.endTime,
+        isDayOff: shift.isDayOff,
+      };
+    }), [shifts, currentMonth, getCodeInfo]);
+  const shareScopeKey = `${userId}|${viewScope}|${groupIds.filter((id) => id !== 'guest-group').join(',')}`;
+  const shareMonthKnown = activeScopeKey === shareScopeKey
+    && Object.prototype.hasOwnProperty.call(shiftsByMonth, currentMonth);
+
+  useEffect(() => {
+    setShareVisible(false);
+  }, [currentMonth, userId, viewScope]);
+
+  const openSharePreview = () => {
+    if (!userId) {
+      Alert.alert(t('calendarShare.entry'), t('calendarShare.guestUnavailable'));
+      return;
+    }
+    if (!shareMonthKnown) {
+      Alert.alert(
+        t('calendarShare.entry'),
+        t(isOfflineReadOnly ? 'calendarShare.offlineMonthUnavailable' : 'calendarShare.monthUnavailable'),
+      );
+      return;
+    }
+    setShareVisible(true);
+  };
+
   // Helper to check if a shift's times differ from its shift code defaults
   const isShiftOverridden = useCallback((shift: ShiftEvent) => {
     const codeInfo = getCodeInfo(shift.code);
@@ -902,6 +945,14 @@ export default function CalendarScreen() {
           {t('calendar.title')}
         </Text>
         <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={styles.headerIconButton}
+            onPress={openSharePreview}
+            accessibilityRole="button"
+            accessibilityLabel={t('calendarShare.entry')}
+          >
+            <Ionicons name="share-outline" size={21} color={theme.colors.primary} />
+          </TouchableOpacity>
           {/* The original scanned roster for the month currently on screen. */}
           <TouchableOpacity
             style={[
@@ -1005,6 +1056,18 @@ export default function CalendarScreen() {
           )}
         </View>
       </View>
+
+      {shareVisible && userId && (
+        <CalendarShareModal
+          key={`${userId}:${currentMonth}:${viewScope}`}
+          visible={shareVisible}
+          accountId={userId}
+          yearMonth={currentMonth}
+          shifts={shareShifts}
+          locale={locale}
+          onClose={() => setShareVisible(false)}
+        />
+      )}
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}

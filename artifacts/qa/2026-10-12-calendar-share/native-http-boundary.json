@@ -435,6 +435,20 @@
       "path": "/realtime/v1/websocket",
       "query": "?apikey=local-qa-only&vsn=2.0.0",
       "offline": false
+    },
+    {
+      "at": "2026-10-13T00:54:12.549Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T00:54:22.579Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
     }
   ]
 }

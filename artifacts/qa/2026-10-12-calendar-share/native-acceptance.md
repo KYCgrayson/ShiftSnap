@@ -17,7 +17,7 @@ Observed through Simulator UI:
 
 Found during QA: preview header intrudes on status bar/Dynamic Island. Fixed using parent safe-area insets on modal root; typecheck passed. Post-fix native build passed and live screenshot october-preview-inset-fixed.png confirms title/close below status bar and share button above home area. Poster scrolls within remaining viewport.
 
-Save Image reached add-only permission before interruption. User explicitly authorized it on resumption, but system share controls currently cannot be clicked: coordinate CUA calls return noWindowsAvailable while AX actions and screenshots work. No Save Image success asserted. User asked to unlock/display simulator; pending.
+October 12 historical blocker (resolved October 13): Save Image reached add-only permission before interruption. User explicitly authorized it on resumption, but system share controls currently cannot be clicked: coordinate CUA calls return noWindowsAvailable while AX actions and screenshots work. No Save Image success asserted. User asked to unlock/display simulator; pending.
 
 Release follow-up: production build environment isolation and build/upload receipt. Existing automated checks (25) and typecheck passed earlier; those are not substitutes for native acceptance.
 

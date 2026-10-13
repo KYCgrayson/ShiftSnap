@@ -1,0 +1,15 @@
+{
+  "id": "ad6591f7-136b-41f9-9de0-c09521a7191c",
+  "status": "FINISHED",
+  "appVersion": "1.0.0",
+  "appBuildVersion": "12",
+  "gitCommitHash": "eb1d37e72ba40d4753a4ae6248c25e6bb30d25ab",
+  "createdAt": "2026-10-13T00:55:34.078Z",
+  "completedAt": "2026-10-13T01:00:34.885Z",
+  "submissionId": "f6da8270-2c51-4071-96b8-64306ef6ed86",
+  "submissionResult": "Successfully uploaded to Apple App Store Connect (EAS CLI exit 0)",
+  "appleProcessing": "Pending / not independently verified",
+  "testerAvailability": "Not verified: App Store Connect browser login unavailable",
+  "productionIsolation": "Clean clone; normal expo-router entry; no local dotenv/native directories; production EAS Supabase variable names verified; QA build variables unset",
+  "nativeQA": "See native-acceptance.md and oct13-photos-saved.png"
+}

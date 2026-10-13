@@ -1,0 +1,1182 @@
+{
+  "boundary": "Synthetic localhost Supabase HTTP; real iOS app, storage, and views",
+  "fixture": "calendar share 2026-10-12",
+  "requests": [
+    {
+      "at": "2026-10-13T01:22:36.496Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:22:46.528Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:22:56.544Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:23:06.592Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:23:16.636Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:23:26.663Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:23:36.695Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:23:46.730Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:23:56.763Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:24:06.799Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:24:16.829Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:24:26.860Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:24:36.893Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:24:46.931Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:25:01.141Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:25:01.280Z",
+      "method": "GET",
+      "path": "/rest/v1/group_members",
+      "query": "?select=group_id%2Cgroups%28*%29&user_id=eq.00000000-0000-4000-8000-000000000001",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:25:01.295Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "query": "",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:25:01.297Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "query": "?select=id%2Cuser_id%2Cdate%2Cupdated_at&user_id=neq.00000000-0000-4000-8000-000000000001&updated_at=gte.2026-10-13T01%3A16%3A51.509Z&order=updated_at.desc&limit=5",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:25:01.305Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "query": "",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:25:01.306Z",
+      "method": "GET",
+      "path": "/rest/v1/shift_codes",
+      "query": "?select=*&order=code.asc&or=%28user_id.eq.00000000-0000-4000-8000-000000000001%2Cand%28group_id.in.%2800000000-0000-4000-8000-000000000010%29%2Cis_group_shared.eq.true%29%29",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:25:02.243Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:25:04.276Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:25:09.311Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:25:12.187Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:25:12.322Z",
+      "method": "GET",
+      "path": "/rest/v1/schedules",
+      "query": "?select=id%2Cimage_url%2Cimage_status%2Cyear_month%2Ccreated_at&year_month=eq.2026-10&image_url=not.is.null&image_url=neq.&or=%28owner_id.eq.00000000-0000-4000-8000-000000000001%2Cgroup_id.in.%2800000000-0000-4000-8000-000000000010%29%29&order=created_at.desc",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:25:12.329Z",
+      "method": "GET",
+      "path": "/rest/v1/shift_codes",
+      "query": "?select=*&order=code.asc&or=%28user_id.eq.00000000-0000-4000-8000-000000000001%2Cand%28group_id.in.%2800000000-0000-4000-8000-000000000010%29%2Cis_group_shared.eq.true%29%29",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:25:12.330Z",
+      "method": "GET",
+      "path": "/rest/v1/persons",
+      "query": "?select=*&order=created_at.asc&or=%28owner_id.eq.00000000-0000-4000-8000-000000000001%2Cgroup_id.eq.00000000-0000-4000-8000-000000000010%29",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:25:12.330Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "query": "?select=*%2Cschedules%28group_id%29&user_id=eq.00000000-0000-4000-8000-000000000001&date=gte.2026-09-01&date=lte.2026-09-30&order=date.asc",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:25:12.331Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "query": "",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:25:12.331Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_group_member_profiles",
+      "query": "",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:25:12.331Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "query": "?select=*%2Cschedules%28group_id%29&user_id=eq.00000000-0000-4000-8000-000000000001&date=gte.2026-10-01&date=lte.2026-10-31&order=date.asc",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:25:12.332Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "query": "?select=*%2Cschedules%28group_id%29&user_id=eq.00000000-0000-4000-8000-000000000001&date=gte.2026-11-01&date=lte.2026-11-30&order=date.asc",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:25:12.332Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "query": "",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:25:12.332Z",
+      "method": "GET",
+      "path": "/rest/v1/daily_notes",
+      "query": "?select=*&user_id=eq.00000000-0000-4000-8000-000000000001&date=gte.2026-10-01&date=lte.2026-10-31",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:25:12.333Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "query": "",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:25:12.474Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "query": "?select=*%2Cschedules%21inner%28group_id%29&schedules.group_id=in.%2800000000-0000-4000-8000-000000000010%29&user_id=neq.00000000-0000-4000-8000-000000000001&date=gte.2026-11-01&date=lte.2026-11-30&order=date.asc",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:25:12.476Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "query": "?select=*%2Cschedules%21inner%28group_id%29&schedules.group_id=in.%2800000000-0000-4000-8000-000000000010%29&user_id=neq.00000000-0000-4000-8000-000000000001&date=gte.2026-10-01&date=lte.2026-10-31&order=date.asc",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:25:12.477Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "query": "?select=*%2Cschedules%21inner%28group_id%29&schedules.group_id=in.%2800000000-0000-4000-8000-000000000010%29&user_id=neq.00000000-0000-4000-8000-000000000001&date=gte.2026-09-01&date=lte.2026-09-30&order=date.asc",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:25:22.240Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:25:32.575Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:25:43.040Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:25:53.064Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:26:03.096Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:26:13.125Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:26:23.159Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:26:33.195Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:26:43.227Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:26:53.261Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:27:03.293Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:27:13.324Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:27:23.347Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:27:33.376Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:27:43.409Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:27:53.442Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:28:03.475Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:28:13.511Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:28:23.554Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:28:33.575Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:28:43.610Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:28:53.644Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:29:03.675Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:29:13.709Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:29:23.741Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:29:33.797Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:29:43.843Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:29:53.876Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:30:03.339Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:30:03.515Z",
+      "method": "GET",
+      "path": "/rest/v1/group_members",
+      "query": "?select=group_id%2Cgroups%28*%29&user_id=eq.00000000-0000-4000-8000-000000000001",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:30:03.543Z",
+      "method": "GET",
+      "path": "/rest/v1/shift_codes",
+      "query": "?select=*&order=code.asc&or=%28user_id.eq.00000000-0000-4000-8000-000000000001%2Cand%28group_id.in.%2800000000-0000-4000-8000-000000000010%29%2Cis_group_shared.eq.true%29%29",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:30:03.544Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "query": "?select=id%2Cuser_id%2Cdate%2Cupdated_at&user_id=neq.00000000-0000-4000-8000-000000000001&updated_at=gte.2026-10-13T01%3A25%3A01.207Z&order=updated_at.desc&limit=5",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:30:03.546Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "query": "",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:30:03.546Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "query": "",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:30:04.475Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:30:06.504Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:30:11.528Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:30:13.315Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:30:13.443Z",
+      "method": "GET",
+      "path": "/rest/v1/schedules",
+      "query": "?select=id%2Cimage_url%2Cimage_status%2Cyear_month%2Ccreated_at&year_month=eq.2026-10&image_url=not.is.null&image_url=neq.&or=%28owner_id.eq.00000000-0000-4000-8000-000000000001%2Cgroup_id.in.%2800000000-0000-4000-8000-000000000010%29%29&order=created_at.desc",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:30:13.448Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_group_member_profiles",
+      "query": "",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:30:13.448Z",
+      "method": "GET",
+      "path": "/rest/v1/shift_codes",
+      "query": "?select=*&order=code.asc&or=%28user_id.eq.00000000-0000-4000-8000-000000000001%2Cand%28group_id.in.%2800000000-0000-4000-8000-000000000010%29%2Cis_group_shared.eq.true%29%29",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:30:13.449Z",
+      "method": "GET",
+      "path": "/rest/v1/persons",
+      "query": "?select=*&order=created_at.asc&or=%28owner_id.eq.00000000-0000-4000-8000-000000000001%2Cgroup_id.eq.00000000-0000-4000-8000-000000000010%29",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:30:13.449Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "query": "?select=*%2Cschedules%28group_id%29&user_id=eq.00000000-0000-4000-8000-000000000001&date=gte.2026-09-01&date=lte.2026-09-30&order=date.asc",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:30:13.450Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "query": "",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:30:13.451Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "query": "?select=*%2Cschedules%28group_id%29&user_id=eq.00000000-0000-4000-8000-000000000001&date=gte.2026-10-01&date=lte.2026-10-31&order=date.asc",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:30:13.451Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "query": "?select=*%2Cschedules%28group_id%29&user_id=eq.00000000-0000-4000-8000-000000000001&date=gte.2026-11-01&date=lte.2026-11-30&order=date.asc",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:30:13.451Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "query": "",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:30:13.452Z",
+      "method": "GET",
+      "path": "/rest/v1/daily_notes",
+      "query": "?select=*&user_id=eq.00000000-0000-4000-8000-000000000001&date=gte.2026-10-01&date=lte.2026-10-31",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:30:13.452Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "query": "",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:30:13.553Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "query": "?select=*%2Cschedules%21inner%28group_id%29&schedules.group_id=in.%2800000000-0000-4000-8000-000000000010%29&user_id=neq.00000000-0000-4000-8000-000000000001&date=gte.2026-09-01&date=lte.2026-09-30&order=date.asc",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:30:13.617Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "query": "?select=*%2Cschedules%21inner%28group_id%29&schedules.group_id=in.%2800000000-0000-4000-8000-000000000010%29&user_id=neq.00000000-0000-4000-8000-000000000001&date=gte.2026-10-01&date=lte.2026-10-31&order=date.asc",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:30:13.617Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "query": "?select=*%2Cschedules%21inner%28group_id%29&schedules.group_id=in.%2800000000-0000-4000-8000-000000000010%29&user_id=neq.00000000-0000-4000-8000-000000000001&date=gte.2026-11-01&date=lte.2026-11-30&order=date.asc",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:30:23.354Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:30:33.394Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:30:43.425Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:30:53.461Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:31:03.489Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:31:13.519Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:31:23.553Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:31:33.585Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:31:43.617Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:31:53.647Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:32:03.676Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:32:13.713Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:32:23.745Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:32:33.778Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:32:43.812Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:32:53.849Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:33:03.879Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:33:13.918Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:33:23.962Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:33:34.020Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:33:44.058Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:33:54.094Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:34:04.036Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:34:04.089Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "query": "?select=id%2Cuser_id%2Cdate%2Cupdated_at&user_id=neq.00000000-0000-4000-8000-000000000001&updated_at=gte.2026-10-13T01%3A30%3A03.444Z&order=updated_at.desc&limit=5",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:34:04.116Z",
+      "method": "GET",
+      "path": "/rest/v1/group_members",
+      "query": "?select=group_id%2Cgroups%28*%29&user_id=eq.00000000-0000-4000-8000-000000000001",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:34:04.156Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "query": "",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:34:04.157Z",
+      "method": "GET",
+      "path": "/rest/v1/shift_codes",
+      "query": "?select=*&order=code.asc&or=%28user_id.eq.00000000-0000-4000-8000-000000000001%2Cand%28group_id.in.%2800000000-0000-4000-8000-000000000010%29%2Cis_group_shared.eq.true%29%29",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:34:04.159Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "query": "",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:34:05.106Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:34:07.126Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:34:10.115Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:34:10.236Z",
+      "method": "GET",
+      "path": "/rest/v1/schedules",
+      "query": "?select=id%2Cimage_url%2Cimage_status%2Cyear_month%2Ccreated_at&year_month=eq.2026-10&image_url=not.is.null&image_url=neq.&or=%28owner_id.eq.00000000-0000-4000-8000-000000000001%2Cgroup_id.in.%2800000000-0000-4000-8000-000000000010%29%29&order=created_at.desc",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:34:10.242Z",
+      "method": "GET",
+      "path": "/rest/v1/shift_codes",
+      "query": "?select=*&order=code.asc&or=%28user_id.eq.00000000-0000-4000-8000-000000000001%2Cand%28group_id.in.%2800000000-0000-4000-8000-000000000010%29%2Cis_group_shared.eq.true%29%29",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:34:10.243Z",
+      "method": "GET",
+      "path": "/rest/v1/persons",
+      "query": "?select=*&order=created_at.asc&or=%28owner_id.eq.00000000-0000-4000-8000-000000000001%2Cgroup_id.eq.00000000-0000-4000-8000-000000000010%29",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:34:10.243Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "query": "?select=*%2Cschedules%28group_id%29&user_id=eq.00000000-0000-4000-8000-000000000001&date=gte.2026-10-01&date=lte.2026-10-31&order=date.asc",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:34:10.244Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_group_member_profiles",
+      "query": "",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:34:10.245Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "query": "?select=*%2Cschedules%28group_id%29&user_id=eq.00000000-0000-4000-8000-000000000001&date=gte.2026-09-01&date=lte.2026-09-30&order=date.asc",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:34:10.245Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "query": "",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:34:10.246Z",
+      "method": "GET",
+      "path": "/rest/v1/daily_notes",
+      "query": "?select=*&user_id=eq.00000000-0000-4000-8000-000000000001&date=gte.2026-10-01&date=lte.2026-10-31",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:34:10.246Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "query": "",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:34:10.246Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "query": "",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:34:10.247Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "query": "?select=*%2Cschedules%28group_id%29&user_id=eq.00000000-0000-4000-8000-000000000001&date=gte.2026-11-01&date=lte.2026-11-30&order=date.asc",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:34:10.390Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "query": "?select=*%2Cschedules%21inner%28group_id%29&schedules.group_id=in.%2800000000-0000-4000-8000-000000000010%29&user_id=neq.00000000-0000-4000-8000-000000000001&date=gte.2026-10-01&date=lte.2026-10-31&order=date.asc",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:34:10.391Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "query": "?select=*%2Cschedules%21inner%28group_id%29&schedules.group_id=in.%2800000000-0000-4000-8000-000000000010%29&user_id=neq.00000000-0000-4000-8000-000000000001&date=gte.2026-11-01&date=lte.2026-11-30&order=date.asc",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:34:10.392Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "query": "?select=*%2Cschedules%21inner%28group_id%29&schedules.group_id=in.%2800000000-0000-4000-8000-000000000010%29&user_id=neq.00000000-0000-4000-8000-000000000001&date=gte.2026-09-01&date=lte.2026-09-30&order=date.asc",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:34:15.162Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:34:25.189Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:34:35.206Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:34:45.227Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:34:55.257Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:35:05.272Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:35:15.288Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:35:25.336Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:35:35.364Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:35:45.412Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:35:55.447Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:36:05.475Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:36:15.506Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:36:25.537Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:36:35.560Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:36:45.591Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:36:55.628Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:37:05.656Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:37:15.672Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:37:25.711Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:37:35.750Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:37:45.793Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:37:55.825Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:38:12.414Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:38:12.497Z",
+      "method": "GET",
+      "path": "/rest/v1/shifts",
+      "query": "?select=id%2Cuser_id%2Cdate%2Cupdated_at&user_id=neq.00000000-0000-4000-8000-000000000001&updated_at=gte.2026-10-13T01%3A34%3A04.076Z&order=updated_at.desc&limit=5",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:38:12.523Z",
+      "method": "GET",
+      "path": "/rest/v1/group_members",
+      "query": "?select=group_id%2Cgroups%28*%29&user_id=eq.00000000-0000-4000-8000-000000000001",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:38:12.564Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "query": "",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:38:12.565Z",
+      "method": "GET",
+      "path": "/rest/v1/shift_codes",
+      "query": "?select=*&order=code.asc&or=%28user_id.eq.00000000-0000-4000-8000-000000000001%2Cand%28group_id.in.%2800000000-0000-4000-8000-000000000010%29%2Cis_group_shared.eq.true%29%29",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:38:12.566Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_my_schedule_shifts",
+      "query": "",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:38:13.524Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:38:15.555Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:38:20.596Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    },
+    {
+      "at": "2026-10-13T01:38:30.622Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "query": "?apikey=local-qa-only&vsn=2.0.0",
+      "offline": false
+    }
+  ]
+}

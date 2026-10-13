@@ -1,0 +1,11 @@
+--- apps/mobile/tests/native-reliability.entry.js
++++ apps/mobile/tests/native-reliability.entry.js
+@@ -28,6 +28,8 @@
+         await SecureStore.setItemAsync('sb-127-auth-token', JSON.stringify(session));
+         await SecureStore.deleteItemAsync('ishift.offline-read.local-signout');
+         await AsyncStorage.setItem(seededKey, 'true');
++        await AsyncStorage.setItem('ishift:share-mode:v1:' + session.user.id, 'toxic');
++        await AsyncStorage.setItem('ishift:share-quote:v1:' + session.user.id + ':toxic', JSON.stringify({anchorMonth:'2026-10',index:9}));
+         await AsyncStorage.setItem('shiftsnap_locale', process.env.EXPO_PUBLIC_QA_LOCALE || 'en');
+       }
+       setReady(true);

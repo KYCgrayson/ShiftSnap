@@ -1,0 +1,14 @@
+--- scripts/qa/calendar-share-fixture-server.mjs
++++ scripts/qa/calendar-share-fixture-server.mjs
+@@ -84,6 +84,11 @@
+ }
+ addShift(591, '2026-08-31', 'L', { coworker: true });
+ 
++// Legend QA: one code has normal, changed, and missing stored times.
++Object.assign(shifts.find(s => s.is_personal && s.date === '2026-10-03'), {start_time:'09:00:00',end_time:'17:00:00'});
++Object.assign(shifts.find(s => s.is_personal && s.date === '2026-10-07'), {start_time:null,end_time:null});
++
++Object.assign(shifts.find(s => s.is_personal && s.date === '2026-10-09'), {start_time:'23:00:00',end_time:'07:00:00'});
+ const notes = [{
+   id: uuid(700), user_id: ownerId, date: '2026-10-12',
+   content: 'QA_NOTE_SENTINEL_NEVER_IN_SHARED_PNG',

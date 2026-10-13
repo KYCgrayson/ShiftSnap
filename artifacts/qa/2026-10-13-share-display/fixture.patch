@@ -1,0 +1,65 @@
+--- scripts/qa/calendar-share-fixture-server.mjs
++++ scripts/qa/calendar-share-fixture-server.mjs
+@@ -28,10 +28,10 @@
+ ];
+ 
+ const codes = [
+-  ['E', 'Early', '07:00:00', '15:00:00', false],
+-  ['L', 'Late', '15:00:00', '23:00:00', false],
+-  ['OFF', 'Rest day', null, null, true],
+-  ['EXTENDED-SUPERVISORY-SHIFT', 'Extended supervisory and training shift with a deliberately long label', '08:30:00', '19:30:00', false],
++  ['A', 'Morning shift', '07:00:00', '15:00:00', false],
++  ['B', 'Afternoon shift', '15:00:00', '23:00:00', false],
++  ['/', '休假', null, null, true],
++  ['C', 'Night shift', '08:30:00', '19:30:00', false],
+ ].map(([code, meaning, start_time, end_time, is_day_off], index) => ({
+   id: uuid(40 + index), user_id: ownerId, group_id: groupId, code, meaning, start_time, end_time,
+   is_day_off, is_confirmed: true, is_group_shared: true,
+@@ -60,30 +60,35 @@
+ // October is the current QA month. Two blank dates distinguish no row from OFF.
+ for (let day = 1; day <= 31; day += 1) {
+   if (day === 6 || day === 21) continue;
+-  const code = day % 5 === 0 ? 'OFF' : day % 2 === 0 ? 'L' : 'E';
++  const code = day % 5 === 0 ? '/' : day % 2 === 0 ? 'B' : 'A';
+   addShift(day, `2026-10-${String(day).padStart(2, '0')}`, code);
+ }
+-addShift(112, '2026-10-12', 'E'); // Same date as the normal late shift.
+-addShift(117, '2026-10-17', 'EXTENDED-SUPERVISORY-SHIFT', {
++addShift(112, '2026-10-12', 'A'); // Same date as the normal late shift.
++addShift(117, '2026-10-17', 'C', {
+   name: 'Alexandria Quality Assurance Long Roster Name',
+ });
+-addShift(191, '2026-10-02', 'L', { coworker: true });
+-addShift(192, '2026-10-12', 'E', { coworker: true });
+-addShift(193, '2026-10-31', 'OFF', { coworker: true });
+-addShift(194, '2026-10-17', 'L', { personal: false });
++addShift(191, '2026-10-02', 'B', { coworker: true });
++addShift(192, '2026-10-12', 'A', { coworker: true });
++addShift(193, '2026-10-31', '/', { coworker: true });
++addShift(194, '2026-10-17', 'B', { personal: false });
+ 
+ // Adjacent month has different codes and an explicit last-day row.
+-for (const [day, code] of [[1, 'OFF'], [3, 'E'], [7, 'L'], [12, 'E'], [18, 'OFF'], [24, 'L'], [30, 'E']]) {
++for (const [day, code] of [[1, '/'], [3, 'A'], [7, 'B'], [12, 'A'], [18, '/'], [24, 'B'], [30, 'A']]) {
+   addShift(300 + day, `2026-11-${String(day).padStart(2, '0')}`, code);
+ }
+-addShift(391, '2026-11-12', 'L', { coworker: true });
++addShift(391, '2026-11-12', 'B', { coworker: true });
+ 
+ // August 2026 starts on Saturday and its 31st is Monday: six Sunday-first rows.
+-for (const [day, code] of [[1, 'E'], [2, 'L'], [8, 'OFF'], [15, 'E'], [22, 'L'], [29, 'OFF'], [31, 'E']]) {
++for (const [day, code] of [[1, 'A'], [2, 'B'], [8, '/'], [15, 'A'], [22, 'B'], [29, '/'], [31, 'A']]) {
+   addShift(500 + day, `2026-08-${String(day).padStart(2, '0')}`, code);
+ }
+-addShift(591, '2026-08-31', 'L', { coworker: true });
+-
++addShift(591, '2026-08-31', 'B', { coworker: true });
++
++// Legend QA: one code has normal, changed, and missing stored times.
++Object.assign(shifts.find(s => s.is_personal && s.date === '2026-10-03'), {start_time:'09:00:00',end_time:'17:00:00'});
++Object.assign(shifts.find(s => s.is_personal && s.date === '2026-10-07'), {start_time:null,end_time:null});
++
++Object.assign(shifts.find(s => s.is_personal && s.date === '2026-10-09'), {start_time:'23:00:00',end_time:'07:00:00'});
+ const notes = [{
+   id: uuid(700), user_id: ownerId, date: '2026-10-12',
+   content: 'QA_NOTE_SENTINEL_NEVER_IN_SHARED_PNG',

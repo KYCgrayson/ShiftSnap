@@ -535,7 +535,8 @@ export default function CalendarScreen() {
       return {
         id: shift.id,
         date: shift.date,
-        name: codeInfo?.meaning || shift.code,
+        code: shift.code,
+        name: codeInfo?.meaning || '',
         // The saved shift times can be intentionally edited away from the
         // code defaults; share the same times shown in the day detail.
         startTime: shift.startTime,

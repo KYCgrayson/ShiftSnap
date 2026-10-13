@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View,
+  ActivityIndicator, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,6 +14,7 @@ import { getMonthlyShareQuote, type ShareQuoteMode } from '../services/calendarS
 export interface CalendarShareShift {
   id: string;
   date: string;
+  code: string;
   name: string;
   startTime: string | null;
   endTime: string | null;
@@ -51,15 +52,28 @@ function displayTime(time: string | null): string | null {
   return time ? time.slice(0, 5) : null;
 }
 
+function formatShiftLabel(code: string, name: string, isDayOff: boolean, dayOffLabel: string, includeName = true): string {
+  const rawCode = code.trim();
+  const fallbackName = name.trim() || (isDayOff ? dayOffLabel : '');
+  if (!rawCode) return fallbackName;
+  if (!includeName) return rawCode;
+  return [rawCode, fallbackName].filter((label, index) => label && (index === 0 || label !== rawCode)).join(' ');
+}
+
 export function CalendarShareModal({ visible, accountId, yearMonth, shifts, locale, onClose }: Props) {
   const { t } = useTranslation();
   const { width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const shotRef = useRef<ViewShot>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  const noteFocusedRef = useRef(false);
   const sharingRef = useRef(false);
   const savingModeRef = useRef(false);
   const scopeRef = useRef(`${accountId}:${yearMonth}`);
   const [mode, setMode] = useState<ShareQuoteMode>('gentle');
+  const [showTimes, setShowTimes] = useState(false);
+  const [showShiftNames, setShowShiftNames] = useState(false);
+  const [shareNote, setShareNote] = useState('');
   const [modeReady, setModeReady] = useState(false);
   const [modeError, setModeError] = useState(false);
   const [savingMode, setSavingMode] = useState(false);
@@ -76,6 +90,7 @@ export function CalendarShareModal({ visible, accountId, yearMonth, shifts, loca
   const weeks = useMemo(() => getWeeks(yearMonth), [yearMonth]);
   const [year, month] = yearMonth.split('-').map(Number);
   const modeKey = `ishift:share-mode:v1:${accountId}`;
+  const dayOffLabel = t('calendarShare.dayOff');
 
   const shiftsByDay = useMemo(() => {
     const result = new Map<string, CalendarShareShift[]>();
@@ -87,11 +102,50 @@ export function CalendarShareModal({ visible, accountId, yearMonth, shifts, loca
     return result;
   }, [shifts]);
 
+  const legendItems = useMemo(() => {
+    const items = new Map<string, { label: string; timePairs: Set<string> }>();
+    for (const shift of shifts) {
+      const code = shift.code.trim();
+      const name = shift.name.trim() || (shift.isDayOff ? dayOffLabel : '');
+      const key = JSON.stringify([code, name]);
+      let item = items.get(key);
+      if (!item) {
+        item = { label: formatShiftLabel(code, name, shift.isDayOff, dayOffLabel), timePairs: new Set() };
+        items.set(key, item);
+      }
+      if (showTimes && !shift.isDayOff) {
+        const start = displayTime(shift.startTime);
+        const end = displayTime(shift.endTime);
+        const pair = start || end ? `${start || '—'}–${end || '—'}` : t('calendarShare.timeNotSet');
+        item.timePairs.add(start && end && end < start ? `${pair} ${t('calendarShare.nextDay')}` : pair);
+      }
+    }
+    return Array.from(items.entries()).map(([key, item]) => ({ key, ...item }));
+  }, [shifts, showTimes, dayOffLabel, t]);
+
+  const trimmedShareNote = shareNote.trim();
+
   useEffect(() => {
     const scope = `${accountId}:${yearMonth}`;
     scopeRef.current = scope;
     return () => { if (scopeRef.current === scope) scopeRef.current = ''; };
   }, [accountId, yearMonth]);
+
+  useEffect(() => {
+    if (!visible) {
+      setShowTimes(false);
+      setShowShiftNames(false);
+      setShareNote('');
+      Keyboard.dismiss();
+    }
+  }, [visible]);
+
+  useEffect(() => {
+    const subscription = Keyboard.addListener('keyboardDidShow', () => {
+      if (noteFocusedRef.current) scrollRef.current?.scrollToEnd({ animated: true });
+    });
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -123,12 +177,11 @@ export function CalendarShareModal({ visible, accountId, yearMonth, shifts, loca
   }, [accountId, yearMonth, mode, locale, retryNonce, visible, modeReady, modeError]);
 
   useEffect(() => {
-    if (quote === null) return;
-    // Wait until the selected line has been laid out before allowing capture.
+    // Wait for quote, display options, and note changes to reach layout before capture.
     setLaidOut(false);
     const frame = requestAnimationFrame(() => setLaidOut(true));
     return () => cancelAnimationFrame(frame);
-  }, [quote]);
+  }, [quote, showTimes, showShiftNames, shareNote]);
 
   const shareImage = async () => {
     if (sharingRef.current || !modeReady || modeError || savingMode || quote === null || !laidOut || !logoLoaded || logoError) return;
@@ -145,6 +198,8 @@ export function CalendarShareModal({ visible, accountId, yearMonth, shifts, loca
       if (scopeRef.current !== scope) return;
       const capture = shotRef.current?.capture;
       if (!capture) throw new Error('View shot not mounted');
+      Keyboard.dismiss();
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       uri = await capture.call(shotRef.current);
       if (scopeRef.current !== scope) return;
       await Sharing.shareAsync(uri, {
@@ -185,6 +240,7 @@ export function CalendarShareModal({ visible, accountId, yearMonth, shifts, loca
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => { if (!sharing) onClose(); }}>
+      <KeyboardAvoidingView style={styles.keyboardAvoiding} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         <View style={styles.topBar}>
           <TouchableOpacity onPress={() => { if (!sharing) onClose(); }} disabled={sharing} accessibilityRole="button" accessibilityLabel={t('common.cancel')} style={styles.closeButton}>
@@ -193,7 +249,7 @@ export function CalendarShareModal({ visible, accountId, yearMonth, shifts, loca
           <Text style={styles.topTitle}>{t('calendarShare.previewTitle')}</Text>
           <View style={styles.closeButton} />
         </View>
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView ref={scrollRef} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           <ViewShot
             ref={shotRef}
             options={{ format: 'png', result: 'tmpfile', width: 1080 }}
@@ -203,9 +259,8 @@ export function CalendarShareModal({ visible, accountId, yearMonth, shifts, loca
             <View collapsable={false} style={styles.posterInner}>
               <View style={styles.posterTopLine}>
                 <Text style={styles.topLineText}>{yearMonth.replace('-', '.')}</Text>
-                <Text style={styles.topLineText}>{t('calendarShare.diaryStyle')}</Text>
               </View>
-              <Text style={[styles.posterTitle, mode !== 'none' && styles.quoteTitle]}>
+              <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65} style={[styles.posterTitle, mode !== 'none' && styles.quoteTitle]}>
                 {mode === 'none' ? t('calendarShare.posterTitle') : quote || ' '}
               </Text>
               <View style={styles.titleRule} />
@@ -233,9 +288,9 @@ export function CalendarShareModal({ visible, accountId, yearMonth, shifts, loca
                             {entries.map((entry) => (
                               <View key={entry.id} style={styles.shiftBlock}>
                                 <Text style={[styles.shiftName, entry.isDayOff && styles.restText]}>
-                                  {entry.isDayOff ? t('calendarShare.dayOff') : entry.name}
+                                  {formatShiftLabel(entry.code, entry.name, entry.isDayOff, dayOffLabel, showShiftNames)}
                                 </Text>
-                                {!entry.isDayOff && (entry.startTime || entry.endTime) && (
+                                {showTimes && !entry.isDayOff && (entry.startTime || entry.endTime) && (
                                   <Text style={styles.shiftTime}>
                                     {[displayTime(entry.startTime), displayTime(entry.endTime)].filter(Boolean).join('\n')}
                                     {entry.startTime && entry.endTime && entry.endTime < entry.startTime ? `\n${t('calendarShare.nextDay')}` : ''}
@@ -251,6 +306,19 @@ export function CalendarShareModal({ visible, accountId, yearMonth, shifts, loca
                 </View>
               ))}
               {shifts.length === 0 && <Text style={styles.emptyMonth}>{t('calendarShare.emptyMonth')}</Text>}
+              {legendItems.length > 0 && (
+                <View style={styles.legend}>
+                  <Text style={styles.legendTitle}>{t('calendarShare.legendTitle')}</Text>
+                  <Text style={styles.legendEntry}>
+                    {legendItems.map((item, index) => (
+                      <Text key={item.key}>
+                        {item.label}{showTimes && item.timePairs.size > 0 ? ` ${Array.from(item.timePairs).join(', ')}` : ''}{index < legendItems.length - 1 ? '\u00A0· ' : ''}
+                      </Text>
+                    ))}
+                  </Text>
+                </View>
+              )}
+              {trimmedShareNote.length > 0 && <Text style={styles.shareNoteOnImage}>{trimmedShareNote}</Text>}
               <View style={styles.footer}>
                 <View style={styles.brand}>
                   <Image
@@ -262,25 +330,84 @@ export function CalendarShareModal({ visible, accountId, yearMonth, shifts, loca
                   />
                   <Text style={styles.brandName}>IShift</Text>
                 </View>
-                <Text style={styles.footerLabel}>{t('calendarShare.diaryStyle')}</Text>
               </View>
             </View>
           </ViewShot>
 
           <Text style={styles.privacyNote}>{t('calendarShare.privacyNote')}</Text>
+          <View style={styles.noteField}>
+            <Text style={styles.noteLabel}>{t('calendarShare.noteLabel')}</Text>
+            <TextInput
+              value={shareNote}
+              onChangeText={(value) => {
+                const nextNote = Array.from(value).slice(0, 300).join('');
+                if (nextNote !== shareNote) {
+                  setLaidOut(false);
+                  setShareNote(nextNote);
+                }
+              }}
+              placeholder={t('calendarShare.notePlaceholder')}
+              accessibilityLabel={t('calendarShare.noteLabel')}
+              multiline
+              maxLength={300}
+              editable={!sharing}
+              onFocus={() => {
+                noteFocusedRef.current = true;
+                if (Keyboard.isVisible()) {
+                  requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
+                }
+              }}
+              onBlur={() => { noteFocusedRef.current = false; }}
+              textAlignVertical="top"
+              style={styles.noteInput}
+            />
+          </View>
           <View style={styles.modeRow}>
-            {(['gentle', 'toxic', 'none'] as ShareQuoteMode[]).map((option) => (
-              <TouchableOpacity
-                key={option}
-                style={[styles.modeButton, mode === option && styles.modeButtonSelected]}
-                onPress={() => void switchMode(option)}
-                disabled={!modeReady || savingMode || sharing}
-                accessibilityRole="button"
-                accessibilityState={{ selected: mode === option }}
-              >
-                <Text style={[styles.modeText, mode === option && styles.modeTextSelected]}>{t(`calendarShare.mode.${option}`)}</Text>
-              </TouchableOpacity>
-            ))}
+            <TouchableOpacity
+              style={styles.modeCycleButton}
+              onPress={() => {
+                const nextMode: ShareQuoteMode = mode === 'gentle' ? 'toxic' : mode === 'toxic' ? 'none' : 'gentle';
+                void switchMode(nextMode);
+              }}
+              disabled={!modeReady || savingMode || sharing}
+              accessibilityRole="button"
+              accessibilityLabel={t('calendarShare.quoteStyle', { style: t(`calendarShare.mode.${mode}`) })}
+              accessibilityHint={t('calendarShare.quoteStyleHint')}
+              accessibilityState={{ disabled: !modeReady || savingMode || sharing }}
+            >
+              <Text style={styles.modeCycleText}>{t('calendarShare.quoteStyle', { style: t(`calendarShare.mode.${mode}`) })}</Text>
+              <Ionicons name="repeat" size={17} color="#906D65" />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.optionsRow}>
+            <TouchableOpacity
+              style={styles.timeToggle}
+              onPress={() => {
+                setLaidOut(false);
+                setShowShiftNames((current) => !current);
+              }}
+              disabled={sharing}
+              accessibilityRole="checkbox"
+              accessibilityLabel={t('calendarShare.showShiftNames')}
+              accessibilityState={{ checked: showShiftNames, disabled: sharing }}
+            >
+              <Ionicons name={showShiftNames ? 'checkbox' : 'square-outline'} size={19} color="#906D65" />
+              <Text style={styles.timeToggleText}>{t('calendarShare.showShiftNames')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.timeToggle}
+              onPress={() => {
+                setLaidOut(false);
+                setShowTimes((current) => !current);
+              }}
+              disabled={sharing}
+              accessibilityRole="checkbox"
+              accessibilityLabel={t('calendarShare.showTimes')}
+              accessibilityState={{ checked: showTimes, disabled: sharing }}
+            >
+              <Ionicons name={showTimes ? 'checkbox' : 'square-outline'} size={19} color="#906D65" />
+              <Text style={styles.timeToggleText}>{t('calendarShare.showTimes')}</Text>
+            </TouchableOpacity>
           </View>
           {quoteError && (
             <TouchableOpacity onPress={() => setRetryNonce((value) => value + 1)} accessibilityRole="button">
@@ -304,11 +431,13 @@ export function CalendarShareModal({ visible, accountId, yearMonth, shifts, loca
           </TouchableOpacity>
         </View>
       </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  keyboardAvoiding: { flex: 1 },
   screen: { flex: 1, backgroundColor: '#FBF7F3' },
   topBar: { height: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12 },
   closeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
@@ -319,7 +448,7 @@ const styles = StyleSheet.create({
   posterTopLine: { flexDirection: 'row', justifyContent: 'space-between' },
   topLineText: { fontSize: 10, color: '#B69B94', letterSpacing: 1 },
   posterTitle: { marginTop: 14, minHeight: 36, textAlign: 'center', fontSize: 26, color: '#805C55', fontWeight: '400', letterSpacing: 5 },
-  quoteTitle: { fontSize: 13, lineHeight: 20, letterSpacing: 1.5, fontWeight: '400', paddingHorizontal: 4 },
+  quoteTitle: { fontSize: 13, lineHeight: 20, letterSpacing: 0.5, fontWeight: '400', paddingHorizontal: 4 },
   titleRule: { alignSelf: 'center', marginTop: 8, width: 25, height: 1, backgroundColor: '#C3938B' },
   posterMonth: { marginTop: 10, marginBottom: 12, textAlign: 'center', fontSize: 17, color: '#805C55', letterSpacing: 1 },
   weekdayRow: { flexDirection: 'row', marginBottom: 6 },
@@ -336,17 +465,24 @@ const styles = StyleSheet.create({
   shiftTime: { marginTop: 1, fontSize: 8, textAlign: 'center', color: '#775852' },
   restText: { fontSize: 15, color: '#CB8875' },
   emptyMonth: { marginTop: 10, textAlign: 'center', fontSize: 12, color: '#A2867F' },
+  legend: { marginTop: 12, paddingTop: 8, borderTopWidth: 0.5, borderTopColor: '#E6D5D0', alignItems: 'stretch' },
+  legendTitle: { marginBottom: 4, fontSize: 9, fontWeight: '600', color: '#A68179' },
+  legendEntry: { width: '100%', textAlign: 'center', fontSize: 9, lineHeight: 13, color: '#775852' },
+  shareNoteOnImage: { marginTop: 10, width: '100%', textAlign: 'center', fontSize: 10, lineHeight: 15, color: '#805C55' },
   footer: { marginTop: 18, paddingTop: 8, borderTopWidth: 0.5, borderTopColor: '#E6D5D0', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   brand: { flexDirection: 'row', alignItems: 'center' },
   brandLogo: { width: 20, height: 20 },
   brandName: { marginLeft: 5, fontSize: 11, fontWeight: '600', color: '#A68179' },
-  footerLabel: { fontSize: 9, color: '#B79B93' },
   privacyNote: { marginTop: 12, marginHorizontal: 18, textAlign: 'center', color: '#8E7974', fontSize: 12 },
-  modeRow: { marginTop: 14, flexDirection: 'row', justifyContent: 'center', gap: 8 },
-  modeButton: { paddingHorizontal: 15, paddingVertical: 9, borderRadius: 18, borderWidth: 1, borderColor: '#E8CFC5', backgroundColor: '#FFFDFC' },
-  modeButtonSelected: { backgroundColor: '#D98D7E', borderColor: '#D98D7E' },
-  modeText: { color: '#906D65', fontSize: 13 },
-  modeTextSelected: { color: '#FFFFFF', fontWeight: '600' },
+  noteField: { width: '100%', marginTop: 12, paddingHorizontal: 18 },
+  noteLabel: { marginBottom: 6, color: '#906D65', fontSize: 13 },
+  noteInput: { minHeight: 76, maxHeight: 132, paddingHorizontal: 11, paddingVertical: 9, borderWidth: 1, borderColor: '#E8CFC5', borderRadius: 10, backgroundColor: '#FFFDFC', color: '#704D48', fontSize: 14 },
+  modeRow: { marginTop: 14, alignItems: 'center' },
+  modeCycleButton: { minHeight: 38, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 19, borderWidth: 1, borderColor: '#E8CFC5', backgroundColor: '#FFFDFC' },
+  modeCycleText: { color: '#906D65', fontSize: 13 },
+  optionsRow: { marginTop: 4, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 },
+  timeToggle: { minHeight: 38, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', gap: 5 },
+  timeToggleText: { color: '#906D65', fontSize: 13 },
   errorText: { textAlign: 'center', color: '#B54B48', marginTop: 10, marginHorizontal: 20, fontSize: 12 },
   bottomBar: { padding: 12, borderTopWidth: 1, borderTopColor: '#F0DDD6', backgroundColor: '#FBF7F3' },
   shareButton: { minHeight: 48, borderRadius: 12, backgroundColor: '#CF7E70', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },

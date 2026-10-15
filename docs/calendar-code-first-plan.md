@@ -19,4 +19,4 @@ New per-account independent include-meaning/include-person options default false
 - [x] Typecheck and diff check; no new unit tests after code.
 - [x] Native E2E synthetic-only: default B, both independent options and all combinations, preview cancel, repeat sync stable event IDs/count, preserved times/alarms/markers/notes, code-first card.
 - [x] Save repeatable native screenshots and calendar snapshots; document limitations.
-- [ ] Backup/sync verified changes; no TestFlight without fresh approval.
+- [x] Backup/sync verified changes. User subsequently authorized merge, push and TestFlight; main fast-forwarded to 5d12bb5 and Build 14 uploaded successfully. Apple processing/tester availability remain unverified.

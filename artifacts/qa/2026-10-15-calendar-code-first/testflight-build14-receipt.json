@@ -1,0 +1,16 @@
+{
+  "id": "c9c02a2e-475d-4496-ac5a-413ef5d1b706",
+  "status": "FINISHED",
+  "appVersion": "1.0.0",
+  "appBuildVersion": "14",
+  "gitCommitHash": "5d12bb5951bd3f6a1e04638179d09a020cee553a",
+  "createdAt": "2026-10-15T12:55:36.395Z",
+  "completedAt": "2026-10-15T13:00:51.266Z",
+  "submissionId": "e30bada1-80f7-40f9-b312-2ec8a7e3e9e8",
+  "submissionResult": "Successfully uploaded to Apple App Store Connect; EAS CLI exit 0",
+  "appleProcessing": "Processing per submission receipt; completion not independently verified",
+  "testerAvailability": "Not independently verified",
+  "authorization": "User explicitly requested merge, push and send testflight",
+  "productionIsolation": "Clean clone of main at 5d12bb5; frozen dependencies; expo-router entry; default Metro; no QA environment or generated native directories",
+  "nativeQA": "artifacts/qa/2026-10-15-calendar-code-first/README.md"
+}

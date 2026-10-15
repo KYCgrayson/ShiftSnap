@@ -37,9 +37,19 @@ export interface CalendarSyncDateRange {
   userId?: string;
   alarmMinutes?: number | null;
   titleMode?: CalendarTitleMode;
+  titleOptions?: CalendarTitleOptions;
 }
 
 export type CalendarTitleMode = 'shift_first' | 'shift_only' | 'name_first';
+export interface CalendarTitleOptions {
+  includeMeaning: boolean;
+  includePerson: boolean;
+}
+
+export const DEFAULT_CALENDAR_TITLE_OPTIONS: CalendarTitleOptions = {
+  includeMeaning: false,
+  includePerson: false,
+};
 
 export interface CalendarSyncResult {
   created: number;
@@ -290,20 +300,13 @@ function buildEventDetails(
   calendarId: string,
   alarmMinutes?: number | null,
   syncOwnerUserId?: string,
-  titleMode: CalendarTitleMode = 'shift_first',
+  titleOptions: CalendarTitleOptions = DEFAULT_CALENDAR_TITLE_OPTIONS,
 ): Omit<Partial<Calendar.Event>, 'id'> {
-  const shiftTitle = codeInfo?.meaning
-    ? `${codeInfo.meaning} (${shift.shift_code})`
-    : `Shift ${shift.shift_code}`;
+  const parts = [shift.shift_code];
+  if (titleOptions.includeMeaning && codeInfo?.meaning?.trim()) parts.push(codeInfo.meaning.trim());
   const rowName = shift.name_on_schedule?.trim();
-  const effectiveMode = ['shift_first', 'shift_only', 'name_first'].includes(titleMode)
-    ? titleMode
-    : 'shift_first';
-  const title = effectiveMode === 'shift_only' || !rowName
-    ? shiftTitle
-    : effectiveMode === 'name_first'
-      ? `${rowName} · ${shiftTitle}`
-      : `${shiftTitle} · ${rowName}`;
+  if (titleOptions.includePerson && rowName) parts.push(rowName);
+  const title = parts.join(' · ');
 
   const startTime = normalizeTime(shift.start_time) || normalizeTime(codeInfo?.start_time);
   const endTime = normalizeTime(shift.end_time) || normalizeTime(codeInfo?.end_time);
@@ -344,7 +347,7 @@ function buildEventDetails(
     allDay: isAllDay,
     calendarId,
     alarms: shouldAddAlarm ? [{ relativeOffset: -alarmMinutes }] : [],
-    notes: `IShift - ${shift.shift_code}\n${SYNC_KEY_NOTE_LABEL}: ${syncKey}`,
+    notes: `IShift - ${shift.shift_code}${codeInfo?.meaning?.trim() ? `\n${codeInfo.meaning.trim()}` : ''}\n${SYNC_KEY_NOTE_LABEL}: ${syncKey}`,
   };
 }
 
@@ -385,7 +388,7 @@ export async function syncShiftToCalendar(
   codeInfo: CalendarShiftCodeForSync | undefined,
   calendarId: string,
   alarmMinutes?: number | null,
-  titleMode: CalendarTitleMode = 'shift_first',
+  titleOptions: CalendarTitleOptions = DEFAULT_CALENDAR_TITLE_OPTIONS,
 ): Promise<string> {
   const shiftCodes = codeInfo
     ? [{ ...codeInfo, code: codeInfo.code ?? shift.shift_code }]
@@ -395,7 +398,7 @@ export async function syncShiftToCalendar(
     endDate: shift.date,
     userId: shift.user_id,
     alarmMinutes,
-    titleMode,
+    titleOptions,
   });
   const eventId = result.eventIdsByShiftId.get(shift.id);
   if (!eventId) {
@@ -525,7 +528,7 @@ export async function reconcileShiftsToCalendar(
       calendarId,
       range?.alarmMinutes,
       range?.userId,
-      range?.titleMode ?? 'shift_first',
+      range?.titleOptions ?? DEFAULT_CALENDAR_TITLE_OPTIONS,
     );
     const keyedCandidates = eventsBySyncKey.get(syncKey) ?? [];
     // calendar_event_id predates multi-user claims and only has room for one

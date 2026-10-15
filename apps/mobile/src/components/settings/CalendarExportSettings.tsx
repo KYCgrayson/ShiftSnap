@@ -3,11 +3,10 @@ import { Alert, Platform, Pressable, StyleSheet, Switch, Text, TextInput, View }
 import { useTranslation } from 'react-i18next';
 import { ALARM_OPTIONS } from '@shiftsnap/shared';
 import { useTheme } from '../../theme';
-import { CALENDAR_COLORS, type CalendarTitleMode } from '../../services/calendarSync';
+import { CALENDAR_COLORS } from '../../services/calendarSync';
 import { useCalendarStore, formatExportSummary, type CalendarExportDraft, type CalendarSyncFilter } from '../../stores/calendarStore';
 
 const filters: CalendarSyncFilter[] = ['all', 'work_days', 'days_off'];
-const modes: CalendarTitleMode[] = ['shift_first', 'shift_only', 'name_first'];
 const colorNames = ['red', 'orange', 'yellow', 'green', 'blue', 'purple', 'brown', 'teal'];
 
 function exportError(t: (key: string) => string, message: string): string {
@@ -71,9 +70,6 @@ export function CalendarExportSettings({ userId }: { userId: string }) {
   const filterLabels: Record<CalendarSyncFilter, string> = {
     all: t('settings.calendarSyncAll'), work_days: t('settings.calendarSyncWorkDays'), days_off: t('settings.calendarSyncDaysOff'),
   };
-  const modeLabels: Record<CalendarTitleMode, string> = {
-    shift_first: t('settings.calendarTitle.shiftFirst'), shift_only: t('settings.calendarTitle.shiftOnly'), name_first: t('settings.calendarTitle.nameFirst'),
-  };
   return (
     <View style={styles.container}>
       <Text style={{ color: theme.colors.textSecondary, lineHeight: 20 }}>{t('settings.exportHelp')}</Text>
@@ -108,8 +104,10 @@ export function CalendarExportSettings({ userId }: { userId: string }) {
       <Text style={[styles.label, { color: theme.colors.textPrimary }]}>{t('settings.calendarSyncContent')}</Text>
       <View style={styles.choices}>{filters.map((filter) => <Pressable key={filter} onPress={() => change({ filter })} style={[styles.choice, { borderColor: draft.filter === filter ? theme.colors.primary : theme.colors.border }]}><Text style={{ color: theme.colors.textPrimary }}>{filterLabels[filter]}</Text></Pressable>)}</View>
       <Text style={[styles.label, { color: theme.colors.textPrimary }]}>{t('settings.calendarTitle.title')}</Text>
-      <View style={styles.choices}>{modes.map((mode) => <Pressable key={mode} onPress={() => change({ titleMode: mode })} style={[styles.choice, { borderColor: draft.titleMode === mode ? theme.colors.primary : theme.colors.border }]}><Text style={{ color: theme.colors.textPrimary }}>{modeLabels[mode]}</Text></Pressable>)}</View>
-      <Text style={{ color: theme.colors.textSecondary }}>{t('settings.exportTitlePreview', { value: t(`settings.calendarTitle.${draft.titleMode === 'shift_only' ? 'shiftOnlyExample' : draft.titleMode === 'name_first' ? 'nameFirstExample' : 'shiftFirstExample'}`) })}</Text>
+      <Text style={{ color: theme.colors.textSecondary }}>{t('settings.calendarTitle.description')}</Text>
+      <View style={styles.row}><Text style={{ color: theme.colors.textPrimary, flex: 1 }}>{t('settings.calendarTitle.includeMeaning')}</Text><Switch accessibilityLabel={t('settings.calendarTitle.includeMeaning')} value={draft.titleOptions.includeMeaning} onValueChange={(includeMeaning) => change({ titleOptions: { ...draft.titleOptions, includeMeaning } })} /></View>
+      <View style={styles.row}><Text style={{ color: theme.colors.textPrimary, flex: 1 }}>{t('settings.calendarTitle.includePerson')}</Text><Switch accessibilityLabel={t('settings.calendarTitle.includePerson')} value={draft.titleOptions.includePerson} onValueChange={(includePerson) => change({ titleOptions: { ...draft.titleOptions, includePerson } })} /></View>
+      <Text style={{ color: theme.colors.textSecondary }}>{t('settings.exportTitlePreview', { value: ['B', draft.titleOptions.includeMeaning ? 'Afternoon shift' : '', draft.titleOptions.includePerson ? 'Alex' : ''].filter(Boolean).join(' · ') })}</Text>
       <View style={styles.row}><Text style={[styles.label, { color: theme.colors.textPrimary }]}>{t('settings.calendarAlarms')}</Text><Switch value={draft.alarmsEnabled} onValueChange={(alarmsEnabled) => change({ alarmsEnabled })} /></View>
       {draft.alarmsEnabled && <View style={styles.choices}>{ALARM_OPTIONS.map((option) => <Pressable key={option.value} onPress={() => change({ alarmMinutes: option.value })} style={[styles.choice, { borderColor: draft.alarmMinutes === option.value ? theme.colors.primary : theme.colors.border }]}><Text style={{ color: theme.colors.textPrimary }}>{option.label}</Text></Pressable>)}</View>}
       <Pressable accessibilityRole="button" disabled={busy} onPress={() => void review()} style={[styles.button, { backgroundColor: theme.colors.primary, opacity: busy ? 0.5 : 1 }]}><Text style={{ color: theme.colors.white, fontWeight: '600' }}>{t('settings.exportReview')}</Text></Pressable>

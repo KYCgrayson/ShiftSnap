@@ -1167,11 +1167,10 @@ export default function CalendarScreen() {
                       style={[styles.colorIndicator, { backgroundColor: shift.color }]}
                     />
                     <View style={styles.shiftInfo}>
-                      <Text style={[styles.shiftCode, { color: theme.colors.textPrimary }]}>
+                      <Text style={[styles.shiftCode, { color: theme.colors.textPrimary }]}>{shift.code}</Text>
+                      <Text style={{ color: theme.colors.textSecondary }}>
                         {shift.isDayOff
-                          ? (unifyDayOff && unifyDayOffSymbol
-                              ? unifyDayOffSymbol
-                              : (codeInfo?.meaning || t('common.dayOff')))
+                          ? (codeInfo?.meaning || (unifyDayOff && unifyDayOffSymbol) || t('common.dayOff'))
                           : codeInfo?.meaning || t('home.shift', { code: shift.code })}
                       </Text>
                       {!shift.isDayOff && shift.startTime && (
@@ -1340,11 +1339,10 @@ export default function CalendarScreen() {
                         style={[styles.colorIndicator, { backgroundColor: shift.color }]}
                       />
                       <View style={styles.shiftInfo}>
-                        <Text style={[styles.shiftCode, { color: theme.colors.textPrimary }]}>
+                        <Text style={[styles.shiftCode, { color: theme.colors.textPrimary }]}>{shift.code}</Text>
+                        <Text style={{ color: theme.colors.textSecondary }}>
                           {shift.isDayOff
-                            ? (unifyDayOff && unifyDayOffSymbol
-                                ? unifyDayOffSymbol
-                                : (codeInfo?.meaning || t('common.dayOff')))
+                            ? (codeInfo?.meaning || (unifyDayOff && unifyDayOffSymbol) || t('common.dayOff'))
                             : codeInfo?.meaning || t('home.shift', { code: shift.code })}
                         </Text>
                         {shift.personName && (

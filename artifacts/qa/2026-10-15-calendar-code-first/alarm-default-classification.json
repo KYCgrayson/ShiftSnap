@@ -1,0 +1,32 @@
+[
+  {
+    "UUID": "389D054C-1000-4E8D-BF37-E8C4DF20EA56",
+    "all_day": 0,
+    "trigger_interval": 0,
+    "default_alarm": 1
+  },
+  {
+    "UUID": "E709FE63-EA12-42E6-9856-F3D5E2BDAEFB",
+    "all_day": 0,
+    "trigger_interval": 0,
+    "default_alarm": 1
+  },
+  {
+    "UUID": "FBB1C091-E154-42A9-B418-1B3BA8E51565",
+    "all_day": 1,
+    "trigger_interval": 0,
+    "default_alarm": 1
+  },
+  {
+    "UUID": "389D054C-1000-4E8D-BF37-E8C4DF20EA56",
+    "all_day": 0,
+    "trigger_interval": -900,
+    "default_alarm": 0
+  },
+  {
+    "UUID": "E709FE63-EA12-42E6-9856-F3D5E2BDAEFB",
+    "all_day": 0,
+    "trigger_interval": -900,
+    "default_alarm": 0
+  }
+]

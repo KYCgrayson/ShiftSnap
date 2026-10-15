@@ -22,6 +22,8 @@ import {
   type CalendarSyncResult,
   type CalendarRemovalResult,
   type CalendarTitleMode,
+  type CalendarTitleOptions,
+  DEFAULT_CALENDAR_TITLE_OPTIONS,
   type WritableCalendarDestination,
 } from '../services/calendarSync';
 import { useAuthStore } from './authStore';
@@ -36,6 +38,7 @@ const CALENDAR_ALARMS_KEY_PREFIX = 'shiftsnap_calendar_alarms_enabled:';
 export const ALARM_MINUTES_KEY = 'shiftsnap_default_alarm_minutes';
 const CALENDAR_SYNC_FILTER_KEY_PREFIX = 'shiftsnap_calendar_sync_filter:';
 const CALENDAR_TITLE_MODE_KEY_PREFIX = 'shiftsnap_calendar_title_mode:';
+const CALENDAR_TITLE_OPTIONS_KEY_PREFIX = 'shiftsnap_calendar_title_options:v1:';
 const CALENDAR_MANAGED_ID_KEY_PREFIX = 'shiftsnap_managed_calendar_id:';
 const CALENDAR_NAME_KEY_PREFIX = 'shiftsnap_calendar_name:';
 const CALENDAR_COLOR_KEY_PREFIX = 'shiftsnap_calendar_color:';
@@ -46,7 +49,7 @@ export interface CalendarExportDraft {
   name: string;
   color: string;
   filter: CalendarSyncFilter;
-  titleMode: CalendarTitleMode;
+  titleOptions: CalendarTitleOptions;
   alarmsEnabled: boolean;
   alarmMinutes: number;
   adoptLegacy: boolean;
@@ -142,6 +145,23 @@ export function calendarTitleModeKey(userId: string): string {
   return `${CALENDAR_TITLE_MODE_KEY_PREFIX}${userId}`;
 }
 
+export function calendarTitleOptionsKey(userId: string): string {
+  return `${CALENDAR_TITLE_OPTIONS_KEY_PREFIX}${userId}`;
+}
+
+function normalizeCalendarTitleOptions(value: string | null): CalendarTitleOptions {
+  if (!value) return DEFAULT_CALENDAR_TITLE_OPTIONS;
+  try {
+    const parsed = JSON.parse(value) as Partial<CalendarTitleOptions>;
+    return {
+      includeMeaning: parsed.includeMeaning === true,
+      includePerson: parsed.includePerson === true,
+    };
+  } catch {
+    return DEFAULT_CALENDAR_TITLE_OPTIONS;
+  }
+}
+
 export async function getCalendarTitleMode(userId?: string): Promise<CalendarTitleMode> {
   if (!userId) return 'shift_first';
   try {
@@ -179,7 +199,8 @@ export function formatExportSummary(preview: CalendarExportPreview): string {
     i18n.t('settings.exportMonth', { value: range.startDate.slice(0, 7) }),
     i18n.t('settings.exportFilter', { value: i18n.t(`settings.${draft.filter === 'work_days' ? 'calendarSyncWorkDays' : draft.filter === 'days_off' ? 'calendarSyncDaysOff' : 'calendarSyncAll'}`) }),
     i18n.t('settings.exportCount', { count: selectedCount }),
-    i18n.t('settings.exportTitleMode', { value: i18n.t(`settings.calendarTitle.${draft.titleMode === 'shift_only' ? 'shiftOnly' : draft.titleMode === 'name_first' ? 'nameFirst' : 'shiftFirst'}`) }),
+    i18n.t('settings.exportTitleOptions', { value: [draft.titleOptions.includeMeaning ? i18n.t('settings.calendarTitle.includeMeaning') : '', draft.titleOptions.includePerson ? i18n.t('settings.calendarTitle.includePerson') : ''].filter(Boolean).join(', ') || i18n.t('settings.calendarTitle.codeOnly') }),
+    i18n.t('settings.exportTitlePreview', { value: ['B', draft.titleOptions.includeMeaning ? 'Afternoon shift' : '', draft.titleOptions.includePerson ? 'Alex' : ''].filter(Boolean).join(' · ') }),
     i18n.t('settings.exportReminder', { value: draft.alarmsEnabled ? `${draft.alarmMinutes} min` : i18n.t('settings.calendarAlarmsDisabled') }),
     i18n.t('settings.exportRemovalNotice'),
     preview.legacyAdoption ? i18n.t('settings.exportLegacyAdoptNotice') : !preview.expectedManagedId && draft.legacyDestination ? i18n.t('settings.exportLegacyNewNotice') : '',
@@ -238,11 +259,11 @@ export const useCalendarStore = create<CalendarState>((set, get) => ({
   error: null,
 
   getExportDraft: async (userId) => {
-    const [savedName, savedColor, savedFilter, savedTitle, savedAlarms, savedMinutes, fallbackMinutes, managedId, savedDestination] = await Promise.all([
+    const [savedName, savedColor, savedFilter, savedTitleOptions, savedAlarms, savedMinutes, fallbackMinutes, managedId, savedDestination] = await Promise.all([
       AsyncStorage.getItem(nameKey(userId)),
       AsyncStorage.getItem(colorKey(userId)),
       AsyncStorage.getItem(calendarSyncFilterKey(userId)),
-      AsyncStorage.getItem(calendarTitleModeKey(userId)),
+      AsyncStorage.getItem(calendarTitleOptionsKey(userId)),
       AsyncStorage.getItem(calendarAlarmsKey(userId)),
       AsyncStorage.getItem(calendarAlarmMinutesKey(userId)),
       AsyncStorage.getItem(ALARM_MINUTES_KEY),
@@ -256,7 +277,7 @@ export const useCalendarStore = create<CalendarState>((set, get) => ({
       name: native?.title || savedName || CALENDAR_NAME,
       color: native?.color || savedColor || CALENDAR_COLOR,
       filter: savedFilter === 'work_days' || savedFilter === 'days_off' ? savedFilter : 'all',
-      titleMode: savedTitle === 'shift_only' || savedTitle === 'name_first' ? savedTitle : 'shift_first',
+      titleOptions: normalizeCalendarTitleOptions(savedTitleOptions),
       alarmsEnabled: savedAlarms === 'true',
       alarmMinutes: Number.isFinite(minutes) && minutes > 0 ? minutes : DEFAULT_ALARM_MINUTES,
       adoptLegacy: legacyDestination?.title === CALENDAR_NAME,
@@ -347,14 +368,14 @@ export const useCalendarStore = create<CalendarState>((set, get) => ({
       await AsyncStorage.multiSet([
         [managedKey(userId), calendarId], [destinationKey(userId), calendarId], [connectedKey(userId), 'true'],
         [nameKey(userId), draft.name], [colorKey(userId), draft.color],
-        [calendarSyncFilterKey(userId), draft.filter], [calendarTitleModeKey(userId), draft.titleMode],
+        [calendarSyncFilterKey(userId), draft.filter], [calendarTitleOptionsKey(userId), JSON.stringify(draft.titleOptions)],
         [calendarAlarmsKey(userId), draft.alarmsEnabled ? 'true' : 'false'],
         [calendarAlarmMinutesKey(userId), String(draft.alarmMinutes)],
       ]);
       assertCurrent();
       set({ activeUserId: userId, isConnected: true, calendarId });
       const result = await reconcileShiftsToCalendar(preview.shifts, preview.shiftCodes, calendarId, {
-        ...range, userId, titleMode: draft.titleMode,
+        ...range, userId, titleOptions: draft.titleOptions,
         alarmMinutes: draft.alarmsEnabled ? draft.alarmMinutes : null,
       });
       assertCurrent();

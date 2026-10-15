@@ -1,0 +1,57 @@
+{
+  "device": "C03ECA22-BBD2-4CA9-837B-330A788CADF7",
+  "boundary": "read-only dedicated synthetic simulator EventKit sqlite",
+  "events": [
+    {
+      "UUID": "389D054C-1000-4E8D-BF37-E8C4DF20EA56",
+      "summary": "Day shift (D) · Alex QA",
+      "description": "IShift - D\nIShift-Sync-Key: IShift:v2:00000000-0000-4000-8000-000000000001:00000000-0000-4000-8000-000000000110",
+      "start_date": 813286800.0,
+      "end_date": 813315600.0,
+      "all_day": 0,
+      "calendar_id": 11,
+      "alarms": [
+        {
+          "trigger_date": null,
+          "trigger_interval": 0,
+          "type": 0,
+          "disabled": 0
+        }
+      ]
+    },
+    {
+      "UUID": "E709FE63-EA12-42E6-9856-F3D5E2BDAEFB",
+      "summary": "Day shift (D) · Alex QA",
+      "description": "IShift - D\nIShift-Sync-Key: IShift:v2:00000000-0000-4000-8000-000000000001:00000000-0000-4000-8000-000000000111",
+      "start_date": 813373200.0,
+      "end_date": 813402000.0,
+      "all_day": 0,
+      "calendar_id": 11,
+      "alarms": [
+        {
+          "trigger_date": null,
+          "trigger_interval": 0,
+          "type": 0,
+          "disabled": 0
+        }
+      ]
+    },
+    {
+      "UUID": "FBB1C091-E154-42A9-B418-1B3BA8E51565",
+      "summary": "Day shift (D) · Alex QA",
+      "description": "IShift - D\nIShift-Sync-Key: IShift:v2:00000000-0000-4000-8000-000000000001:00000000-0000-4000-8000-000000000112",
+      "start_date": 813459600.0,
+      "end_date": 813488400.0,
+      "all_day": 0,
+      "calendar_id": 11,
+      "alarms": [
+        {
+          "trigger_date": null,
+          "trigger_interval": 0,
+          "type": 0,
+          "disabled": 0
+        }
+      ]
+    }
+  ]
+}

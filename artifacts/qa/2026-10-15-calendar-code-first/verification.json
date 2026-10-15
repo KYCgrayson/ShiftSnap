@@ -1,0 +1,13 @@
+{
+  "cancel_did_not_mutate": true,
+  "stable_ids_all_syncs": true,
+  "three_events_every_snapshot": true,
+  "code-only": true,
+  "with-meaning": true,
+  "with-person": true,
+  "both": true,
+  "timing_alarms_notes_preserved_between_title_modes": true,
+  "repeat_exact_match": true,
+  "notes_meaning_and_key_no_person": true,
+  "work_custom_alarm_15min_rest_no_custom_alarm": true
+}

@@ -1,0 +1,24 @@
+{
+  "en": {
+    "title": "Privacy Policy",
+    "date": "Updated November 5, 2026",
+    "sections": [
+      ["Account and schedules", "IShift uses Supabase for sign-in, database and file storage. Account information includes your email, display name and account identifier. Schedule photos, recognized names, dates, shift codes, times, group membership and notes are used to show and share the schedules you manage."],
+      ["Photo recognition", "If you approve recognition, IShift sends the selected roster image, which may include other people's names and shifts, to Google Gemini through our Supabase service. Optional instructions and known shift definitions can also be sent. Only submit material you are authorized to share. You can decline without sending the image for recognition."],
+      ["Sharing and device access", "Camera and photo permissions let you select a roster. Calendar access is used when you export events. Photo-library access can save a share image. People with access to the destination calendar or a shared image may see its contents. A note photo may be accessible to anyone with its file link."],
+      ["Storage and deletion", "Saved schedules are stored with your account; your device can also cache previously loaded schedules for offline viewing. In Settings, use Delete Account to request deletion of your account and associated personal data. A request receipt confirms the request, not completion. Copies already exported to calendars or shared with others are separate. Service-provider logs and backups are subject to the applicable provider's retention settings."],
+      ["Support and privacy questions", "Signed-in users can open Settings → Help & Support to submit a question. A submitted message is stored with your account so the operator can investigate. A reference is shown when the server accepts it. Do not include passwords, verification codes or other people's roster photos."]
+    ]
+  },
+  "zh-TW": {
+    "title": "隱私政策",
+    "date": "更新日期：2026 年 11 月 5 日",
+    "sections": [
+      ["帳號與班表", "IShift 使用 Supabase 提供登入、資料庫與檔案儲存服務。帳號資訊包含電子郵件、顯示名稱與帳號識別碼。我們使用班表照片、辨識出的姓名、日期、班別代號、時間、群組成員關係與筆記，顯示及分享你管理的班表。"],
+      ["班表照片辨識", "當你同意辨識，IShift 會透過 Supabase 服務將所選班表圖片傳送給 Google Gemini。圖片可能包含他人的姓名及班次，你輸入的提示與既有班別定義也可能一併傳送。請只提交你有權分享的資料。你可以取消，圖片就不會送去辨識。"],
+      ["分享與裝置權限", "相機與相簿權限用於選取班表；日曆權限用於匯出事件；相簿新增權限可儲存分享圖片。能存取目的地日曆或收到分享圖片的人可能看到內容。持有筆記照片檔案連結的人也可能開啟該照片。"],
+      ["資料儲存與刪除", "已儲存的班表與帳號相關聯，手機也會快取部分已載入的班表供離線查看。可在「設定 → 刪除帳號」提出刪除帳號及相關個人資料的申請；收到案件編號代表已受理，不代表已完成刪除。已匯出至日曆或他人持有的副本不會因此一併移除。服務供應商的日誌與備份依適用的保存設定處理。"],
+      ["客服與隱私問題", "登入後可在「設定 → 幫助與支援」提出問題。客服訊息會連同帳號識別資訊儲存，供營運人員查詢處理。伺服器受理後會顯示案件編號。請勿填寫密碼、驗證碼或他人的班表照片。"]
+    ]
+  }
+}

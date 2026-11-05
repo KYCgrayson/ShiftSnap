@@ -90,7 +90,7 @@ export default function WelcomeScreen() {
             <Text style={{ color: theme.colors.primary }}>{t('welcome.termsOfService')}</Text>
           </Link>
           {t('welcome.and')}
-          <Link href="/(auth)/terms">
+          <Link href="/(auth)/privacy">
             <Text style={{ color: theme.colors.primary }}>{t('welcome.privacyPolicy')}</Text>
           </Link>
         </Text>

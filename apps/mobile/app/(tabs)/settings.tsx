@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../src/theme';
@@ -45,6 +45,39 @@ import {
 const MY_COLOR_KEY = 'shiftsnap_my_schedule_color';
 const NOTIFICATIONS_KEY = 'shiftsnap_notifications_enabled';
 
+type AccountDeletionRequestStatus = 'pending' | 'in_progress' | 'action_required' | 'completed' | 'rejected';
+interface AccountDeletionRequest {
+  request_id: string;
+  status: AccountDeletionRequestStatus;
+  requested_at: string;
+}
+
+function parseAccountDeletionRequest(value: unknown): AccountDeletionRequest | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const candidate = value as Partial<AccountDeletionRequest>;
+  const statuses: AccountDeletionRequestStatus[] = ['pending', 'in_progress', 'action_required', 'completed', 'rejected'];
+  if (typeof candidate.request_id !== 'string'
+    || typeof candidate.requested_at !== 'string'
+    || !statuses.includes(candidate.status as AccountDeletionRequestStatus)) return null;
+  return candidate as AccountDeletionRequest;
+}
+
+async function clearDeletionAccountLocalPreferences(userId: string): Promise<void> {
+  const keys = await AsyncStorage.getAllKeys();
+  const accountKeyPrefixes = [
+    'shiftsnap_calendar_destination:', 'shiftsnap_calendar_connected:',
+    'shiftsnap_calendar_alarms_enabled:', 'shiftsnap_calendar_sync_filter:',
+    'shiftsnap_calendar_title_mode:', 'shiftsnap_calendar_title_options:v1:',
+    'shiftsnap_managed_calendar_id:', 'shiftsnap_calendar_name:',
+    'shiftsnap_calendar_color:', 'shiftsnap_calendar_alarm_minutes:',
+  ];
+  const accountKeys = keys.filter((key) =>
+    accountKeyPrefixes.some((prefix) => key === `${prefix}${userId}`)
+      || key.startsWith(`ishift:share-quote:v1:${userId}:`),
+  );
+  if (accountKeys.length > 0) await AsyncStorage.multiRemove(accountKeys);
+}
+
 function getMonthDateRange(yearMonth: string): { startDate: string; endDate: string } {
   const [year, month] = yearMonth.split('-').map(Number);
   const lastDay = new Date(year, month, 0).getDate();
@@ -62,7 +95,7 @@ function getCurrentYearMonth(): string {
 export default function SettingsScreen() {
   const theme = useTheme();
   const { t, i18n } = useTranslation();
-  const { user, signOut, isGuest } = useAuthStore();
+  const { user, signOut, isGuest, isOfflineReadOnly } = useAuthStore();
   const themeMode = useThemeStore((s) => s.mode);
   const setThemeMode = useThemeStore((s) => s.setMode);
   const { locale, setLocale } = useLocaleStore();
@@ -91,6 +124,9 @@ export default function SettingsScreen() {
   const [newCoworkerName, setNewCoworkerName] = useState('');
   const [showFeedback, setShowFeedback] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
+  const [sendingFeedback, setSendingFeedback] = useState(false);
+  const [accountDeletionRequest, setAccountDeletionRequest] = useState<AccountDeletionRequest | null>(null);
+  const [submittingDeletionRequest, setSubmittingDeletionRequest] = useState(false);
   const [showJoinGroup, setShowJoinGroup] = useState(false);
   const [joinInviteCode, setJoinInviteCode] = useState('');
   const [showShareInvite, setShowShareInvite] = useState(false);
@@ -144,6 +180,40 @@ export default function SettingsScreen() {
   useEffect(() => {
     if (user?.id) fetchPersons(user.id);
   }, [user?.id]);
+
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    setAccountDeletionRequest(null);
+    if (!user?.id || isGuest || isOfflineReadOnly) return () => { active = false; };
+    void (async () => {
+      try {
+        const { data, error } = await supabase.rpc('get_my_account_deletion_request');
+        if (!active || error) return;
+        const request = parseAccountDeletionRequest(data);
+        setAccountDeletionRequest(request);
+        if (request?.status === 'completed') {
+          Alert.alert(
+            t('settings.deleteRequestTitle'),
+            t('settings.deleteRequestCompleted', { reference: request.request_id }),
+            [{ text: t('common.ok'), onPress: () => void (async () => {
+              try {
+                if (user?.id) await clearDeletionAccountLocalPreferences(user.id);
+              } catch {
+                Alert.alert(t('common.error'), t('settings.deleteRequestLocalCleanupFailed'));
+              } finally {
+                await signOut();
+                router.replace('/(auth)/welcome');
+              }
+            })() }],
+            { cancelable: false },
+          );
+        }
+      } catch {
+        // Keep the action usable; submitting is idempotent if a request exists.
+      }
+    })();
+    return () => { active = false; };
+  }, [user?.id, isGuest, isOfflineReadOnly, signOut, t]));
 
   useEffect(() => {
     if (currentGroup?.id && !isGuest) {
@@ -360,18 +430,58 @@ export default function SettingsScreen() {
   };
 
   const handleDeleteAccount = () => {
+    if (!user?.id || isGuest || isOfflineReadOnly) {
+      Alert.alert(t('common.error'), t('settings.deleteRequestOnlineRequired'));
+      return;
+    }
+    if (accountDeletionRequest?.status === 'completed') {
+      Alert.alert(t('settings.deleteRequestTitle'), t('settings.deleteRequestCompleted', { reference: accountDeletionRequest.request_id }));
+      return;
+    }
+    const requestingUserId = user.id;
+    if (accountDeletionRequest && ['pending', 'in_progress', 'action_required'].includes(accountDeletionRequest.status)) {
+      const statusLabel = t(`settings.deleteRequestStatuses.${accountDeletionRequest.status}`);
+      const actionHint = accountDeletionRequest.status === 'action_required'
+        ? `\n\n${t('settings.deleteRequestActionRequiredHint')}`
+        : '';
+      Alert.alert(
+        t('settings.deleteRequestTitle'),
+        `${t('settings.deleteRequestExisting', { status: statusLabel, reference: accountDeletionRequest.request_id })}${actionHint}\n\n${t('settings.deleteRequestProcessingTime')}`,
+      );
+      return;
+    }
     Alert.alert(
       t('settings.deleteAccount'),
       t('settings.deleteAccountConfirm'),
       [
         { text: t('common.cancel'), style: 'cancel' },
         {
-          text: t('settings.deleteAndSignOut'),
+          text: t('settings.submitDeletionRequest'),
           style: 'destructive',
-          onPress: async () => {
-            await signOut();
-            router.replace('/(auth)/welcome');
-          },
+          onPress: () => void (async () => {
+            const currentAuth = useAuthStore.getState();
+            if (submittingDeletionRequest) return;
+            if (currentAuth.user?.id !== requestingUserId || currentAuth.isGuest || currentAuth.isOfflineReadOnly) {
+              Alert.alert(t('common.error'), t('settings.deleteRequestOnlineRequired'));
+              return;
+            }
+            setSubmittingDeletionRequest(true);
+            try {
+              const { data, error } = await supabase.rpc('request_account_deletion');
+              const request = parseAccountDeletionRequest(data);
+              if (error || !request) throw new Error('request receipt was not confirmed');
+              if (useAuthStore.getState().user?.id !== requestingUserId) return;
+              setAccountDeletionRequest(request);
+              Alert.alert(
+                t('settings.deleteRequestTitle'),
+                `${t('settings.deleteRequestReceived', { reference: request.request_id })}\n\n${t('settings.deleteRequestProcessingTime')}`,
+              );
+            } catch {
+              Alert.alert(t('common.error'), t('settings.deleteRequestUnconfirmed'));
+            } finally {
+              setSubmittingDeletionRequest(false);
+            }
+          })(),
         },
       ]
     );
@@ -1475,7 +1585,7 @@ export default function SettingsScreen() {
             <SettingsItem
               icon="help-circle-outline"
               title={t('settings.helpSupport')}
-              onPress={() => { setFeedbackText(''); setShowFeedback(true); }}
+              onPress={() => { if (isGuest || !user) { Alert.alert(t('settings.helpSupport'), t('settings.feedbackSignIn')); return; } setShowFeedback(true); }}
             />
             <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
             <SettingsItem
@@ -1511,6 +1621,10 @@ export default function SettingsScreen() {
                 <SettingsItem
                   icon="trash-outline"
                   title={t('settings.deleteAccount')}
+                  subtitle={accountDeletionRequest ? t('settings.deleteRequestStatusLine', {
+                    status: t(`settings.deleteRequestStatuses.${accountDeletionRequest.status}`),
+                    reference: accountDeletionRequest.request_id.slice(0, 8),
+                  }) : undefined}
                   onPress={handleDeleteAccount}
                   destructive
                 />
@@ -1680,7 +1794,7 @@ export default function SettingsScreen() {
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
-          onPress={() => setShowFeedback(false)}
+          disabled={sendingFeedback} onPress={() => setShowFeedback(false)}
         >
           <View
             style={[styles.modalContent, { backgroundColor: theme.colors.cardBackground }]}
@@ -1699,6 +1813,8 @@ export default function SettingsScreen() {
               placeholderTextColor={theme.colors.textMuted}
               value={feedbackText}
               onChangeText={setFeedbackText}
+              maxLength={2000}
+              editable={!sendingFeedback}
               multiline
               numberOfLines={4}
               textAlignVertical="top"
@@ -1707,7 +1823,7 @@ export default function SettingsScreen() {
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={[styles.modalButton, { borderColor: theme.colors.border }]}
-                onPress={() => setShowFeedback(false)}
+                disabled={sendingFeedback} onPress={() => setShowFeedback(false)}
               >
                 <Text style={[styles.modalButtonText, { color: theme.colors.textSecondary }]}>
                   {t('common.cancel')}
@@ -1718,11 +1834,21 @@ export default function SettingsScreen() {
                   borderColor: theme.colors.primary,
                   backgroundColor: feedbackText.trim() ? theme.colors.primary : theme.colors.primary + '50',
                 }]}
-                disabled={!feedbackText.trim()}
-                onPress={() => {
-                  // TODO: send feedback to backend when ready
-                  setShowFeedback(false);
-                  Alert.alert(t('settings.feedbackSent'), t('settings.feedbackSentDesc'));
+                disabled={sendingFeedback || !feedbackText.trim()}
+                onPress={async () => {
+                  if (sendingFeedback || !user || isGuest) return;
+                  setSendingFeedback(true);
+                  try {
+                    const { data, error } = await supabase.rpc('submit_support_request', { p_message: feedbackText.trim() });
+                    if (error || typeof data !== 'string') throw new Error('unconfirmed');
+                    setFeedbackText('');
+                    setShowFeedback(false);
+                    Alert.alert(t('settings.feedbackSent'), t('settings.feedbackReceipt', { receipt: data }));
+                  } catch {
+                    Alert.alert(t('settings.helpSupport'), t('settings.feedbackUnconfirmed'));
+                  } finally {
+                    setSendingFeedback(false);
+                  }
                 }}
               >
                 <Text style={[styles.modalButtonText, { color: theme.colors.white }]}>

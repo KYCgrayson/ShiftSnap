@@ -30,6 +30,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useTheme } from '../src/theme';
 import { supabase } from '../src/services/supabase';
+import { confirmRosterPhotoTransmission } from '../src/services/rosterPhotoConsent';
 import { Card, Button, Input, TimePickerInput } from '../src/components/ui';
 import { useAuthStore } from '../src/stores/authStore';
 import { useShiftCodeStore } from '../src/stores/shiftCodeStore';
@@ -132,6 +133,7 @@ export default function ReviewScheduleScreen() {
 
   // Step 1: Re-analyze
   const [reanalyzing, setReanalyzing] = useState(false);
+  const reanalyzeConsentPending = useRef(false);
   const [guideContrastMode, setGuideContrastMode] = useState<GuideContrastMode>("normal");
 
   // Step 4: Saving
@@ -647,9 +649,15 @@ export default function ReviewScheduleScreen() {
       Alert.alert(t('common.error'), t('offline.readOnly'));
       return;
     }
-    if (!params.imageUrl || reanalyzing) return;
-    setReanalyzing(true);
+    if (!params.imageUrl || reanalyzing || reanalyzeConsentPending.current) return;
+    reanalyzeConsentPending.current = true;
     try {
+      if (!await confirmRosterPhotoTransmission('reanalyze')) return;
+      if (useAuthStore.getState().isOfflineReadOnly || useAuthStore.getState().user?.id !== user?.id) {
+        Alert.alert(t('common.error'), t('offline.readOnly'));
+        return;
+      }
+      setReanalyzing(true);
       // Convert image to base64
       const response = await fetch(params.imageUrl);
       const blob = await response.blob();
@@ -691,6 +699,7 @@ export default function ReviewScheduleScreen() {
       Alert.alert(t('common.error'), msg);
     } finally {
       setReanalyzing(false);
+      reanalyzeConsentPending.current = false;
     }
   };
 

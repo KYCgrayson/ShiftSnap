@@ -21,6 +21,7 @@ import { useTheme } from '../../src/theme';
 import { Button } from '../../src/components/ui';
 import { supabase } from '../../src/services/supabase';
 import { buildScheduleImageStoragePath, getShiftImageStoragePath } from '../../src/services/shiftImages';
+import { confirmRosterPhotoTransmission } from '../../src/services/rosterPhotoConsent';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useScheduleStore } from '../../src/stores/scheduleStore';
 import { useLocaleStore } from '../../src/stores/localeStore';
@@ -64,6 +65,7 @@ export default function ScanScreen() {
   const currentGroupId = useGroupStore((s) => s.currentGroup?.id);
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
   const handledPickerUris = useRef(new Set<string>());
+  const photoConsentPending = useRef(false);
   const isDemoAccount = user?.email?.toLowerCase() === DEMO_ACCOUNT_EMAIL;
 
   const handleImagePickerResult = useCallback((result: ImagePicker.ImagePickerResult) => {
@@ -322,9 +324,19 @@ export default function ScanScreen() {
       Alert.alert(t('common.error'), t('auth.signInRequired'));
       return;
     }
+    if (processing || photoConsentPending.current) return;
 
-    setProcessing(true);
+    photoConsentPending.current = true;
     try {
+      // Selection and preview are local. No OCR or photo storage request may
+      // begin until this action's explicit consent, including the demo image.
+      if (!await confirmRosterPhotoTransmission('recognize')) return;
+      const currentAuth = useAuthStore.getState();
+      if (currentAuth.isOfflineReadOnly || currentAuth.user?.id !== user.id) {
+        Alert.alert(t('common.error'), t('offline.readOnly'));
+        return;
+      }
+      setProcessing(true);
       // Always convert to base64 and send directly to Edge Function
       const base64 = await imageToBase64(capturedImage);
 
@@ -417,6 +429,7 @@ export default function ScanScreen() {
       Alert.alert(t('scan.processingFailed'), userMessage);
     } finally {
       setProcessing(false);
+      photoConsentPending.current = false;
     }
   };
 

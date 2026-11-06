@@ -27,13 +27,13 @@ export default {
 
   // Welcome screen
   welcome: {
-    subtitle: '拍下班表，同步生活',
-    scanTitle: '掃描班表',
-    scanDesc: '拍攝紙本班表照片',
-    syncTitle: '自動同步',
-    syncDesc: '同步至你喜愛的日曆 App',
-    alarmTitle: '智慧鬧鐘',
-    alarmDesc: '再也不會忘記上班',
+    subtitle: '三步，把班表帶進生活',
+    importTitle: '匯入班表',
+    importDesc: '拍照或選取照片，帶入紙本班表。',
+    confirmTitle: '核對班表',
+    confirmDesc: '確認日期、姓名與 A／B／C 等班別代號。',
+    exportTitle: '匯出班表',
+    exportDesc: '同步到手機日曆，或分享一張月班表圖片。',
     getStarted: '開始使用',
     alreadyHaveAccount: '已經有帳號了？',
     tryWithoutAccount: '不建立帳號試用',
@@ -169,6 +169,9 @@ export default {
     photoConsentTitle: '同意傳送班表照片進行 AI 辨識？',
     photoConsentRecognize: '這張照片可能包含同事姓名、日期、班別代碼與時間。同意後，IShift 會透過 Supabase 將照片傳給 Google Gemini 辨識；如有提供補充辨識提示或既有班別代碼說明，也可能一併傳送。登入帳號時，IShift 也會在辨識後把原始照片儲存在 Supabase，方便日後查看。請確認你有權分享照片中的資料。',
     photoConsentReanalyze: '這張班表照片可能包含同事姓名、日期、班別代碼與時間。重新分析會再次透過 Supabase 把照片傳給 Google Gemini，也會傳送辨識提示及任何提供的既有班別代碼說明。請確認你有權分享照片中的資料。',
+    scheduleGroup: '此班表所屬群組',
+    groupVisibility: '將儲存至「{{group}}」。群組成員可查看原始班表照片及儲存的班次，不只你選取的個人班次。',
+    personalVisibility: '這張班表儲存在你的帳號內，尚未分享到群組。',
     photoConsentConfirm: '同意並辨識',
     positionGuide: '將班表放入框架內',
     processingFailed: '處理失敗',
@@ -414,6 +417,8 @@ export default {
     switchGroup: '切換群組',
     admin: '管理員',
     shareInvite: '分享邀請碼',
+    shareGroupVisibility: '新上傳的班表會儲存至「{{group}}」，成員可查看原始照片及儲存的班次。',
+    shareSchedulesConfirm: '將所有尚未在「{{group}}」的班表移至此群組，成員可查看原始照片及儲存的班次。班表若原屬其他群組，也會改至此群組。是否繼續？',
     shareExistingSchedules: '分享現有班表',
     unsharedCount: '{{count}} 個班表尚未分享至此群組',
     unsharedCountOne: '1 個班表尚未分享至此群組',
@@ -497,6 +502,7 @@ export default {
 
   // Review schedule screen
   review: {
+    visibilityUnavailable: '暫時無法確認這張班表所屬的群組。請連線後重試，確認分享範圍再繼續。',
     title: '檢視班表',
     // Step labels
     stepPerson: '選人',

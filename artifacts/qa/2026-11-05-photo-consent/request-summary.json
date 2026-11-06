@@ -1,0 +1,10 @@
+{
+  "boundary": "localhost synthetic QA only; startup baseline, no UI consent action exercised",
+  "device": "C03ECA22-BBD2-4CA9-837B-330A788CADF7",
+  "requestsObserved": 20,
+  "ocrRequestsObserved": 0,
+  "storageRequestsObserved": 0,
+  "cancelScenario": "not_exercised",
+  "acceptScenario": "not_exercised",
+  "reanalyzeScenario": "not_exercised"
+}

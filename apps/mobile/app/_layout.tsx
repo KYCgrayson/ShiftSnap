@@ -26,6 +26,7 @@ function RootLayoutInner() {
   const theme = useTheme();
   const { initialized, initialize, user } = useAuthStore();
   const themeInitialized = useThemeStore((s) => s.initialized);
+  const localeInitialized = useLocaleStore((s) => s.initialized);
   const fetchOrCreateDefaultGroup = useGroupStore((s) => s.fetchOrCreateDefaultGroup);
   const initViewScope = useGroupStore((s) => s.initViewScope);
 
@@ -89,10 +90,8 @@ function RootLayoutInner() {
     return () => subscription.remove();
   }, [initialized, user?.id]);
 
-  // Wait for both auth and theme to load before rendering UI, otherwise
-  // the theme briefly flashes the OS default before the persisted user
-  // preference takes effect.
-  if (!initialized || !themeInitialized) {
+  // Load the saved appearance and language before showing the first screen.
+  if (!initialized || !themeInitialized || !localeInitialized) {
     return (
       <View style={[styles.loading, { backgroundColor: theme.colors.warmWhite }]}>
         <ActivityIndicator size="large" color={theme.colors.primary} />
@@ -128,6 +127,7 @@ export default function RootLayout() {
   const initializeCalendar = useCalendarStore((s) => s.initialize);
   const initializeLocale = useLocaleStore((s) => s.initialize);
   const locale = useLocaleStore((s) => s.locale);
+  const localeInitialized = useLocaleStore((s) => s.initialized);
 
   useEffect(() => {
     initializeTheme();
@@ -137,10 +137,10 @@ export default function RootLayout() {
 
   // Sync persisted locale with i18n
   useEffect(() => {
-    if (locale && locale !== i18n.language) {
+    if (localeInitialized && locale && locale !== i18n.language) {
       i18n.changeLanguage(locale);
     }
-  }, [locale]);
+  }, [localeInitialized, locale]);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

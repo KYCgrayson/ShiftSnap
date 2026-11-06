@@ -57,7 +57,7 @@ interface PersonState {
   error: string | null;
 
   fetchPersons: (userId: string) => Promise<void>;
-  createPerson: (userId: string, name: string, notes?: string, color?: string) => Promise<string>;
+  createPerson: (userId: string, name: string, notes?: string, color?: string, destinationGroupId?: string | null) => Promise<string>;
   updatePerson: (id: string, updates: Partial<Pick<PersonItem, 'name' | 'notes' | 'color'>>) => Promise<void>;
   deletePerson: (id: string) => Promise<void>;
   fetchAliases: (groupId: string) => Promise<void>;
@@ -137,7 +137,7 @@ export const usePersonStore = create<PersonState>((set, get) => ({
     }
   },
 
-  createPerson: async (userId: string, name: string, notes?: string, color?: string) => {
+  createPerson: async (userId: string, name: string, notes?: string, color?: string, destinationGroupId?: string | null) => {
     if (getIsGuest()) {
       const guestId = `g-person-local-${Date.now()}`;
       const newPerson: PersonItem = {
@@ -161,14 +161,15 @@ export const usePersonStore = create<PersonState>((set, get) => ({
     if (getIsOfflineReadOnly()) throw new Error('Offline mode is read-only. Reconnect to edit people.');
     try {
       const currentGroup = useGroupStore.getState().currentGroup;
-      if (currentGroup?.id) {
+      const groupId = destinationGroupId === undefined ? currentGroup?.id || null : destinationGroupId;
+      if (groupId) {
         const { data, error } = await supabase.rpc('resolve_roster_person', {
-          p_group_id: currentGroup.id,
+          p_group_id: groupId,
           p_name: name,
           p_color: color || '#4F6BFF',
         });
         if (error || !data) throw error ?? new Error('Failed to resolve roster person');
-        await Promise.all([get().fetchPersons(userId), get().fetchAliases(currentGroup.id)]);
+        await Promise.all([get().fetchPersons(userId), get().fetchAliases(groupId)]);
         return data as string;
       }
       const usedColors = get().persons.map((p) => p.color);
@@ -178,7 +179,7 @@ export const usePersonStore = create<PersonState>((set, get) => ({
         .from('persons')
         .insert({
           owner_id: userId,
-          group_id: currentGroup?.id || null,
+          group_id: groupId,
           name,
           color: personColor,
           notes: notes || null,

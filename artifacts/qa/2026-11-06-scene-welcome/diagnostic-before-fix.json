@@ -1,0 +1,12 @@
+{
+  "scenario": "SDK 27 sample roster, explicit consent, isolated fixture",
+  "markersAfterConsent": [
+    [
+      "GET",
+      "/qa/phase/image-fetch-begin"
+    ]
+  ],
+  "reviewObserved": false,
+  "waitSeconds": 35,
+  "scanUI": "Processing spinner"
+}

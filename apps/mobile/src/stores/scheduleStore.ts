@@ -35,6 +35,7 @@ interface ScheduleState {
     yearMonth: string,
     ocrResult: OCRResult,
     imageStatus?: ScheduleItem['image_status'],
+    destinationGroupId?: string | null,
   ) => Promise<string>;
   updateScheduleImage: (
     scheduleId: string,
@@ -105,6 +106,7 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     yearMonth: string,
     ocrResult: OCRResult,
     imageStatus: ScheduleItem['image_status'] = 'pending',
+    destinationGroupId?: string | null,
   ) => {
     if (getIsGuest()) {
       const localSchedule: ScheduleItem = {
@@ -139,7 +141,8 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
         .from('schedules')
         .insert({
           owner_id: userId,
-          group_id: currentGroup?.id || null,
+          // The scan pins the destination shown in its consent before OCR starts.
+          group_id: destinationGroupId === undefined ? currentGroup?.id || null : destinationGroupId,
           image_url: imageUrl,
           image_status: imageStatus,
           year_month: yearMonth,

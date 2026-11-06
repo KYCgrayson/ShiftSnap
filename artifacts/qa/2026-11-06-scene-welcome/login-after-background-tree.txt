@@ -1,0 +1,44 @@
+Attributes: Application, 0x110eccb40, pid: 94823, label: 'IShift'
+Element subtree:
+ →Application, 0x110eccb40, pid: 94823, label: 'IShift'
+    Window (Main), 0x110eccc80, {{0.0, 0.0}, {440.0, 956.0}}
+      Other, 0x110eccdc0, {{0.0, 0.0}, {440.0, 956.0}}
+        Other, 0x110eccf00, {{0.0, 0.0}, {440.0, 956.0}}
+          Other, 0x110ecd040, {{0.0, 0.0}, {440.0, 956.0}}
+            Other, 0x110ecd180, {{0.0, 0.0}, {440.0, 956.0}}
+              Other, 0x110ecd2c0, {{0.0, 0.0}, {440.0, 956.0}}
+                Other, 0x110ecd400, {{0.0, 0.0}, {440.0, 956.0}}
+                  Other, 0x110ecd540, {{0.0, 0.0}, {440.0, 956.0}}
+                    Other, 0x110ecd680, {{0.0, 0.0}, {440.0, 956.0}}
+                      Other, 0x110ecd7c0, {{0.0, 0.0}, {440.0, 956.0}}
+                        Other, 0x110ecd900, {{0.0, 0.0}, {440.0, 956.0}}
+                          Other, 0x110ecda40, {{0.0, 0.0}, {440.0, 956.0}}
+                            Other, 0x110ecdb80, {{0.0, 0.0}, {440.0, 956.0}}
+                              Other, 0x110ecdcc0, {{0.0, 0.0}, {440.0, 956.0}}
+                                Other, 0x110ecde00, {{0.0, 0.0}, {440.0, 956.0}}
+                                  Other, 0x110ecdf40, {{0.0, 0.0}, {440.0, 956.0}}
+                                    Other, 0x110ece080, {{0.0, 0.0}, {440.0, 956.0}}
+                                      Other, 0x110ece1c0, {{0.0, 0.0}, {440.0, 956.0}}
+                                        Other, 0x110ece300, {{0.0, 0.0}, {440.0, 956.0}}
+                                          Other, 0x110ece440, {{0.0, 0.0}, {440.0, 956.0}}
+                                            Other, 0x110ece580, {{0.0, 0.0}, {440.0, 956.0}}
+                                              Other, 0x110ece6c0, {{24.0, 86.0}, {24.0, 48.7}}, label: ''
+                                              StaticText, 0x110ece800, {{24.0, 174.7}, {392.0, 33.7}}, label: 'Welcome back'
+                                                StaticText, 0x110ece940, {{24.0, 174.7}, {392.0, 33.7}}, label: 'Welcome back'
+                                              StaticText, 0x110ecea80, {{24.0, 216.3}, {392.0, 22.0}}, label: 'Sign in to your account'
+                                                StaticText, 0x110ecebc0, {{24.0, 216.3}, {392.0, 22.0}}, label: 'Sign in to your account'
+                                              Other, 0x110eced00, {{24.0, 278.3}, {392.0, 52.0}}
+                                                Button, 0x110ecee40, {{24.0, 278.3}, {392.0, 52.0}}, label: '透過Apple繼續'
+                                              Other, 0x110ecef80, {{24.0, 342.3}, {392.0, 52.0}}, label: ', Google'
+                                              Other, 0x110ecf0c0, {{24.0, 418.3}, {392.0, 48.0}}, label: 'Continue as Guest'
+                                    Toolbar, 0x110ecf200, {{0.0, 0.0}, {440.0, 956.0}}, identifier: 'Toolbar', label: '工具列'
+                                      Other, 0x110ecf340, {{0.0, 0.0}, {440.0, 956.0}}
+                        Toolbar, 0x110ecf480, {{0.0, 0.0}, {440.0, 956.0}}, identifier: 'Toolbar', label: '工具列'
+                          Other, 0x110ecf5c0, {{0.0, 0.0}, {440.0, 956.0}}
+Path to element:
+ →Application, 0x110eccb40, pid: 94823, label: 'IShift'
+Query chain:
+ →Find: Application 'com.shiftsnap.app'
+  Output: {
+    Application, 0x110ecca00, pid: 94823, label: 'IShift'
+  }

@@ -1,0 +1,20 @@
+{
+  "outcome": "XCTest launcher reached installed bundle; app terminated before the Home screen and the Scan consent could be exercised.",
+  "sdk": "iPhoneSimulator27.0",
+  "runtime": "iOS 27.0 (24A434)",
+  "installedSimulatorBinarySDK": "27.0",
+  "availableOlderSimulatorRuntime": false,
+  "crashReportName": "IShift-2026-11-06-155319.ips",
+  "exception": "EXC_BREAKPOINT",
+  "signal": "SIGTRAP",
+  "triggeredFrames": [
+    "___UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption_block_invoke",
+    "_dispatch_client_callout",
+    "_dispatch_once_callout",
+    "-[UIApplication workspace:didCreateScene:withTransitionContext:completion:]",
+    "-[UIApplicationSceneClientAgent scene:didInitializeWithEvent:completion:]",
+    "__95-[FBSScene _callOutQueue_didCreateWithTransitionContext:alternativeCreationCallout:completion:]_block_invoke"
+  ],
+  "xctestSummary": "Executed 1 test, 1 failure. Scan tab missing because app terminated before XCTest could snapshot the app.",
+  "scope": "Native simulator failure on this candidate; no conclusion about older operating systems or store builds."
+}

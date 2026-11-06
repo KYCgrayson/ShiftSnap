@@ -1,0 +1,18 @@
+{
+  "pass": true,
+  "method": "Expo compileModsAsync iOS base mod file providers, twice",
+  "sceneStarts": 1,
+  "manifest": {
+    "UIApplicationSupportsMultipleScenes": false,
+    "UISceneConfigurations": {
+      "UIWindowSceneSessionRoleApplication": [
+        {
+          "UISceneConfigurationName": "Default Configuration",
+          "UISceneDelegateClassName": "$(PRODUCT_MODULE_NAME).SceneDelegate"
+        }
+      ]
+    }
+  },
+  "sourceTemplate": "SDK54 Swift template with legacy window startup",
+  "temporaryProject": "/private/tmp/ishift-scene-prebuild-mTdiTi"
+}

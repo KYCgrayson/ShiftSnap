@@ -1,0 +1,142 @@
+Attributes: Application, 0x107ab5b80, pid: 99995, label: 'IShift'
+Element subtree:
+ →Application, 0x107ab5b80, pid: 99995, label: 'IShift'
+    Window (Main), 0x107ab5cc0, {{0.0, 0.0}, {440.0, 956.0}}
+      Other, 0x107ab5e00, {{0.0, 0.0}, {440.0, 956.0}}
+        Other, 0x103a6b700, {{0.0, 0.0}, {440.0, 956.0}}
+          Other, 0x103a6b840, {{0.0, 0.0}, {440.0, 956.0}}
+            Other, 0x103a6b980, {{0.0, 0.0}, {440.0, 956.0}}
+              Other, 0x103a6bac0, {{0.0, 0.0}, {440.0, 956.0}}
+                Other, 0x103a6bd40, {{0.0, 0.0}, {440.0, 956.0}}
+                  Other, 0x103a6bc00, {{0.0, 0.0}, {440.0, 956.0}}
+                    Other, 0x103a69400, {{0.0, 0.0}, {440.0, 956.0}}
+                      Other, 0x103a69540, {{0.0, 0.0}, {440.0, 956.0}}
+                        Other, 0x107bec000, {{0.0, 0.0}, {440.0, 956.0}}
+                          Other, 0x107bec140, {{0.0, 0.0}, {440.0, 956.0}}
+                            Other, 0x107bec280, {{0.0, 0.0}, {440.0, 956.0}}
+                              Other, 0x107bec3c0, {{0.0, 0.0}, {440.0, 956.0}}
+                                Other, 0x107bec500, {{0.0, 0.0}, {440.0, 858.0}}
+                                  Other, 0x107bec640, {{0.0, 0.0}, {440.0, 858.0}}
+                                    Other, 0x107bec780, {{0.0, 0.0}, {440.0, 858.0}}
+                                      Other, 0x107bec8c0, {{0.0, 0.0}, {440.0, 858.0}}
+                                        Other, 0x107beca00, {{0.0, 0.0}, {440.0, 858.0}}
+                                          Other, 0x107becb40, {{0.0, 0.0}, {440.0, 858.0}}
+                                            Other, 0x107becc80, {{0.0, 0.0}, {440.0, 858.0}}
+                                              Other, 0x107becdc0, {{0.0, 62.0}, {440.0, 762.0}}
+                                                ScrollView, 0x107becf00, {{0.0, 62.0}, {440.0, 762.0}}
+                                                  Other, 0x107bed040, {{0.0, 62.0}, {440.0, 1147.0}}
+                                                    Other, 0x107bed180, {{0.0, 62.0}, {440.0, 1147.0}}
+                                                      StaticText, 0x107bed2c0, {{16.0, 78.0}, {124.7, 17.0}}, label: 'Good afternoon,'
+                                                        StaticText, 0x107bed400, {{16.0, 78.0}, {124.7, 17.0}}, label: 'Good afternoon,'
+                                                      Other, 0x107bed540, {{328.0, 81.0}, {44.0, 44.0}}, label: ''
+                                                      Other, 0x107bed680, {{380.0, 81.0}, {44.0, 44.0}}, label: 'G'
+                                                      StaticText, 0x107bed7c0, {{16.0, 99.0}, {124.7, 28.7}}, label: 'Guest User'
+                                                        StaticText, 0x107bed900, {{16.0, 99.0}, {124.7, 28.7}}, label: 'Guest User'
+                                                      Other, 0x107beda40, {{16.0, 151.7}, {408.0, 77.0}}, label: ', You're in guest mode, Create an account to save your data and unlock all features., '
+                                                      Other, 0x107bedb80, {{16.0, 244.7}, {408.0, 202.7}}
+                                                        Other, 0x107bedcc0, {{16.0, 244.7}, {408.0, 202.7}}
+                                                        StaticText, 0x107bede00, {{36.0, 264.7}, {368.0, 17.0}}, label: 'Today'
+                                                          StaticText, 0x107bedf40, {{36.0, 264.7}, {368.0, 17.0}}, label: 'Today'
+                                                        StaticText, 0x107bee080, {{36.0, 285.7}, {368.0, 19.3}}, label: 'Fri, November 6, 2026'
+                                                          StaticText, 0x107bee1c0, {{36.0, 285.7}, {368.0, 19.3}}, label: 'Fri, November 6, 2026'
+                                                        StaticText, 0x107bee300, {{36.0, 321.0}, {33.7, 57.3}}, label: 'A'
+                                                          StaticText, 0x107bee440, {{36.0, 321.0}, {33.7, 57.3}}, label: 'A'
+                                                        StaticText, 0x107bee580, {{36.0, 382.3}, {98.7, 19.3}}, label: 'Morning shift'
+                                                          StaticText, 0x107bee6c0, {{36.0, 382.3}, {98.7, 19.3}}, label: 'Morning shift'
+                                                        StaticText, 0x107bee800, {{36.0, 405.7}, {114.3, 21.7}}, label: '06:00 - 14:00'
+                                                          StaticText, 0x107bee940, {{36.0, 405.7}, {114.3, 21.7}}, label: '06:00 - 14:00'
+                                                      StaticText, 0x107beea80, {{16.0, 471.3}, {408.0, 21.7}}, label: 'Quick Actions'
+                                                        StaticText, 0x107beebc0, {{16.0, 471.3}, {408.0, 21.7}}, label: 'Quick Actions'
+                                                      Other, 0x107beed00, {{16.0, 509.0}, {128.0, 102.3}}, label: ', Scan Schedule'
+                                                      Other, 0x107beee40, {{156.0, 509.0}, {128.0, 102.3}}, label: ', View Calendar'
+                                                      Other, 0x107beef80, {{296.0, 509.0}, {128.0, 102.3}}, label: ', Shift Codes'
+                                                      StaticText, 0x107bef0c0, {{16.0, 635.3}, {139.7, 21.7}}, label: 'Upcoming Shifts'
+                                                        StaticText, 0x107bef200, {{16.0, 635.3}, {139.7, 21.7}}, label: 'Upcoming Shifts'
+                                                      StaticText, 0x107bef340, {{378.3, 645.7}, {45.7, 17.0}}, label: 'See All'
+                                                        StaticText, 0x107bef480, {{378.3, 645.7}, {45.7, 17.0}}, label: 'See All'
+                                                      Other, 0x107bef5c0, {{16.0, 689.0}, {408.0, 88.0}}
+                                                        Other, 0x107bef700, {{36.0, 709.0}, {48.0, 48.0}}
+                                                        StaticText, 0x107bef840, {{54.0, 715.3}, {12.0, 21.7}}, label: '6'
+                                                          StaticText, 0x107bef980, {{54.0, 715.3}, {12.0, 21.7}}, label: '6'
+                                                        StaticText, 0x107befac0, {{96.0, 714.7}, {288.0, 19.3}}, label: 'Morning shift'
+                                                          StaticText, 0x107befc00, {{96.0, 714.7}, {288.0, 19.3}}, label: 'Morning shift'
+                                                        StaticText, 0x107befd40, {{384.0, 722.7}, {20.0, 20.7}}, label: ''
+                                                          StaticText, 0x107befe80, {{384.0, 722.7}, {20.0, 20.7}}, label: ''
+                                                        StaticText, 0x107bf8000, {{53.0, 737.0}, {14.0, 13.3}}, label: 'Fri'
+                                                          StaticText, 0x107bf8140, {{53.0, 737.0}, {14.0, 13.3}}, label: 'Fri'
+                                                        StaticText, 0x107bf8280, {{96.0, 736.0}, {288.0, 15.7}}, label: 'Starts at 06:00'
+                                                          StaticText, 0x107bf83c0, {{96.0, 736.0}, {288.0, 15.7}}, label: 'Starts at 06:00'
+                                                      Other, 0x107bf8500, {{16.0, 785.0}, {408.0, 88.0}}
+                                                        Other, 0x107bf8640, {{36.0, 805.0}, {48.0, 48.0}}
+                                                        StaticText, 0x107bf8780, {{54.7, 811.3}, {10.7, 21.7}}, label: '7'
+                                                          StaticText, 0x107bf88c0, {{54.7, 811.3}, {10.7, 21.7}}, label: '7'
+                                                        StaticText, 0x107bf8a00, {{96.0, 810.7}, {288.0, 19.3}}, label: 'Afternoon shift'
+                                                          StaticText, 0x107bf8b40, {{96.0, 810.7}, {288.0, 19.3}}, label: 'Afternoon shift'
+                                                        StaticText, 0x107bf8c80, {{384.0, 818.7}, {20.0, 20.7}}, label: ''
+                                                          StaticText, 0x107bf8dc0, {{384.0, 818.7}, {20.0, 20.7}}, label: ''
+                                                        StaticText, 0x107bf8f00, {{51.0, 833.0}, {18.0, 13.3}}, label: 'Sat'
+                                                          StaticText, 0x107bf9040, {{51.0, 833.0}, {18.0, 13.3}}, label: 'Sat'
+                                                        StaticText, 0x107bf9180, {{96.0, 832.0}, {288.0, 15.7}}, label: 'Starts at 14:00'
+                                                          StaticText, 0x107bf92c0, {{96.0, 832.0}, {288.0, 15.7}}, label: 'Starts at 14:00'
+                                                      Other, 0x107bf9400, {{16.0, 881.0}, {408.0, 88.0}}
+                                                        Other, 0x107bf9540, {{36.0, 901.0}, {48.0, 48.0}}
+                                                        StaticText, 0x107bf9680, {{53.7, 907.3}, {12.3, 21.7}}, label: '8'
+                                                          StaticText, 0x107bf97c0, {{53.7, 907.3}, {12.3, 21.7}}, label: '8'
+                                                        StaticText, 0x107bf9900, {{96.0, 906.7}, {288.0, 19.3}}, label: 'Afternoon shift'
+                                                          StaticText, 0x107bf9a40, {{96.0, 906.7}, {288.0, 19.3}}, label: 'Afternoon shift'
+                                                        StaticText, 0x107bf9b80, {{384.0, 914.7}, {20.0, 20.7}}, label: ''
+                                                          StaticText, 0x107bf9cc0, {{384.0, 914.7}, {20.0, 20.7}}, label: ''
+                                                        StaticText, 0x107bf9e00, {{49.7, 929.0}, {20.7, 13.3}}, label: 'Sun'
+                                                          StaticText, 0x107bf9f40, {{49.7, 929.0}, {20.7, 13.3}}, label: 'Sun'
+                                                        StaticText, 0x107bfa080, {{96.0, 928.0}, {288.0, 15.7}}, label: 'Starts at 14:00'
+                                                          StaticText, 0x107bfa1c0, {{96.0, 928.0}, {288.0, 15.7}}, label: 'Starts at 14:00'
+                                                      Other, 0x107bfa300, {{16.0, 977.0}, {408.0, 88.0}}
+                                                        Other, 0x107bfa440, {{36.0, 997.0}, {48.0, 48.0}}
+                                                        StaticText, 0x107bfa580, {{54.0, 1003.3}, {12.0, 21.7}}, label: '9'
+                                                          StaticText, 0x107bfa6c0, {{54.0, 1003.3}, {12.0, 21.7}}, label: '9'
+                                                        StaticText, 0x107bfa800, {{96.0, 1002.7}, {288.0, 19.3}}, label: 'Night shift'
+                                                          StaticText, 0x107bfa940, {{96.0, 1002.7}, {288.0, 19.3}}, label: 'Night shift'
+                                                        StaticText, 0x107bfaa80, {{384.0, 1010.7}, {20.0, 20.7}}, label: ''
+                                                          StaticText, 0x107bfabc0, {{384.0, 1010.7}, {20.0, 20.7}}, label: ''
+                                                        StaticText, 0x107bfad00, {{48.3, 1025.0}, {23.3, 13.3}}, label: 'Mon'
+                                                          StaticText, 0x107bfae40, {{48.3, 1025.0}, {23.3, 13.3}}, label: 'Mon'
+                                                        StaticText, 0x107bfaf80, {{96.0, 1024.0}, {288.0, 15.7}}, label: 'Starts at 22:00'
+                                                          StaticText, 0x107bfb0c0, {{96.0, 1024.0}, {288.0, 15.7}}, label: 'Starts at 22:00'
+                                                      Other, 0x107bfb200, {{16.0, 1073.0}, {408.0, 88.0}}
+                                                        Other, 0x107bfb340, {{36.0, 1093.0}, {48.0, 48.0}}
+                                                        StaticText, 0x107bfb480, {{49.7, 1099.3}, {20.7, 21.7}}, label: '10'
+                                                          StaticText, 0x107bfb5c0, {{49.7, 1099.3}, {20.7, 21.7}}, label: '10'
+                                                        StaticText, 0x107bfb700, {{96.0, 1098.7}, {288.0, 19.3}}, label: 'Night shift'
+                                                          StaticText, 0x107bfb840, {{96.0, 1098.7}, {288.0, 19.3}}, label: 'Night shift'
+                                                        StaticText, 0x107bfb980, {{384.0, 1106.7}, {20.0, 20.7}}, label: ''
+                                                          StaticText, 0x107bfbac0, {{384.0, 1106.7}, {20.0, 20.7}}, label: ''
+                                                        StaticText, 0x107bfbc00, {{50.0, 1121.0}, {19.7, 13.3}}, label: 'Tue'
+                                                          StaticText, 0x107bfbd40, {{50.0, 1121.0}, {19.7, 13.3}}, label: 'Tue'
+                                                        StaticText, 0x107bfbe80, {{96.0, 1120.0}, {288.0, 15.7}}, label: 'Starts at 22:00'
+                                                          StaticText, 0x111804000, {{96.0, 1120.0}, {288.0, 15.7}}, label: 'Starts at 22:00'
+                                                  Other, 0x111804140, {{407.0, 62.0}, {30.0, 762.0}}, label: '垂直捲軸, 2頁', value: 0%
+                                                    Other, 0x111804280, {{434.0, 127.0}, {3.0, 461.0}}
+                                                  Other, 0x1118043c0, {{0.0, 791.0}, {440.0, 30.0}}, label: '水平捲軸, 1頁', value: 0%
+                                                    Other, 0x111804500, {{3.0, 818.0}, {431.0, 3.0}}
+                                                  Other, 0x111804640, {{407.0, 62.0}, {30.0, 762.0}}, label: '垂直捲軸, 2頁', value: 0%
+                                                    Other, 0x111804780, {{434.0, 127.0}, {3.0, 461.0}}
+                                                  Other, 0x1118048c0, {{0.0, 791.0}, {440.0, 30.0}}, label: '水平捲軸, 1頁', value: 0%
+                                                    Other, 0x111804a00, {{3.0, 818.0}, {431.0, 3.0}}
+                                    Toolbar, 0x111804b40, {{0.0, 0.0}, {440.0, 858.0}}, identifier: 'Toolbar', label: '工具列'
+                                      Other, 0x111804c80, {{0.0, 0.0}, {440.0, 858.0}}
+                                Other, 0x111804dc0, {{0.0, 858.0}, {440.0, 98.0}}
+                                  Other, 0x111804f00, {{0.0, 858.3}, {440.0, 97.7}}
+                                  Button, 0x111805040, {{0.0, 866.3}, {88.0, 55.7}}, label: 'Home, tab, 1 of 5', Selected
+                                  Button, 0x111805180, {{88.0, 866.3}, {88.0, 55.7}}, label: 'Calendar, tab, 2 of 5'
+                                  Button, 0x1118052c0, {{176.0, 866.3}, {88.0, 55.7}}, label: 'Scan, tab, 3 of 5'
+                                  Button, 0x111805400, {{264.0, 866.3}, {88.0, 55.7}}, label: 'Shifts, tab, 4 of 5'
+                                  Button, 0x111805540, {{352.0, 866.3}, {88.0, 55.7}}, label: 'Settings, tab, 5 of 5'
+                        Toolbar, 0x111805680, {{0.0, 0.0}, {440.0, 956.0}}, identifier: 'Toolbar', label: '工具列'
+                          Other, 0x1118057c0, {{0.0, 0.0}, {440.0, 956.0}}
+Path to element:
+ →Application, 0x107ab5b80, pid: 99995, label: 'IShift'
+Query chain:
+ →Find: Application 'com.shiftsnap.app'
+  Output: {
+    Application, 0x111805900, pid: 99995, label: 'IShift'
+  }

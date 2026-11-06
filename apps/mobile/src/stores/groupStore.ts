@@ -32,6 +32,29 @@ export interface GroupMemberItem {
   claimed_name_on_schedule?: string | null;
 }
 
+/** Read members without changing the active group's global picker state. */
+export async function loadGroupMembers(groupId: string): Promise<GroupMemberItem[]> {
+  if (getIsGuest()) return [];
+  // RPC bypasses the users_select RLS that hides other users'
+  // profiles, so admin/member name + email are populated correctly.
+  const { data, error } = await supabase.rpc('get_group_member_profiles', { gid: groupId });
+  if (error) throw error;
+  const members: GroupMemberItem[] = (data || []).map((m: any) => ({
+    id: m.membership_id,
+    group_id: groupId,
+    user_id: m.user_id,
+    role: m.role,
+    nickname: m.nickname,
+    color: m.color,
+    is_visible: m.is_visible,
+    joined_at: m.joined_at,
+    display_name: m.display_name || m.email?.split('@')[0] || undefined,
+    claimed_person_id: m.claimed_person_id ?? null,
+    claimed_name_on_schedule: m.claimed_name_on_schedule ?? null,
+  }));
+  return members;
+}
+
 /** Populate the last saved account scope immediately while an online refresh starts. */
 export async function hydrateCachedGroups(userId: string): Promise<void> {
   if (useGroupStore.getState().groups.length > 0) return;
@@ -242,23 +265,7 @@ export const useGroupStore = create<GroupState>((set, get) => ({
       return;
     }
     try {
-      // RPC bypasses the users_select RLS that hides other users'
-      // profiles, so admin/member name + email are populated correctly.
-      const { data, error } = await supabase.rpc('get_group_member_profiles', { gid: groupId });
-      if (error) throw error;
-      const members: GroupMemberItem[] = (data || []).map((m: any) => ({
-        id: m.membership_id,
-        group_id: groupId,
-        user_id: m.user_id,
-        role: m.role,
-        nickname: m.nickname,
-        color: m.color,
-        is_visible: m.is_visible,
-        joined_at: m.joined_at,
-        display_name: m.display_name || m.email?.split('@')[0] || undefined,
-        claimed_person_id: m.claimed_person_id ?? null,
-        claimed_name_on_schedule: m.claimed_name_on_schedule ?? null,
-      }));
+      const members = await loadGroupMembers(groupId);
       set({ members });
     } catch (error) {
       console.error('Error fetching group members:', error);

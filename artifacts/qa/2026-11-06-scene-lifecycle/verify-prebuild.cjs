@@ -1,0 +1,28 @@
+const fs = require('fs');
+const path = require('path');
+const root = path.resolve(__dirname, '../../..');
+const { compileModsAsync } = require(path.join(root, 'node_modules/expo/config-plugins'));
+const plist = require(path.join(root, 'node_modules/plist'));
+const plugin = require(path.join(root, 'apps/mobile/plugins/with-ios-scene-lifecycle'));
+const temp = fs.mkdtempSync('/private/tmp/ishift-scene-prebuild-');
+const source = path.join(root, 'apps/mobile/ios');
+fs.mkdirSync(path.join(temp, 'ios/ShiftSnap'), { recursive: true });
+fs.cpSync(path.join(source, 'ShiftSnap.xcodeproj'), path.join(temp, 'ios/ShiftSnap.xcodeproj'), { recursive: true });
+let app = fs.readFileSync(path.join(source, 'ShiftSnap/AppDelegate.swift'), 'utf8');
+app = app.slice(0, app.indexOf('// IShift scene lifecycle')).replace('  var reactNativeLaunchOptions: [UIApplication.LaunchOptionsKey: Any]?\n', '').replace('    reactNativeLaunchOptions = launchOptions', '#if os(iOS) || os(tvOS)\n    window = UIWindow(frame: UIScreen.main.bounds)\n    factory.startReactNative(\n      withModuleName: "main",\n      in: window,\n      launchOptions: launchOptions)\n#endif');
+fs.writeFileSync(path.join(temp, 'ios/ShiftSnap/AppDelegate.swift'), app);
+const info = plist.parse(fs.readFileSync(path.join(source, 'ShiftSnap/Info.plist'), 'utf8'));
+delete info.UIApplicationSceneManifest;
+fs.writeFileSync(path.join(temp, 'ios/ShiftSnap/Info.plist'), plist.build(info));
+const config = { name: 'IShift', slug: 'shiftsnap', ios: { bundleIdentifier: 'com.shiftsnap.app' }, _internal: { projectRoot: temp } };
+const readOutput = () => ['AppDelegate.swift', 'Info.plist'].map(name => fs.readFileSync(path.join(temp, 'ios/ShiftSnap', name), 'utf8'));
+(async () => {
+  await compileModsAsync(plugin(structuredClone(config)), { projectRoot: temp, platforms: ['ios'] });
+  const once = readOutput();
+  await compileModsAsync(plugin(structuredClone(config)), { projectRoot: temp, platforms: ['ios'] });
+  const twice = readOutput();
+  if (once.some((text, index) => text !== twice[index])) throw new Error('Prebuild changes on repeat');
+  const result = { pass: true, method: 'Expo compileModsAsync iOS base mod file providers, twice', sceneStarts: (once[0].match(/factory\.startReactNative/g) || []).length, manifest: plist.parse(once[1]).UIApplicationSceneManifest, sourceTemplate: 'SDK54 Swift template with legacy window startup', temporaryProject: temp };
+  fs.writeFileSync(path.join(root, 'artifacts/qa/2026-11-06-scene-lifecycle/prebuild-repeatability.json'), JSON.stringify(result, null, 2) + '\n');
+  console.log(JSON.stringify(result));
+})().catch(error => { console.error(error.message); process.exit(1); });

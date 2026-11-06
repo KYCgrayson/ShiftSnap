@@ -1,0 +1,89 @@
+{
+  "boundary": "Synthetic localhost Supabase HTTP; real iOS app, storage and views",
+  "requests": [
+    {
+      "at": "2026-11-06T08:48:11.769Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "body": {},
+      "offline": false
+    },
+    {
+      "at": "2026-11-06T08:48:12.281Z",
+      "method": "POST",
+      "path": "/functions/v1/ocr-process",
+      "body": {
+        "bytes": 83412,
+        "sha256": "e398ffa245e991bc9509ca449c765780cb3865e7dd7abfda56c4313ef4f92f9a"
+      },
+      "offline": false
+    },
+    {
+      "at": "2026-11-06T08:48:12.312Z",
+      "method": "POST",
+      "path": "/rest/v1/schedules",
+      "body": {
+        "image_status": "pending",
+        "group_id": "00000000-0000-4000-8000-000000000010"
+      },
+      "offline": false
+    },
+    {
+      "at": "2026-11-06T08:48:12.356Z",
+      "method": "POST",
+      "path": "/storage/v1/object/shift-images/00000000-0000-4000-8000-000000000001/00000000-0000-4000-8000-000000000010/2026-11/00000000-0000-4000-8000-000000000020.png",
+      "body": {
+        "bytes": 83412,
+        "sha256": "e398ffa245e991bc9509ca449c765780cb3865e7dd7abfda56c4313ef4f92f9a"
+      },
+      "offline": false
+    },
+    {
+      "at": "2026-11-06T08:48:12.372Z",
+      "method": "GET",
+      "path": "/storage/v1/object/shift-images/00000000-0000-4000-8000-000000000001/00000000-0000-4000-8000-000000000010/2026-11/00000000-0000-4000-8000-000000000020.png",
+      "body": {
+        "bytes": 83412,
+        "sha256": "e398ffa245e991bc9509ca449c765780cb3865e7dd7abfda56c4313ef4f92f9a"
+      },
+      "offline": false
+    },
+    {
+      "at": "2026-11-06T08:48:12.390Z",
+      "method": "PATCH",
+      "path": "/rest/v1/schedules",
+      "body": {
+        "image_status": "uploaded"
+      },
+      "offline": false
+    },
+    {
+      "at": "2026-11-06T08:48:12.512Z",
+      "method": "GET",
+      "path": "/rest/v1/shift_codes",
+      "body": {},
+      "offline": false
+    },
+    {
+      "at": "2026-11-06T08:48:12.513Z",
+      "method": "POST",
+      "path": "/rest/v1/rpc/get_group_member_profiles",
+      "body": {},
+      "offline": false
+    },
+    {
+      "at": "2026-11-06T08:48:21.813Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "body": {},
+      "offline": false
+    },
+    {
+      "at": "2026-11-06T08:48:31.848Z",
+      "method": "GET",
+      "path": "/realtime/v1/websocket",
+      "body": {},
+      "offline": false
+    }
+  ]
+}

@@ -27,13 +27,13 @@ export default {
 
   // Welcome screen
   welcome: {
-    subtitle: 'Snap your schedule, sync your life',
-    scanTitle: 'Scan Schedules',
-    scanDesc: 'Take a photo of your shift schedule',
-    syncTitle: 'Auto Sync',
-    syncDesc: 'Sync to your favorite calendar app',
-    alarmTitle: 'Smart Alarms',
-    alarmDesc: 'Never miss a shift again',
+    subtitle: 'Your roster, ready in three steps',
+    importTitle: 'Import your roster',
+    importDesc: 'Take a photo or choose one from your library.',
+    confirmTitle: 'Check your shifts',
+    confirmDesc: 'Review dates, names, and shift codes such as A, B, or C.',
+    exportTitle: 'Export your schedule',
+    exportDesc: 'Sync to your phone calendar or share a monthly image.',
     getStarted: 'Get Started',
     alreadyHaveAccount: 'Already have an account?',
     tryWithoutAccount: 'Try without an account',
@@ -169,6 +169,9 @@ export default {
     photoConsentTitle: 'Send this roster photo for AI recognition?',
     photoConsentRecognize: 'This photo may show coworkers’ names, dates, shift codes and times. If you agree, IShift will send it through Supabase to Google Gemini for recognition. Any supplied recognition hint or existing shift-code definitions may be included. For signed-in users, IShift also saves the original photo in Supabase after recognition so you can view it later. Please confirm you have permission to share the information in this photo.',
     photoConsentReanalyze: 'This roster photo may show coworkers’ names, dates, shift codes and times. Re-analyzing sends the photo again through Supabase to Google Gemini, along with the recognition hint and any existing shift-code definitions supplied. Please confirm you have permission to share the information in this photo.',
+    scheduleGroup: 'this roster’s group',
+    groupVisibility: 'Save to “{{group}}”. Group members can view the original roster photo and saved shifts, including rows other than your own.',
+    personalVisibility: 'This roster is saved in your account and has not been shared with a group.',
     photoConsentConfirm: 'Agree and recognize',
     positionGuide: 'Position your schedule within the frame',
     processingFailed: 'Processing Failed',
@@ -414,6 +417,8 @@ export default {
     switchGroup: 'Switch Group',
     admin: 'Admin',
     shareInvite: 'Share Invite Code',
+    shareGroupVisibility: 'New rosters are saved to “{{group}}”. Members can view the original photos and saved shifts.',
+    shareSchedulesConfirm: 'Move all your rosters not already in “{{group}}” to this group. Members can view the original photos and saved shifts. Rosters in other groups will also move here. Continue?',
     shareExistingSchedules: 'Share existing schedules',
     unsharedCount: '{{count}} schedules not shared with this group',
     unsharedCountOne: '1 schedule not shared with this group',
@@ -497,6 +502,7 @@ export default {
 
   // Review schedule screen
   review: {
+    visibilityUnavailable: 'Cannot confirm this roster’s group yet. Reconnect and retry to check who can view it before continuing.',
     title: 'Review Schedule',
     // Step labels
     stepPerson: 'Select',

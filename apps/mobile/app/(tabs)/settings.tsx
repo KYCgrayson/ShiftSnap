@@ -703,12 +703,25 @@ export default function SettingsScreen() {
   };
 
   const handleShareAllSchedules = async () => {
-    if (!currentGroup || !user?.id) return;
+    if (!currentGroup || !user?.id || sharingSchedules) return;
+    const destinationGroup = currentGroup;
+    const ownerId = user.id;
     setSharingSchedules(true);
     try {
-      const count = await shareSchedulesWithGroup(user.id, currentGroup.id);
+      const approved = await new Promise<boolean>((resolve) => {
+        Alert.alert(
+          t('settings.shareExistingSchedules'),
+          t('settings.shareSchedulesConfirm', { group: destinationGroup.name }),
+          [
+            { text: t('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
+            { text: t('settings.shareAll'), onPress: () => resolve(true) },
+          ],
+          { cancelable: true, onDismiss: () => resolve(false) },
+        );
+      });
+      if (!approved || useAuthStore.getState().user?.id !== ownerId) return;
+      const count = await shareSchedulesWithGroup(ownerId, destinationGroup.id);
       setUnsharedCount(0);
-      setSharingSchedules(false);
       Alert.alert(
         t('settings.shareExistingSchedules'),
         count === 1
@@ -716,8 +729,9 @@ export default function SettingsScreen() {
           : t('settings.schedulesShared', { count })
       );
     } catch {
-      setSharingSchedules(false);
       Alert.alert(t('common.error'), t('settings.shareFailed'));
+    } finally {
+      setSharingSchedules(false);
     }
   };
 
@@ -1232,7 +1246,10 @@ export default function SettingsScreen() {
               <SettingsItem
                 icon="people-outline"
                 title={currentGroup.name}
-                subtitle={groups.length > 1 ? t('settings.switchGroup') : t('settings.groupNameHint')}
+                subtitle={[
+                  groups.length > 1 ? t('settings.switchGroup') : t('settings.groupNameHint'),
+                  t('settings.shareGroupVisibility', { group: currentGroup.name }),
+                ].join('\n')}
                 onPress={groups.length > 1 ? handleSwitchGroup : handleEditGroupName}
               />
               <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />

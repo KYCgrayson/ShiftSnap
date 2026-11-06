@@ -1,0 +1,465 @@
+{
+  "boundary": "Actual ScanScreen, consent service and schedule store; controlled React/native/HTTP boundaries; not native UI E2E",
+  "results": [
+    {
+      "name": "group-cancel",
+      "language": "zh-TW",
+      "preview": "將儲存至「QA 桃子班」。群組成員可查看原始班表照片及儲存的班次，不只你選取的個人班次。",
+      "consent": "這張照片可能包含同事姓名、日期、班別代碼與時間。同意後，IShift 會透過 Supabase 將照片傳給 Google Gemini 辨識；如有提供補充辨識提示或既有班別代碼說明，也可能一併傳送。登入帳號時，IShift 也會在辨識後把原始照片儲存在 Supabase，方便日後查看。請確認你有權分享照片中的資料。\n\n將儲存至「QA 桃子班」。群組成員可查看原始班表照片及儲存的班次，不只你選取的個人班次。",
+      "records": [],
+      "route": [],
+      "pass": true
+    },
+    {
+      "name": "group-accept",
+      "language": "zh-TW",
+      "preview": "將儲存至「QA 桃子班」。群組成員可查看原始班表照片及儲存的班次，不只你選取的個人班次。",
+      "consent": "這張照片可能包含同事姓名、日期、班別代碼與時間。同意後，IShift 會透過 Supabase 將照片傳給 Google Gemini 辨識；如有提供補充辨識提示或既有班別代碼說明，也可能一併傳送。登入帳號時，IShift 也會在辨識後把原始照片儲存在 Supabase，方便日後查看。請確認你有權分享照片中的資料。\n\n將儲存至「QA 桃子班」。群組成員可查看原始班表照片及儲存的班次，不只你選取的個人班次。",
+      "records": [
+        {
+          "fileRead": "file://synthetic.png",
+          "native": "base64"
+        },
+        {
+          "ocr": "ocr-process",
+          "params": {
+            "body": {
+              "imageBase64": "cWE=",
+              "imageMimeType": "image/png"
+            }
+          }
+        },
+        {
+          "table": "schedules",
+          "operation": "insert",
+          "data": {
+            "owner_id": "synthetic-user",
+            "group_id": "group-a",
+            "image_url": "",
+            "image_status": "pending",
+            "year_month": "2026-09",
+            "raw_ocr_result": {
+              "success": true,
+              "detected_year": 2026,
+              "detected_month": 9,
+              "rows": [
+                {
+                  "name": "Alex QA",
+                  "shifts": [
+                    {
+                      "date": 1,
+                      "code": "A"
+                    }
+                  ]
+                }
+              ]
+            },
+            "status": "draft"
+          }
+        },
+        {
+          "upload": "synthetic-user/group-a/2026-09/schedule-qa.png",
+          "bucket": "shift-images",
+          "byteLength": 2,
+          "base64": "cWE="
+        },
+        {
+          "download": "synthetic-user/group-a/2026-09/schedule-qa.png"
+        },
+        {
+          "table": "schedules",
+          "operation": "update",
+          "data": {
+            "image_url": "synthetic-user/group-a/2026-09/schedule-qa.png",
+            "image_status": "uploaded"
+          },
+          "id": "schedule-qa"
+        }
+      ],
+      "route": [
+        {
+          "pathname": "/review-schedule",
+          "params": {
+            "ocrResult": "{\"success\":true,\"detected_year\":2026,\"detected_month\":9,\"rows\":[{\"name\":\"Alex QA\",\"shifts\":[{\"date\":1,\"code\":\"A\"}]}]}",
+            "scheduleId": "schedule-qa",
+            "yearMonth": "2026-09",
+            "imageUrl": "file://synthetic.png"
+          }
+        }
+      ],
+      "pass": true
+    },
+    {
+      "name": "group-switch-after-consent-pinned",
+      "language": "zh-TW",
+      "preview": "將儲存至「QA 桃子班」。群組成員可查看原始班表照片及儲存的班次，不只你選取的個人班次。",
+      "consent": "這張照片可能包含同事姓名、日期、班別代碼與時間。同意後，IShift 會透過 Supabase 將照片傳給 Google Gemini 辨識；如有提供補充辨識提示或既有班別代碼說明，也可能一併傳送。登入帳號時，IShift 也會在辨識後把原始照片儲存在 Supabase，方便日後查看。請確認你有權分享照片中的資料。\n\n將儲存至「QA 桃子班」。群組成員可查看原始班表照片及儲存的班次，不只你選取的個人班次。",
+      "records": [
+        {
+          "fileRead": "file://synthetic.png",
+          "native": "base64"
+        },
+        {
+          "ocr": "ocr-process",
+          "params": {
+            "body": {
+              "imageBase64": "cWE=",
+              "imageMimeType": "image/png"
+            }
+          }
+        },
+        {
+          "table": "schedules",
+          "operation": "insert",
+          "data": {
+            "owner_id": "synthetic-user",
+            "group_id": "group-a",
+            "image_url": "",
+            "image_status": "pending",
+            "year_month": "2026-09",
+            "raw_ocr_result": {
+              "success": true,
+              "detected_year": 2026,
+              "detected_month": 9,
+              "rows": [
+                {
+                  "name": "Alex QA",
+                  "shifts": [
+                    {
+                      "date": 1,
+                      "code": "A"
+                    }
+                  ]
+                }
+              ]
+            },
+            "status": "draft"
+          }
+        },
+        {
+          "upload": "synthetic-user/group-a/2026-09/schedule-qa.png",
+          "bucket": "shift-images",
+          "byteLength": 2,
+          "base64": "cWE="
+        },
+        {
+          "download": "synthetic-user/group-a/2026-09/schedule-qa.png"
+        },
+        {
+          "table": "schedules",
+          "operation": "update",
+          "data": {
+            "image_url": "synthetic-user/group-a/2026-09/schedule-qa.png",
+            "image_status": "uploaded"
+          },
+          "id": "schedule-qa"
+        }
+      ],
+      "route": [
+        {
+          "pathname": "/review-schedule",
+          "params": {
+            "ocrResult": "{\"success\":true,\"detected_year\":2026,\"detected_month\":9,\"rows\":[{\"name\":\"Alex QA\",\"shifts\":[{\"date\":1,\"code\":\"A\"}]}]}",
+            "scheduleId": "schedule-qa",
+            "yearMonth": "2026-09",
+            "imageUrl": "file://synthetic.png"
+          }
+        }
+      ],
+      "pass": true
+    },
+    {
+      "name": "personal-cancel",
+      "language": "zh-TW",
+      "preview": "這張班表儲存在你的帳號內，尚未分享到群組。",
+      "consent": "這張照片可能包含同事姓名、日期、班別代碼與時間。同意後，IShift 會透過 Supabase 將照片傳給 Google Gemini 辨識；如有提供補充辨識提示或既有班別代碼說明，也可能一併傳送。登入帳號時，IShift 也會在辨識後把原始照片儲存在 Supabase，方便日後查看。請確認你有權分享照片中的資料。\n\n這張班表儲存在你的帳號內，尚未分享到群組。",
+      "records": [],
+      "route": [],
+      "pass": true
+    },
+    {
+      "name": "personal-switch-after-consent-pinned",
+      "language": "zh-TW",
+      "preview": "這張班表儲存在你的帳號內，尚未分享到群組。",
+      "consent": "這張照片可能包含同事姓名、日期、班別代碼與時間。同意後，IShift 會透過 Supabase 將照片傳給 Google Gemini 辨識；如有提供補充辨識提示或既有班別代碼說明，也可能一併傳送。登入帳號時，IShift 也會在辨識後把原始照片儲存在 Supabase，方便日後查看。請確認你有權分享照片中的資料。\n\n這張班表儲存在你的帳號內，尚未分享到群組。",
+      "records": [
+        {
+          "fileRead": "file://synthetic.png",
+          "native": "base64"
+        },
+        {
+          "ocr": "ocr-process",
+          "params": {
+            "body": {
+              "imageBase64": "cWE=",
+              "imageMimeType": "image/png"
+            }
+          }
+        },
+        {
+          "table": "schedules",
+          "operation": "insert",
+          "data": {
+            "owner_id": "synthetic-user",
+            "group_id": null,
+            "image_url": "",
+            "image_status": "pending",
+            "year_month": "2026-09",
+            "raw_ocr_result": {
+              "success": true,
+              "detected_year": 2026,
+              "detected_month": 9,
+              "rows": [
+                {
+                  "name": "Alex QA",
+                  "shifts": [
+                    {
+                      "date": 1,
+                      "code": "A"
+                    }
+                  ]
+                }
+              ]
+            },
+            "status": "draft"
+          }
+        },
+        {
+          "upload": "synthetic-user/personal/2026-09/schedule-qa.png",
+          "bucket": "shift-images",
+          "byteLength": 2,
+          "base64": "cWE="
+        },
+        {
+          "download": "synthetic-user/personal/2026-09/schedule-qa.png"
+        },
+        {
+          "table": "schedules",
+          "operation": "update",
+          "data": {
+            "image_url": "synthetic-user/personal/2026-09/schedule-qa.png",
+            "image_status": "uploaded"
+          },
+          "id": "schedule-qa"
+        }
+      ],
+      "route": [
+        {
+          "pathname": "/review-schedule",
+          "params": {
+            "ocrResult": "{\"success\":true,\"detected_year\":2026,\"detected_month\":9,\"rows\":[{\"name\":\"Alex QA\",\"shifts\":[{\"date\":1,\"code\":\"A\"}]}]}",
+            "scheduleId": "schedule-qa",
+            "yearMonth": "2026-09",
+            "imageUrl": "file://synthetic.png"
+          }
+        }
+      ],
+      "pass": true
+    },
+    {
+      "name": "english-group-accept",
+      "language": "en",
+      "preview": "Save to “QA 桃子班”. Group members can view the original roster photo and saved shifts, including rows other than your own.",
+      "consent": "This photo may show coworkers’ names, dates, shift codes and times. If you agree, IShift will send it through Supabase to Google Gemini for recognition. Any supplied recognition hint or existing shift-code definitions may be included. For signed-in users, IShift also saves the original photo in Supabase after recognition so you can view it later. Please confirm you have permission to share the information in this photo.\n\nSave to “QA 桃子班”. Group members can view the original roster photo and saved shifts, including rows other than your own.",
+      "records": [
+        {
+          "fileRead": "file://synthetic.png",
+          "native": "base64"
+        },
+        {
+          "ocr": "ocr-process",
+          "params": {
+            "body": {
+              "imageBase64": "cWE=",
+              "imageMimeType": "image/png"
+            }
+          }
+        },
+        {
+          "table": "schedules",
+          "operation": "insert",
+          "data": {
+            "owner_id": "synthetic-user",
+            "group_id": "group-a",
+            "image_url": "",
+            "image_status": "pending",
+            "year_month": "2026-09",
+            "raw_ocr_result": {
+              "success": true,
+              "detected_year": 2026,
+              "detected_month": 9,
+              "rows": [
+                {
+                  "name": "Alex QA",
+                  "shifts": [
+                    {
+                      "date": 1,
+                      "code": "A"
+                    }
+                  ]
+                }
+              ]
+            },
+            "status": "draft"
+          }
+        },
+        {
+          "upload": "synthetic-user/group-a/2026-09/schedule-qa.png",
+          "bucket": "shift-images",
+          "byteLength": 2,
+          "base64": "cWE="
+        },
+        {
+          "download": "synthetic-user/group-a/2026-09/schedule-qa.png"
+        },
+        {
+          "table": "schedules",
+          "operation": "update",
+          "data": {
+            "image_url": "synthetic-user/group-a/2026-09/schedule-qa.png",
+            "image_status": "uploaded"
+          },
+          "id": "schedule-qa"
+        }
+      ],
+      "route": [
+        {
+          "pathname": "/review-schedule",
+          "params": {
+            "ocrResult": "{\"success\":true,\"detected_year\":2026,\"detected_month\":9,\"rows\":[{\"name\":\"Alex QA\",\"shifts\":[{\"date\":1,\"code\":\"A\"}]}]}",
+            "scheduleId": "schedule-qa",
+            "yearMonth": "2026-09",
+            "imageUrl": "file://synthetic.png"
+          }
+        }
+      ],
+      "pass": true
+    },
+    {
+      "name": "dialog-dismiss-aborts",
+      "pass": true,
+      "records": [],
+      "consent": "這張照片可能包含同事姓名、日期、班別代碼與時間。同意後，IShift 會透過 Supabase 將照片傳給 Google Gemini 辨識；如有提供補充辨識提示或既有班別代碼說明，也可能一併傳送。登入帳號時，IShift 也會在辨識後把原始照片儲存在 Supabase，方便日後查看。請確認你有權分享照片中的資料。\n\n將儲存至「QA 桃子班」。群組成員可查看原始班表照片及儲存的班次，不只你選取的個人班次。"
+    },
+    {
+      "name": "double-tap-one-dialog",
+      "pass": true,
+      "records": [],
+      "consent": "這張照片可能包含同事姓名、日期、班別代碼與時間。同意後，IShift 會透過 Supabase 將照片傳給 Google Gemini 辨識；如有提供補充辨識提示或既有班別代碼說明，也可能一併傳送。登入帳號時，IShift 也會在辨識後把原始照片儲存在 Supabase，方便日後查看。請確認你有權分享照片中的資料。\n\n將儲存至「QA 桃子班」。群組成員可查看原始班表照片及儲存的班次，不只你選取的個人班次。"
+    },
+    {
+      "name": "logout-pending-aborts",
+      "pass": true,
+      "records": [],
+      "consent": "這張照片可能包含同事姓名、日期、班別代碼與時間。同意後，IShift 會透過 Supabase 將照片傳給 Google Gemini 辨識；如有提供補充辨識提示或既有班別代碼說明，也可能一併傳送。登入帳號時，IShift 也會在辨識後把原始照片儲存在 Supabase，方便日後查看。請確認你有權分享照片中的資料。\n\n將儲存至「QA 桃子班」。群組成員可查看原始班表照片及儲存的班次，不只你選取的個人班次。"
+    },
+    {
+      "name": "group-change-before-tap-disclosed",
+      "pass": true,
+      "records": [
+        {
+          "fileRead": "file://synthetic.png",
+          "native": "base64"
+        },
+        {
+          "ocr": "ocr-process",
+          "params": {
+            "body": {
+              "imageBase64": "cWE=",
+              "imageMimeType": "image/png"
+            }
+          }
+        },
+        {
+          "table": "schedules",
+          "operation": "insert",
+          "data": {
+            "owner_id": "synthetic-user",
+            "group_id": "group-b",
+            "image_url": "",
+            "image_status": "pending",
+            "year_month": "2026-09",
+            "raw_ocr_result": {
+              "success": true,
+              "detected_year": 2026,
+              "detected_month": 9,
+              "rows": [
+                {
+                  "name": "Alex QA",
+                  "shifts": [
+                    {
+                      "date": 1,
+                      "code": "A"
+                    }
+                  ]
+                }
+              ]
+            },
+            "status": "draft"
+          }
+        },
+        {
+          "upload": "synthetic-user/group-b/2026-09/schedule-qa.png",
+          "bucket": "shift-images",
+          "byteLength": 2,
+          "base64": "cWE="
+        },
+        {
+          "download": "synthetic-user/group-b/2026-09/schedule-qa.png"
+        },
+        {
+          "table": "schedules",
+          "operation": "update",
+          "data": {
+            "image_url": "synthetic-user/group-b/2026-09/schedule-qa.png",
+            "image_status": "uploaded"
+          },
+          "id": "schedule-qa"
+        }
+      ],
+      "consent": "這張照片可能包含同事姓名、日期、班別代碼與時間。同意後，IShift 會透過 Supabase 將照片傳給 Google Gemini 辨識；如有提供補充辨識提示或既有班別代碼說明，也可能一併傳送。登入帳號時，IShift 也會在辨識後把原始照片儲存在 Supabase，方便日後查看。請確認你有權分享照片中的資料。\n\n將儲存至「QA 白雲班」。群組成員可查看原始班表照片及儲存的班次，不只你選取的個人班次。"
+    },
+    {
+      "name": "bulk-cancel-no-write",
+      "pass": true,
+      "confirmation": "將所有尚未在「QA 桃子班」的班表移至此群組，成員可查看原始照片及儲存的班次。班表若原屬其他群組，也會改至此群組。是否繼續？",
+      "records": []
+    },
+    {
+      "name": "bulk-dismiss-no-write",
+      "pass": true,
+      "confirmation": "將所有尚未在「QA 桃子班」的班表移至此群組，成員可查看原始照片及儲存的班次。班表若原屬其他群組，也會改至此群組。是否繼續？",
+      "records": []
+    },
+    {
+      "name": "bulk-group-switch-pinned",
+      "pass": true,
+      "confirmation": "將所有尚未在「QA 桃子班」的班表移至此群組，成員可查看原始照片及儲存的班次。班表若原屬其他群組，也會改至此群組。是否繼續？",
+      "records": [
+        {
+          "table": "schedules",
+          "selected": "id",
+          "owner_id": "synthetic-user",
+          "or": "group_id.is.null,group_id.neq.group-a"
+        },
+        {
+          "table": "schedules",
+          "operation": "update",
+          "data": {
+            "group_id": "group-a"
+          },
+          "id": [
+            "old-personal",
+            "old-group"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bulk-logout-aborts",
+      "pass": true,
+      "confirmation": "將所有尚未在「QA 桃子班」的班表移至此群組，成員可查看原始照片及儲存的班次。班表若原屬其他群組，也會改至此群組。是否繼續？",
+      "records": []
+    }
+  ]
+}

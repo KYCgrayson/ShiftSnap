@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { decode } from 'base64-arraybuffer';
 import {
   View,
   Text,
@@ -22,6 +23,7 @@ import { Button } from '../../src/components/ui';
 import { supabase } from '../../src/services/supabase';
 import { buildScheduleImageStoragePath, getShiftImageStoragePath } from '../../src/services/shiftImages';
 import { confirmRosterPhotoTransmission } from '../../src/services/rosterPhotoConsent';
+import { readRosterImageBase64 } from '../../src/services/rosterImageData';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useScheduleStore } from '../../src/stores/scheduleStore';
 import { useLocaleStore } from '../../src/stores/localeStore';
@@ -62,7 +64,8 @@ export default function ScanScreen() {
   const locale = useLocaleStore((s) => s.locale);
   const { user, isGuest, isOfflineReadOnly } = useAuthStore();
   const { createScheduleFromOCR, updateScheduleImage, schedules, fetchSchedules } = useScheduleStore();
-  const currentGroupId = useGroupStore((s) => s.currentGroup?.id);
+  const currentGroup = useGroupStore((s) => s.currentGroup);
+  const currentGroupId = currentGroup?.id;
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
   const handledPickerUris = useRef(new Set<string>());
   const photoConsentPending = useRef(false);
@@ -168,7 +171,7 @@ export default function ScanScreen() {
   };
 
   // Permission denied view
-  if (!permission.granted) {
+  if (!permission.granted && !capturedImage) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.warmWhite }]}>
         <View style={styles.permissionContainer}>
@@ -224,27 +227,14 @@ export default function ScanScreen() {
     setCapturedImage(null);
   };
 
-  // Convert image URI to base64
-  const imageToBase64 = async (uri: string): Promise<string> => {
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    return new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const dataUrl = reader.result as string;
-        resolve(dataUrl.split(',')[1]);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  };
-
   // Persist only after OCR has supplied the month and the schedule row has a
   // stable ID.  ArrayBuffer is required for reliable React Native uploads.
   const uploadToStorage = async (
     uri: string,
+    arrayBuffer: ArrayBuffer,
     scheduleId: string,
     yearMonth: string,
+    destinationGroupId: string | null,
   ): Promise<string> => {
     try {
       if (!user?.id) throw new Error('NOT_AUTHENTICATED');
@@ -252,13 +242,11 @@ export default function ScanScreen() {
       const extension = mimeType === 'image/png' ? 'png' : 'jpg';
       const storagePath = buildScheduleImageStoragePath(
         user.id,
-        currentGroupId,
+        destinationGroupId,
         yearMonth,
         scheduleId,
         extension,
       );
-      const response = await fetch(uri);
-      const arrayBuffer = await response.arrayBuffer();
       const { error } = await supabase.storage
         .from('shift-images')
         // The path is deterministic. `upsert` makes retry safe when the
@@ -330,7 +318,12 @@ export default function ScanScreen() {
     try {
       // Selection and preview are local. No OCR or photo storage request may
       // begin until this action's explicit consent, including the demo image.
-      if (!await confirmRosterPhotoTransmission('recognize')) return;
+      const destinationGroup = isGuest ? null : useGroupStore.getState().currentGroup;
+      const destinationGroupId = destinationGroup?.id || null;
+      const visibilityNotice = !isGuest
+        ? t(destinationGroup ? 'scan.groupVisibility' : 'scan.personalVisibility', { group: destinationGroup?.name })
+        : undefined;
+      if (!await confirmRosterPhotoTransmission('recognize', visibilityNotice)) return;
       const currentAuth = useAuthStore.getState();
       if (currentAuth.isOfflineReadOnly || currentAuth.user?.id !== user.id) {
         Alert.alert(t('common.error'), t('offline.readOnly'));
@@ -338,7 +331,7 @@ export default function ScanScreen() {
       }
       setProcessing(true);
       // Always convert to base64 and send directly to Edge Function
-      const base64 = await imageToBase64(capturedImage);
+      const base64 = await readRosterImageBase64(capturedImage);
 
       const ocrData = await callOcrFunction({
         imageBase64: base64,
@@ -357,21 +350,25 @@ export default function ScanScreen() {
         yearMonth,
         ocrData,
         isGuest ? 'uploaded' : 'pending',
+        destinationGroupId,
       );
 
       if (!isGuest) {
+        // Reuse the original bytes already read for OCR. This also works for
+        // bundled read-only demo assets and keeps retries on the same image.
+        const imageBytes = decode(base64);
         let imageSaved = false;
         const imageExtension = getImageMimeType(capturedImage) === 'image/png' ? 'png' : 'jpg';
         const attemptedStoragePath = buildScheduleImageStoragePath(
           user.id,
-          currentGroupId,
+          destinationGroupId,
           yearMonth,
           scheduleId,
           imageExtension,
         );
         while (!imageSaved) {
           try {
-            const storagePath = await uploadToStorage(capturedImage, scheduleId, yearMonth);
+            const storagePath = await uploadToStorage(capturedImage, imageBytes, scheduleId, yearMonth, destinationGroupId);
             await updateScheduleImage(scheduleId, storagePath, 'uploaded');
             imageSaved = true;
           } catch (uploadError) {
@@ -446,6 +443,14 @@ export default function ScanScreen() {
             </Text>
           </View>
         </View>
+        {!isGuest && (
+          <View style={[styles.visibilityNotice, { backgroundColor: theme.colors.warmWhite }]}>
+            <Ionicons name={currentGroup ? 'people-outline' : 'person-outline'} size={18} color={theme.colors.textSecondary} />
+            <Text style={[styles.visibilityText, { color: theme.colors.textSecondary }]} testID="scan-visibility-notice">
+              {t(currentGroup ? 'scan.groupVisibility' : 'scan.personalVisibility', { group: currentGroup?.name })}
+            </Text>
+          </View>
+        )}
         <View style={[styles.previewActions, { backgroundColor: theme.colors.warmWhite }]}>
           <Button
             title={t('scan.retake')}
@@ -840,6 +845,14 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
+  visibilityNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  visibilityText: { flex: 1, fontSize: 13, lineHeight: 19 },
   previewActions: {
     flexDirection: 'row',
     padding: 16,

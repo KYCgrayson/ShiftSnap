@@ -31,6 +31,7 @@ import Animated, {
 import { useTheme } from '../src/theme';
 import { supabase } from '../src/services/supabase';
 import { confirmRosterPhotoTransmission } from '../src/services/rosterPhotoConsent';
+import { readRosterImageBase64 } from '../src/services/rosterImageData';
 import { Card, Button, Input, TimePickerInput } from '../src/components/ui';
 import { useAuthStore } from '../src/stores/authStore';
 import { useShiftCodeStore } from '../src/stores/shiftCodeStore';
@@ -38,7 +39,7 @@ import { useShiftStore } from '../src/stores/shiftStore';
 import { useScheduleStore } from '../src/stores/scheduleStore';
 import { useCalendarStore } from '../src/stores/calendarStore';
 import { usePersonStore } from '../src/stores/personStore';
-import { useGroupStore } from '../src/stores/groupStore';
+import { loadGroupMembers, useGroupStore, type GroupMemberItem } from '../src/stores/groupStore';
 import { COMMON_SHIFT_CODES, PERSON_COLOR_HEX } from '@shiftsnap/shared';
 import type { OCRResult, OCRShift } from '@shiftsnap/shared';
 const MY_COLOR_KEY = 'shiftsnap_my_schedule_color';
@@ -82,13 +83,24 @@ export default function ReviewScheduleScreen() {
     yearMonth: string;
     imageUrl: string;
   }>();
-  const { user, isOfflineReadOnly } = useAuthStore();
+  const { user, isGuest, isOfflineReadOnly } = useAuthStore();
   const { shiftCodes, fetchShiftCodes, saveShiftCode } = useShiftCodeStore();
   const { createShiftsFromOCR } = useShiftStore();
   const { updateScheduleStatus, updateScheduleYearMonth } = useScheduleStore();
   const { isConnected, syncUserShifts } = useCalendarStore();
   const { persons, createPerson, resolveRosterPerson, fetchPersons } = usePersonStore();
-  const { currentGroup, members, fetchMembers } = useGroupStore();
+  const { groups } = useGroupStore();
+  const [scheduleMembers, setScheduleMembers] = useState<GroupMemberItem[]>([]);
+  const storedSchedule = useScheduleStore((state) => state.schedules.find((item) => item.id === params.scheduleId));
+  const [loadedScope, setLoadedScope] = useState<{ scheduleId: string; groupId: string | null } | null>(null);
+  const [groupScopeRetry, setGroupScopeRetry] = useState(0);
+  const scheduleGroupId = storedSchedule ? storedSchedule.group_id
+    : loadedScope?.scheduleId === params.scheduleId ? loadedScope.groupId : undefined;
+  const scheduleGroup = groups.find((group) => group.id === scheduleGroupId);
+  const members = scheduleMembers.filter((member) => member.group_id === scheduleGroupId);
+  const visibilityNotice = scheduleGroupId
+    ? t('scan.groupVisibility', { group: scheduleGroup?.name || t('scan.scheduleGroup') })
+    : t('scan.personalVisibility');
 
   // Wizard state
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
@@ -198,12 +210,31 @@ export default function ReviewScheduleScreen() {
     }
   }, [user?.id]);
 
-  // Pull group members so the "tag this row as ..." picker lists them.
-  // Refetches on group switch so the dropdown always reflects the group
-  // the schedule is actually being uploaded into.
+  // History routes may arrive without a cached schedule. Resolve its actual
+  // group instead of borrowing whichever group is currently active.
   useEffect(() => {
-    if (currentGroup?.id) fetchMembers(currentGroup.id);
-  }, [currentGroup?.id]);
+    if (storedSchedule) return;
+    let cancelled = false;
+    setLoadedScope(null);
+    Promise.resolve(supabase.from('schedules').select('group_id').eq('id', params.scheduleId).single())
+      .then(({ data, error }) => {
+        if (!cancelled && !error && data) setLoadedScope({ scheduleId: params.scheduleId, groupId: data.group_id });
+      }).catch(() => { /* The action offers an explicit retry below. */ });
+    return () => { cancelled = true; };
+  }, [params.scheduleId, storedSchedule?.id, groupScopeRetry]);
+
+  // Pull group members so the "tag this row as ..." picker lists them.
+  // Keep the picker tied to this schedule even if the active group changes.
+  useEffect(() => {
+    let cancelled = false;
+    setScheduleMembers([]);
+    if (scheduleGroupId && !isGuest) {
+      loadGroupMembers(scheduleGroupId)
+        .then((loaded) => { if (!cancelled) setScheduleMembers(loaded); })
+        .catch((error) => console.warn('Failed to load roster group members:', error));
+    }
+    return () => { cancelled = true; };
+  }, [scheduleGroupId, isGuest]);
 
   // Load saved self color
   useEffect(() => {
@@ -643,6 +674,17 @@ export default function ReviewScheduleScreen() {
     }
   };
 
+  const showGroupScopeUnavailable = () => {
+    Alert.alert(
+      t('common.error'),
+      t('review.visibilityUnavailable'),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('common.retry'), onPress: () => setGroupScopeRetry((attempt) => attempt + 1) },
+      ],
+    );
+  };
+
   // Re-analyze the schedule image
   const handleReanalyze = async () => {
     if (isOfflineReadOnly) {
@@ -652,24 +694,17 @@ export default function ReviewScheduleScreen() {
     if (!params.imageUrl || reanalyzing || reanalyzeConsentPending.current) return;
     reanalyzeConsentPending.current = true;
     try {
-      if (!await confirmRosterPhotoTransmission('reanalyze')) return;
+      if (scheduleGroupId === undefined) {
+        showGroupScopeUnavailable();
+        return;
+      }
+      if (!await confirmRosterPhotoTransmission('reanalyze', isGuest ? undefined : visibilityNotice)) return;
       if (useAuthStore.getState().isOfflineReadOnly || useAuthStore.getState().user?.id !== user?.id) {
         Alert.alert(t('common.error'), t('offline.readOnly'));
         return;
       }
       setReanalyzing(true);
-      // Convert image to base64
-      const response = await fetch(params.imageUrl);
-      const blob = await response.blob();
-      const base64: string = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const dataUrl = reader.result as string;
-          resolve(dataUrl.split(',')[1]);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
+      const base64 = await readRosterImageBase64(params.imageUrl);
 
       // Call OCR with hint to extract more rows
       const { data, error } = await supabase.functions.invoke('ocr-process', {
@@ -725,6 +760,10 @@ export default function ReviewScheduleScreen() {
       return;
     }
     if (!user || !ocrData || !scheduleId || !yearMonth || selectedPersonIndex === null) return;
+    if (scheduleGroupId === undefined) {
+      showGroupScopeUnavailable();
+      return;
+    }
 
     setSaving(true);
     try {
@@ -732,17 +771,17 @@ export default function ReviewScheduleScreen() {
       await AsyncStorage.setItem(MY_COLOR_KEY, selfColor);
 
       // Each imported row retains its OCR label in name_on_schedule, while its
-      // person_id resolves through the active group's canonical/alias rule.
+      // person_id resolves through the schedule group's canonical/alias rule.
       // Fuzzy mode intentionally resolves exact aliases only; it never merges.
       const personMap = new Map<number, string>();
       const resolveReviewPerson = async (rowIndex: number, name: string, color: string) => {
-        if (currentGroup?.id) {
-          const personId = await resolveRosterPerson(currentGroup.id, name, color);
+        if (scheduleGroupId) {
+          const personId = await resolveRosterPerson(scheduleGroupId, name, color);
           personMap.set(rowIndex, personId);
           return;
         }
-        const existingPerson = persons.find((person) => person.name === name);
-        const personId = existingPerson?.id ?? await createPerson(user.id, name, undefined, color);
+        const existingPerson = persons.find((person) => person.name === name && person.group_id === null);
+        const personId = existingPerson?.id ?? await createPerson(user.id, name, undefined, color, null);
         personMap.set(rowIndex, personId);
       };
 
@@ -1418,6 +1457,12 @@ export default function ReviewScheduleScreen() {
           <Text style={[styles.summaryTitle, { color: theme.colors.textPrimary }]}>
             {t('review.confirmTitle')}
           </Text>
+
+          {!isGuest && (
+            <Text style={{ color: theme.colors.textSecondary, fontSize: 13, lineHeight: 19, marginBottom: 12 }}>
+              {scheduleGroupId === undefined ? t('review.visibilityUnavailable') : visibilityNotice}
+            </Text>
+          )}
 
           {summary.personName ? (
             <View style={[styles.summaryRow, { borderColor: theme.colors.border }]}>

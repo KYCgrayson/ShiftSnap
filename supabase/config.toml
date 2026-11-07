@@ -56,3 +56,6 @@ secret = "env(GOOGLE_SECRET)"
 
 [functions.ocr-process]
 verify_jwt = false
+
+[functions.request-notifications]
+verify_jwt = false

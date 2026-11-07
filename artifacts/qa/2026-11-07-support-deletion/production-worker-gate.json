@@ -1,0 +1,7 @@
+{
+  "checked_at": "2026-11-07T02:44:52.310203+00:00",
+  "worker_missing_configuration_http": 503,
+  "pending_jobs": 4,
+  "attempts": 0,
+  "boundary": "Production worker deployed; no valid Resend key or schedule configured. Queued jobs preserved. No email sent."
+}

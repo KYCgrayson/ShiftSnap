@@ -1,0 +1,17 @@
+{
+  "checked_at": "2026-11-07T02:24:41.420595+00:00",
+  "boundary": "Production authenticated HTTP APIs, not Build 15 device UI. Dedicated synthetic QA identities only. No account deletion performed.",
+  "checks": [
+    "authenticated support returns receipt",
+    "authenticated deletion pending receipt",
+    "duplicate deletion same receipt",
+    "own status readable",
+    "other account cannot see request",
+    "client denied direct support_requests",
+    "client denied direct account_deletion_requests",
+    "anonymous denied submit_support_request",
+    "anonymous denied request_account_deletion",
+    "anonymous denied get_my_account_deletion_request"
+  ],
+  "count": 10
+}

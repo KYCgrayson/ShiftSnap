@@ -1,0 +1,18 @@
+{
+  "checked_at": "2026-11-07T02:44:35.356789+00:00",
+  "boundary": "Production authenticated HTTP; synthetic identities. Not actual Build 15 UI or inbox delivery.",
+  "count": 11,
+  "checks": [
+    "synthetic account signs in",
+    "synthetic account signs in",
+    "customer reads operator-updated status",
+    "retry reuses current receipt",
+    "original receipt retained",
+    "other customer sees no request",
+    "private table denied: support_requests",
+    "private table denied: account_deletion_requests",
+    "anonymous denied: submit_support_request",
+    "anonymous denied: request_account_deletion",
+    "anonymous denied: get_my_account_deletion_request"
+  ]
+}

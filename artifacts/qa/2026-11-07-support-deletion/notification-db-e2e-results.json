@@ -1,0 +1,178 @@
+{
+  "suite": "IShift request notification database integration E2E",
+  "environment": "isolated PostgreSQL 17, synthetic users, Unix socket only",
+  "generated_at_utc": "2026-11-07T02:43:31.792697+00:00",
+  "postgres_version": "17.11 (Homebrew)",
+  "auth_prerequisites": "minimal auth.users, auth.uid JWT-setting stub, update_updated_at",
+  "provider_delivery_tested": false,
+  "mobile_build15_tested": false,
+  "passed": true,
+  "checks": [
+    {
+      "case": "all_three_migrations_apply_to_isolated_postgresql17",
+      "passed": true
+    },
+    {
+      "case": "existing_verified_contact_backfilled",
+      "passed": true
+    },
+    {
+      "case": "existing_support_and_open_deletion_received_backfill",
+      "passed": true
+    },
+    {
+      "case": "initial_backfill_repeat_is_idempotent",
+      "passed": true
+    },
+    {
+      "case": "initial_backfill_deliverable",
+      "passed": true
+    },
+    {
+      "case": "unauthenticated_rpc_calls_denied",
+      "passed": true
+    },
+    {
+      "case": "mobile_role_denied_tables_and_worker_rpcs",
+      "passed": true
+    },
+    {
+      "case": "service_role_worker_grants_present",
+      "passed": true
+    },
+    {
+      "case": "security_definer_search_paths_empty",
+      "passed": true
+    },
+    {
+      "case": "build15_support_receipt_is_uuid",
+      "passed": true
+    },
+    {
+      "case": "build15_deletion_receipt_shape_unchanged",
+      "passed": true
+    },
+    {
+      "case": "eight_concurrent_deletion_submissions_one_request",
+      "passed": true
+    },
+    {
+      "case": "duplicate_deletion_submissions_only_one_mail_pair",
+      "passed": true
+    },
+    {
+      "case": "other_user_reads_only_own_receipt",
+      "passed": true
+    },
+    {
+      "case": "support_body_absent_from_customer_payload",
+      "passed": true
+    },
+    {
+      "case": "concurrent_workers_claim_disjoint_jobs",
+      "passed": true
+    },
+    {
+      "case": "verified_recipient_and_reply_routes",
+      "passed": true
+    },
+    {
+      "case": "wrong_claim_token_cannot_finish",
+      "passed": true
+    },
+    {
+      "case": "support_contact_purged_after_receipt",
+      "passed": true
+    },
+    {
+      "case": "successful_operator_body_and_reply_snapshot_redacted",
+      "passed": true
+    },
+    {
+      "case": "invalid_status_missing_notes_and_false_completion_rejected",
+      "passed": true
+    },
+    {
+      "case": "note_only_update_and_repeated_request_do_not_notify",
+      "passed": true
+    },
+    {
+      "case": "fifo_only_oldest_status_per_audience_claimed",
+      "passed": true
+    },
+    {
+      "case": "parallel_claim_cannot_overtake_inflight_status",
+      "passed": true
+    },
+    {
+      "case": "next_status_claims_after_prior_finished",
+      "passed": true
+    },
+    {
+      "case": "expired_lease_reclaims_same_immutable_job",
+      "passed": true
+    },
+    {
+      "case": "stale_previous_owner_cannot_finish",
+      "passed": true
+    },
+    {
+      "case": "provider_failure_schedules_backoff_without_request_loss",
+      "passed": true
+    },
+    {
+      "case": "retry_keeps_uuid_and_rotates_owner_token",
+      "passed": true
+    },
+    {
+      "case": "retry_window_expiry_terminal_no_resend",
+      "passed": true
+    },
+    {
+      "case": "expired_retry_token_cannot_finish",
+      "passed": true
+    },
+    {
+      "case": "unverified_email_not_used_for_customer_receipt",
+      "passed": true
+    },
+    {
+      "case": "unverified_operator_mail_has_only_fixed_reply_address",
+      "passed": true
+    },
+    {
+      "case": "attempt_limit_becomes_terminal_failed",
+      "passed": true
+    },
+    {
+      "case": "verified_deletion_contact_survives_auth_removal",
+      "passed": true
+    },
+    {
+      "case": "completion_uses_own_snapshot_and_30_day_due_date",
+      "passed": true
+    },
+    {
+      "case": "completion_acceptance_purges_contact_snapshot",
+      "passed": true
+    },
+    {
+      "case": "other_user_contact_untouched",
+      "passed": true
+    },
+    {
+      "case": "outbox_failure_owner_lookup_survives_auth_removal",
+      "passed": true
+    },
+    {
+      "case": "queue_empty_after_terminal_jobs",
+      "passed": true
+    }
+  ],
+  "elapsed_seconds": 2.89,
+  "source_sha256": {
+    "supabase/migrations/20261105000001_support_requests.sql": "8fe78a2e0c62d5031f06b2f3f68db5b212c3bf01587775e4e3e03dab62c8c247",
+    "supabase/migrations/20261105000002_account_deletion_requests.sql": "6bd2f70977d0299c6f4f5d735cbb2919d045e16c14ba392717050c6acd8dbac4",
+    "supabase/migrations/20261107000001_request_notifications.sql": "d3d9db8e4342fc7d6c25db9a466233c822a262a6f854f0026d2f261543d44131"
+  }
+}

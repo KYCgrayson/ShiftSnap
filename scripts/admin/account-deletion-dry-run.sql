@@ -85,6 +85,20 @@ UNION ALL
 SELECT 'support_requests', jsonb_build_object('rows', count(*))
 FROM public.support_requests sr JOIN target t ON sr.user_id = t.user_id
 UNION ALL
+SELECT 'request_notification_data', jsonb_build_object(
+  'jobs', count(*),
+  'unsent_jobs', count(*) FILTER (WHERE o.state <> 'sent'),
+  'retained_reply_addresses', count(o.operator_reply_to),
+  'retained_message_or_note', count(*) FILTER (WHERE o.payload ? 'message' OR o.payload->>'note' IS NOT NULL),
+  'contact_snapshots', (SELECT count(*) FROM request_mail.contacts c
+    WHERE c.request_id IN (SELECT DISTINCT q.request_id FROM request_mail.outbox q JOIN target x ON q.owner_id=x.user_id))
+)
+FROM request_mail.outbox o JOIN target t ON o.owner_id=t.user_id
+UNION ALL
+SELECT 'request_operator_notes', jsonb_build_object('rows', count(*))
+FROM public.account_deletion_requests r JOIN target t ON r.user_id=t.user_id
+WHERE r.operator_note IS NOT NULL
+UNION ALL
 SELECT 'storage_objects', jsonb_build_object(
   'shift_images', count(*) FILTER (WHERE o.bucket_id = 'shift-images'),
   'note_images', count(*) FILTER (WHERE o.bucket_id = 'note-images')

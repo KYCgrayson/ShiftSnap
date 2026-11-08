@@ -19,7 +19,9 @@
 老闆原話：「我的 Gemini 是付費方案，删除账号要三十天内处理。」
 - Gemini API 用付費方案：App Privacy 問卷和隱私權政策照付費方案寫。依 Gemini API 付費服務條款，Google 不會用送出的內容改善產品。帳單頁沒有由 agent 獨立核對，這點依老闆口述。
 - 刪除帳號承諾 30 日內處理：已核准，與 App 內文字（`en.ts:299`「up to 30 days」）一致。
-- 還要老闆決定：(a) 刪除申請的處理人（誰收通知、誰執行 `docs/account-deletion-operations.md` 的步驟）；(b) 刪除申請紀錄的保留期限（建議選項：完成後 1 年，或完成後 3 年，或只保留匿名化的完成收據）。
+- 還要老闆決定：刪除申請紀錄的保留期限（建議選項：完成後 1 年，或完成後 3 年，或只保留匿名化的完成收據）。
+- **處理人已決定（11/8 老闆原話）**：「现在申请是用户申请，然后他会发信给我自己去手动去 Superbase…因为现在也没有用户，我预设应多有用户的情况不太好。」由老闆本人處理：用戶在 App 申請 → 管理通知寄到 appai@appai.info → 老闆照 `docs/support-and-deletion-guide.zh-TW.md` 在 Supabase 手動刪除，並把 `status` 改成完成。這跟 11/7 的設計（`docs/plans/2026-11-07-support-deletion-delivery.md:7`、`:31`）一致，不另外設計多人分工。
+- **前提缺口**：通知信目前還寄不出去（Resend 金鑰 401，排程未啟用）。修好之前，老闆收不到申請通知，只能定期在 SQL Editor 執行 `scripts/admin/request-inbox.sql` 查看有沒有新申請。
 - 掃描太慢：另開 ops #51，由總窗口在 Studio 測試，本 run log 不處理。
 
 ## 逐項清單
@@ -33,7 +35,7 @@
 | 5 | 隱私權政策網址 | 好了 | HTTP 200，內容如實寫出 Gemini | 營運者名稱、保存期限（建議補） |
 | 6 | App Privacy 問卷 | 缺 | 還沒填；下方有建議答案 | 已確認付費方案（11/8），只剩實際填寫 |
 | 7 | 審查備註與測試帳號 | 缺 | 備註已填，專用登入帳號未填 | 建立帳號，並親自把密碼填進 Apple |
-| 8 | 刪除帳號流程 | 要老闆決定 | App 內可以申請；30 日已核准（11/8），之後還要做完整刪除演練 | 指定處理人、決定申請紀錄保留期限 |
+| 8 | 刪除帳號流程 | 要老闆決定 | App 內可以申請；30 日已核准（11/8），之後還要做完整刪除演練 | 處理人已定為老闆本人（11/8）；只剩申請紀錄保留期限 |
 | 9 | 群組分享隱私說明 | 好了 | App 內上傳前有明確提示；網站政策可以再寫清楚 | — |
 | 10 | 首次啟動畫面 | 缺 | 模擬器已驗證；Build 15 的實機畫面還沒驗收 | 需要有人拿實機開一次 |
 | 11 | 已知問題：OCR 處理很久 | 缺 | 根因已確認，只記錄、沒有修 | — |
@@ -123,7 +125,8 @@ cd apps/mobile/ios && xcodebuild -workspace ShiftSnap.xcworkspace -scheme ShiftS
 - 後端：migration `20261105000002_account_deletion_requests.sql` 已部署到正式環境，並用 10 項正式 HTTP 檢查驗證（`artifacts/qa/2026-11-07-support-deletion/production-rpc.json`）。
 - 這是「提出申請，再由人工處理」，Apple 允許這種做法，前提是要說明處理時間並通知完成（Apple「Offering account deletion in your app」）。
 - 已核准（11/8）：30 日內處理（`docs/account-deletion-operations.md:9`、`:29` 要求的核准）。
-- **還要老闆決定**：指定處理人，以及申請紀錄要保留多久（選項見前面的「11/8 老闆決定」）。
+- 處理人已決定（11/8）：老闆本人收通知，並在 Supabase 手動處理。
+- **還要老闆決定**：申請紀錄要保留多久（選項見前面的「11/8 老闆決定」）。
 - **缺**：
   - 完整刪除演練（Storage 照片、群組移交、Apple 登入 token 撤銷、完成通知）還沒做。
   - 完成通知信目前不能寄：Resend 金鑰回 401，排程也還沒啟用（`current-status.md`）。

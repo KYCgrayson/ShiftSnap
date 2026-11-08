@@ -63,3 +63,8 @@ Thumbs.db
 .cache/
 .local-backups/
 .codex/
+
+# ops #51 bench: roster photos and model output contain coworkers' names
+scripts/bench/input/
+scripts/bench/output/
+scripts/bench/truth/

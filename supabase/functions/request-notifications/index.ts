@@ -21,13 +21,19 @@ async function authorized(given: string, expected: string): Promise<boolean> {
   return difference === 0;
 }
 
-function message(job: Envelope): { subject: string; text: string } {
+function dashboardProjectUrl(supabaseUrl: string): string | undefined {
+  const match = /^https:\/\/([a-z0-9]{20})\.supabase\.co\/?$/.exec(supabaseUrl);
+  if (match?.[0] === supabaseUrl) return `https://supabase.com/dashboard/project/${match[1]}`;
+}
+
+function message(job: Envelope, dashboard: string | undefined): { subject: string; text: string } {
   const operator = job.audience === 'operator';
   const reference = `申請編號：${job.request_id}`;
+  const editor = dashboard ? `Table Editor\n${dashboard}/editor` : 'IShift 專案的 Table Editor';
   if (job.kind === 'support') return {
     subject: operator ? 'IShift：新的客服需求' : 'IShift：已收到您的客服需求',
     text: operator
-      ? `${reference}\n已收到客服需求。可直接回覆此信聯絡已驗證的使用者；若 Reply-To 為客服信箱，請先於後台查核聯絡方式。\n\n使用者內容（原文）：\n${String(job.payload.message ?? '')}`
+      ? `${reference}\n已收到客服需求。\n\n開啟 ${editor}\n在 public.support_requests 用申請編號比對 id，查看案件內容。可直接回覆此信聯絡已驗證的使用者。若 Reply-To 為客服信箱，請先於後台查核聯絡方式。\n\n使用者內容（原文）：\n${String(job.payload.message ?? '')}`
       : `${reference}\n\n我們已收到您的客服需求，將由客服人員處理。您可以回覆此信補充資訊。\n\nIShift 客服\nappai@appai.info`,
   };
   const labels: Record<string, string> = {
@@ -42,19 +48,31 @@ function message(job: Envelope): { subject: string; text: string } {
   const status = labels[job.event];
   const note = typeof job.payload.note === 'string' && job.payload.note.trim()
     ? `\n處理說明：\n${job.payload.note}\n` : '';
+  const summary = `${reference}\n\n${status}。${note}\n本申請的處理目標為收到申請後 30 天內，目標日期為 ${due}（台灣時間）；此日期為處理目標。`;
+  if (operator) {
+    const lookup = `開啟 ${editor}\n在 public.account_deletion_requests 用申請編號比對 id，查看目前狀態。`;
+    const active = job.event === 'received' || job.event === 'pending' || job.event === 'in_progress';
+    const steps = active ? `
+
+1. 目前狀態是 pending 或 in_progress 才繼續。若是 pending，先改為 in_progress。
+2. 用該筆 user_id 在 Authentication → Users 核對帳號。${dashboard ? `\n${dashboard}/auth/users` : ''}
+3. 先依內部刪除手冊盤點帳號資料、班表共享及群組依賴。在 Storage 的 shift-images 和 note-images 內，僅刪除以該 user_id 為名的資料夾中屬於本人的檔案。保留 bucket 和其他人的資料。${dashboard ? `\n${dashboard}/storage/buckets` : ''}
+4. 處理完依賴與應刪資料後，再刪除 Auth 帳號。Auth 帳號移除後，仍須確認應刪資料和檔案均已清除，才把案件改為 completed。` : '';
+    return { subject: `IShift：${status}`, text: `${summary}\n\n${lookup}${steps}` };
+  }
   return {
     subject: `IShift：${status}`,
-    text: `${reference}\n\n${status}。${note}\n本申請的處理目標為收到申請後 30 天內，目標日期為 ${due}（台灣時間）；此日期為處理目標。${job.event === 'completed' ? '\n客服已將此申請標記為完成。' : '\n若有需要補充的資訊或處理進度，我們會以電子郵件通知。'}\n${operator ? '\n請在受限後台查核帳號、共享資料及儲存空間後處理；本通知不會自動刪除任何資料。' : '\n您可直接回覆此信聯絡客服。'}\n\nIShift 客服\nappai@appai.info`,
+    text: `${summary}${job.event === 'completed' ? '\n客服已將此申請標記為完成。' : '\n若有需要補充的資訊或處理進度，我們會以電子郵件通知。'}\n\n您可直接回覆此信聯絡客服。\n\nIShift 客服\nappai@appai.info`,
   };
 }
 
-async function send(job: Envelope, key: string, from: string): Promise<Delivery> {
+async function send(job: Envelope, key: string, from: string, dashboard: string | undefined): Promise<Delivery> {
   if (!job.to_email) return { delivered: false, code: 'no_verified_contact' };
   if (!safeEmail(job.to_email) || !safeEmail(job.reply_to)) {
     return { delivered: false, code: 'invalid_envelope' };
   }
   let content: ReturnType<typeof message>;
-  try { content = message(job); }
+  try { content = message(job, dashboard); }
   catch { return { delivered: false, code: 'invalid_envelope' }; }
   try {
     const response = await fetch('https://api.resend.com/emails', {
@@ -91,6 +109,7 @@ Deno.serve(async (request: Request) => {
   }
   const given = request.headers.get('x-request-mail-secret') ?? '';
   if (!await authorized(given, secret)) return json(401, { error: 'unauthorized' });
+  const dashboard = dashboardProjectUrl(url);
   const rpc = async (name: string, body: Record<string, unknown>) => {
     const response = await fetch(`${url}/rest/v1/rpc/${name}`, {
       method: 'POST', signal: AbortSignal.timeout(10_000),
@@ -104,7 +123,7 @@ Deno.serve(async (request: Request) => {
     const jobs: Envelope[] = await rpc('claim_request_notifications', { p_limit: 10 });
     let accepted = 0;
     for (const job of jobs) {
-      const result = await send(job, key, from);
+      const result = await send(job, key, from, dashboard);
       const recorded = await rpc('finish_request_notification', {
         p_id: job.id, p_claim_token: job.claim_token, p_delivered: result.delivered,
         p_provider_id: result.providerId ?? null, p_failure_code: result.code ?? null,

@@ -25,3 +25,20 @@ Authenticated production test accounts receive stable receipts; another account 
 
 ## Dependencies
 User explicitly authorized shared Resend and an IShift-specific key. The existing local credential returns 401; Safari login remains pending. Physical device inventory confirms IShift 1.0.0 Build 15 installed, but iPhone Mirroring still requires Mac unlock, so actual UI acceptance remains pending. The existing 30-day target is an operational target, not proof that fulfillment has occurred.
+
+## Manual handling links in operator mail
+
+The worker already addresses operator notifications to appai@appai.info. Operators currently have to find the project and case themselves because the plain-text message has no Dashboard links. Extend the operator template with authenticated Supabase Dashboard links and short manual instructions. Keep Build 15 APIs, the queue, and customer emails compatible.
+
+Failure cases recorded before the change:
+
+- A missing, malformed, or non-hosted project URL sends the operator to the wrong project. Use only the project reference from a canonical hosted `SUPABASE_URL`; otherwise describe how to open the correct project manually.
+- A customer receipt or status notice leaks Dashboard links or internal instructions. Render the operator content only for the operator audience.
+- User-controlled content or configuration with a lookalike hostname injects a Dashboard URL. Build the URL from a validated project reference and fixed paths without personal data, receipt IDs or credentials.
+- A completed or rejected notice, or a delayed older notice, triggers duplicate deletion. Terminal notices only point to the case record. Instructions in older notices require checking the live case and stopping for terminal statuses before acting.
+- An operator marks the request completed after removing Auth alone. Require review of shared data, cleanup of owned Storage and account data, and verification before completion.
+
+- [x] Review operator routing, existing case fields, the deletion runbook, and official Dashboard routes.
+- [x] Add and document the operator-only Dashboard links and manual steps.
+- [x] Strict TypeScript passed. Exercised 14 synthetic jobs through the worker HTTP handler with mocked RPC and mail-provider responses. Verified all three project links, seven byte-equivalent customer messages, record-only terminal notices, the receipt-based 30-day date, and no Dashboard links for six noncanonical URLs.
+- [ ] Verify the updated operator emails in the real inbox after sender configuration and schedule activation.

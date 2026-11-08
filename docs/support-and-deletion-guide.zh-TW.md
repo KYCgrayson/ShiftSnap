@@ -13,6 +13,8 @@
 
 你可用 iCloud Mail 或手機 Mail 開啟 `appai@appai.info`。客服通知的 Reply-To 指向申請人已驗證的信箱；按「回覆」前核對收件人，寄件人選 `appai@appai.info`。保留案件編號，方便雙方對照。用戶回覆自動信也會寄到此客服地址。
 
+管理通知附上 IShift 專案的 Supabase Table Editor 連結。客服案件可依信中的編號在 `public.support_requests` 比對 `id`。刪除案件則在 `public.account_deletion_requests` 比對 `id`，先查看當下的狀態。待處理通知另附 Authentication → Users 與 Storage 連結，供你核對 `user_id`、盤點共用資料並清理檔案。結案通知只提供案件查閱指引。連結須登入有權限的 Supabase 帳號，並且只放在管理通知中。
+
 郵件與 App 狀態不同：在 Mail 回信不會自動改變 App 的處理狀態，須在受限 Supabase 後台更新。不能只寄「已完成」但沒有刪除資料。
 
 ## 在 Supabase 查看案件
@@ -33,7 +35,7 @@
 在 Table Editor 同時修改 `status` 和 `operator_note` 後儲存；只有狀態改變才會新增通知。一般客服對話直接用郵件回覆。不要要求用戶說明刪除動機、寄信或打電話才接受申請；用戶在 App 的確認已構成申請。
 
 ## 實際刪除由你處理
-依 `docs/account-deletion-operations.md` 先盤點本人資料、原始照片、共享群組及 Apple 登入，再執行實際刪除。通知系統不會在第 30 天自動刪除。必須在目標期限內主動處理，不可讓申請只留在資料表。
+對照信中編號與當下狀態，把 `pending` 改為 `in_progress` 後開始處理。依 [帳號刪除操作手冊](account-deletion-operations.md) 先盤點本人資料、原始照片、共享群組及 Apple 登入。先處理共享依賴及刪除該帳號在 `shift-images`、`note-images` 中擁有的檔案，再刪除 Auth 帳號。核對帳號及應刪資料均已清除後，才把案件改為 `completed`。從收到申請起算 30 天是人工處理目標。
 
 新增郵件資料也在刪除範圍：用 `owner_id` 找出 `request_mail.outbox` 中的客服內文、聯絡地址及操作說明，清理舊客服／舊案件的相關資料。當次完成通知需要的聯絡快照先保留，成功寄出後會清理；若寄送失敗則依錯誤排查，確認用戶實際收到完成通知。還須依既定保留政策清理客服郵箱和郵件供應商的案件內容。
 

@@ -1,0 +1,10 @@
+{
+  "assertions": 143,
+  "syntheticEmails": 14,
+  "customerCopiesUnchanged": 7,
+  "liveEmailSent": false,
+  "operatorExamples": 7,
+  "fallbackUrls": 6,
+  "boundary": "Local worker HTTP handler with mocked database and provider. No email sent. Real provider configuration remains absent.",
+  "source_sha256": "e9a2a008bfadf60291240d8d99997db8a0c7a76ad489725fb5e66266a1c8bb06"
+}

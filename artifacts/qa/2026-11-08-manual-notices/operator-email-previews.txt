@@ -1,0 +1,118 @@
+### support / received
+To: appai@appai.info
+Subject: IShift：新的客服需求
+
+申請編號：ffffffff-ffff-4fff-8fff-ffffffffffff
+已收到客服需求。
+
+開啟 Table Editor
+https://supabase.com/dashboard/project/abcdefghijklmnopqrst/editor
+在 public.support_requests 用申請編號比對 id，查看案件內容。可直接回覆此信聯絡已驗證的使用者。若 Reply-To 為客服信箱，請先於後台查核聯絡方式。
+
+使用者內容（原文）：
+合成客服內容。
+
+### deletion / received
+To: appai@appai.info
+Subject: IShift：已收到刪除帳號申請
+
+申請編號：ffffffff-ffff-4fff-8fff-ffffffffffff
+
+已收到刪除帳號申請。
+本申請的處理目標為收到申請後 30 天內，目標日期為 2026/12/08（台灣時間）；此日期為處理目標。
+
+開啟 Table Editor
+https://supabase.com/dashboard/project/abcdefghijklmnopqrst/editor
+在 public.account_deletion_requests 用申請編號比對 id，查看目前狀態。
+
+1. 目前狀態是 pending 或 in_progress 才繼續。若是 pending，先改為 in_progress。
+2. 用該筆 user_id 在 Authentication → Users 核對帳號。
+https://supabase.com/dashboard/project/abcdefghijklmnopqrst/auth/users
+3. 先依內部刪除手冊盤點帳號資料、班表共享及群組依賴。在 Storage 的 shift-images 和 note-images 內，僅刪除以該 user_id 為名的資料夾中屬於本人的檔案。保留 bucket 和其他人的資料。
+https://supabase.com/dashboard/project/abcdefghijklmnopqrst/storage/buckets
+4. 處理完依賴與應刪資料後，再刪除 Auth 帳號。Auth 帳號移除後，仍須確認應刪資料和檔案均已清除，才把案件改為 completed。
+
+### deletion / pending
+To: appai@appai.info
+Subject: IShift：等待處理
+
+申請編號：ffffffff-ffff-4fff-8fff-ffffffffffff
+
+等待處理。
+本申請的處理目標為收到申請後 30 天內，目標日期為 2026/12/08（台灣時間）；此日期為處理目標。
+
+開啟 Table Editor
+https://supabase.com/dashboard/project/abcdefghijklmnopqrst/editor
+在 public.account_deletion_requests 用申請編號比對 id，查看目前狀態。
+
+1. 目前狀態是 pending 或 in_progress 才繼續。若是 pending，先改為 in_progress。
+2. 用該筆 user_id 在 Authentication → Users 核對帳號。
+https://supabase.com/dashboard/project/abcdefghijklmnopqrst/auth/users
+3. 先依內部刪除手冊盤點帳號資料、班表共享及群組依賴。在 Storage 的 shift-images 和 note-images 內，僅刪除以該 user_id 為名的資料夾中屬於本人的檔案。保留 bucket 和其他人的資料。
+https://supabase.com/dashboard/project/abcdefghijklmnopqrst/storage/buckets
+4. 處理完依賴與應刪資料後，再刪除 Auth 帳號。Auth 帳號移除後，仍須確認應刪資料和檔案均已清除，才把案件改為 completed。
+
+### deletion / in_progress
+To: appai@appai.info
+Subject: IShift：處理中
+
+申請編號：ffffffff-ffff-4fff-8fff-ffffffffffff
+
+處理中。
+本申請的處理目標為收到申請後 30 天內，目標日期為 2026/12/08（台灣時間）；此日期為處理目標。
+
+開啟 Table Editor
+https://supabase.com/dashboard/project/abcdefghijklmnopqrst/editor
+在 public.account_deletion_requests 用申請編號比對 id，查看目前狀態。
+
+1. 目前狀態是 pending 或 in_progress 才繼續。若是 pending，先改為 in_progress。
+2. 用該筆 user_id 在 Authentication → Users 核對帳號。
+https://supabase.com/dashboard/project/abcdefghijklmnopqrst/auth/users
+3. 先依內部刪除手冊盤點帳號資料、班表共享及群組依賴。在 Storage 的 shift-images 和 note-images 內，僅刪除以該 user_id 為名的資料夾中屬於本人的檔案。保留 bucket 和其他人的資料。
+https://supabase.com/dashboard/project/abcdefghijklmnopqrst/storage/buckets
+4. 處理完依賴與應刪資料後，再刪除 Auth 帳號。Auth 帳號移除後，仍須確認應刪資料和檔案均已清除，才把案件改為 completed。
+
+### deletion / action_required
+To: appai@appai.info
+Subject: IShift：需要您補充資訊
+
+申請編號：ffffffff-ffff-4fff-8fff-ffffffffffff
+
+需要您補充資訊。
+處理說明：
+合成案件處理說明。
+
+本申請的處理目標為收到申請後 30 天內，目標日期為 2026/12/08（台灣時間）；此日期為處理目標。
+
+開啟 Table Editor
+https://supabase.com/dashboard/project/abcdefghijklmnopqrst/editor
+在 public.account_deletion_requests 用申請編號比對 id，查看目前狀態。
+
+### deletion / completed
+To: appai@appai.info
+Subject: IShift：刪除流程已完成
+
+申請編號：ffffffff-ffff-4fff-8fff-ffffffffffff
+
+刪除流程已完成。
+本申請的處理目標為收到申請後 30 天內，目標日期為 2026/12/08（台灣時間）；此日期為處理目標。
+
+開啟 Table Editor
+https://supabase.com/dashboard/project/abcdefghijklmnopqrst/editor
+在 public.account_deletion_requests 用申請編號比對 id，查看目前狀態。
+
+### deletion / rejected
+To: appai@appai.info
+Subject: IShift：申請未完成
+
+申請編號：ffffffff-ffff-4fff-8fff-ffffffffffff
+
+申請未完成。
+處理說明：
+合成案件處理說明。
+
+本申請的處理目標為收到申請後 30 天內，目標日期為 2026/12/08（台灣時間）；此日期為處理目標。
+
+開啟 Table Editor
+https://supabase.com/dashboard/project/abcdefghijklmnopqrst/editor
+在 public.account_deletion_requests 用申請編號比對 id，查看目前狀態。

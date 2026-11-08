@@ -10,9 +10,17 @@
 共 11 項，每項只標一個主狀態：**好了 3 項（#2、#5、#9）、缺 7 項（#1、#3、#4、#6、#7、#10、#11）、要老闆決定 1 項（#8）**。有些「缺」的項目也需要老闆配合決定，列在表格最後一欄。
 
 最該先做的三件事：
-1. **修 OCR「處理中」等很久的問題，再出新 build**（第 11 項）。審查員一定會掃描範例班表；如果一直轉圈或逾時，很可能被以 2.1（App 完整性）退件。修好後要出 Build 16，並重新驗收實機。
-2. **在 App Store Connect 填審查專用測試帳號，並完成 App Privacy 問卷**（第 7、6 項）。掃描必須登入，目前沒有測試帳號。問卷完全沒填，就不能送審。填問卷前，老闆要先確認 Gemini API 用的是付費方案還是免費方案。
-3. **刪除帳號：老闆核准「30 日內處理」與負責處理的人，並用測試帳號完整跑一次刪除流程**（第 8 項）。
+1. **修 OCR「處理中」等很久的問題，再出新 build**（第 11 項）。審查員一定會掃描範例班表；如果一直轉圈或逾時，很可能被以 2.1（App 完整性）退件。修好後要出 Build 16，並重新驗收實機。**已另開 ops #51，由總窗口在 Studio 處理。**
+2. **在 App Store Connect 填審查專用測試帳號，並完成 App Privacy 問卷**（第 7、6 項）。掃描必須登入，目前沒有測試帳號。問卷完全沒填，就不能送審。Gemini 方案已確認為付費方案（見下方「11/8 老闆決定」），可以照付費方案填寫。
+3. **刪除帳號：「30 日內處理」已核准；還要指定處理人與申請紀錄保留期限，並用測試帳號完整跑一次刪除流程**（第 8 項）。
+
+### 11/8 老闆決定（由總窗口轉達，已記進 ops backlog #48）
+
+老闆原話：「我的 Gemini 是付費方案，删除账号要三十天内处理。」
+- Gemini API 用付費方案：App Privacy 問卷和隱私權政策照付費方案寫。依 Gemini API 付費服務條款，Google 不會用送出的內容改善產品。帳單頁沒有由 agent 獨立核對，這點依老闆口述。
+- 刪除帳號承諾 30 日內處理：已核准，與 App 內文字（`en.ts:299`「up to 30 days」）一致。
+- 還要老闆決定：(a) 刪除申請的處理人（誰收通知、誰執行 `docs/account-deletion-operations.md` 的步驟）；(b) 刪除申請紀錄的保留期限（建議選項：完成後 1 年，或完成後 3 年，或只保留匿名化的完成收據）。
+- 掃描太慢：另開 ops #51，由總窗口在 Studio 測試，本 run log 不處理。
 
 ## 逐項清單
 
@@ -23,9 +31,9 @@
 | 3 | 截圖 | 缺 | 必要尺寸各只有 1 張，畫面有瑕疵，也還沒拍新的歡迎頁 | 是否上架英文版 |
 | 4 | 名稱／副標／說明／關鍵字／支援網址 | 缺 | 已存在後台；新版說明文字還沒確認貼入 | — |
 | 5 | 隱私權政策網址 | 好了 | HTTP 200，內容如實寫出 Gemini | 營運者名稱、保存期限（建議補） |
-| 6 | App Privacy 問卷 | 缺 | 還沒填；下方有建議答案 | 確認 Gemini 用付費還是免費方案 |
+| 6 | App Privacy 問卷 | 缺 | 還沒填；下方有建議答案 | 已確認付費方案（11/8），只剩實際填寫 |
 | 7 | 審查備註與測試帳號 | 缺 | 備註已填，專用登入帳號未填 | 建立帳號，並親自把密碼填進 Apple |
-| 8 | 刪除帳號流程 | 要老闆決定 | App 內可以申請；30 日承諾需要核准，之後還要做完整刪除演練 | 核准 30 日目標、指定處理人、申請紀錄保留期限 |
+| 8 | 刪除帳號流程 | 要老闆決定 | App 內可以申請；30 日已核准（11/8），之後還要做完整刪除演練 | 指定處理人、決定申請紀錄保留期限 |
 | 9 | 群組分享隱私說明 | 好了 | App 內上傳前有明確提示；網站政策可以再寫清楚 | — |
 | 10 | 首次啟動畫面 | 缺 | 模擬器已驗證；Build 15 的實機畫面還沒驗收 | 需要有人拿實機開一次 |
 | 11 | 已知問題：OCR 處理很久 | 缺 | 根因已確認，只記錄、沒有修 | — |
@@ -83,7 +91,7 @@ cd apps/mobile/ios && xcodebuild -workspace ShiftSnap.xcworkspace -scheme ShiftS
 - `grep -rnE "不上傳|不會上傳|never upload|zero retention…"` 只在內部文件找到「已移除不實承諾」的紀錄，**對外文字沒有寫「班表不上傳」**。
 - 建議補充（不擋送審）：營運者名稱、班表與照片的保存期限，以及一句「選取群組時，群組成員可以看到你上傳的原始照片」（見第 9 項）。
 
-### 6. App Privacy 問卷｜缺（填寫前需要老闆確認 Gemini 方案）
+### 6. App Privacy 問卷｜缺（Gemini 付費方案已於 11/8 確認）
 
 後台還沒填（`current-status.md`：「內容權利聲明與 App 隱私標籤另行審閱」）。建議依程式碼這樣填：
 
@@ -99,7 +107,7 @@ cd apps/mobile/ios && xcodebuild -workspace ShiftSnap.xcworkspace -scheme ShiftS
 
 - **Tracking：否**。沒有廣告 SDK，也沒有跨 App 追蹤。
 - 行事曆：事件寫入裝置行事曆，伺服器不收集使用者的整本行事曆，所以不勾 Calendar 類別。
-- **要老闆決定**：Gemini API 用的是哪個 Google 方案。Gemini API 免費方案的條款允許 Google 用送出的內容改善產品，付費方案不會。這會影響政策要怎麼寫，以及是否算「與第三方分享」。請老闆在 Google AI Studio／Cloud 帳單頁確認後再定案（這次沒有讀取任何金鑰或帳單）。
+- **已決定（11/8）**：Gemini API 用付費方案。依付費服務條款，Google 不會用送出的內容改善產品，所以問卷與隱私權政策照付費方案寫。Gemini 仍然是處理資料的第三方服務，政策中「圖片會傳給 Google Gemini」的揭露必須保留。帳單頁沒有由 agent 核對，依老闆口述。建議在隱私權政策補一句「Google 不會用這些圖片改善其產品」，但要等網站更新，屬於對外發布，需要老闆批准。
 - 另外要確認：`ocr-process/index.ts:250` 解析失敗時，會把最多 2000 字的模型回應寫進 log，可能含班表內容。如果正式 log 會保留，可以考慮在 Diagnostics 誠實揭露，或改成遮蔽後再記錄（這次不修）。
 
 ### 7. 審查備註與測試帳號｜缺
@@ -109,12 +117,13 @@ cd apps/mobile/ios && xcodebuild -workspace ShiftSnap.xcworkspace -scheme ShiftS
 - **缺：專用 IShift 審查帳號**（`current-status.md`：「專用 IShift 登入資料未填」）。訪客模式不能掃描（metadata：「掃描與雲端儲存需要登入」），所以一定要提供。帳號要登入時不需要驗證碼，密碼只填在 Apple 專用欄，不能進 Git。
 - 建議在備註補一句：「辨識約需 N 秒」，以及「辨識前會跳出 Gemini 同意視窗，請按同意」。
 
-### 8. 刪除帳號流程｜要老闆決定（核准後還要完成下方「缺」的工作）
+### 8. 刪除帳號流程｜要老闆決定（30 日已核准，還剩處理人與保留期限；之後還要完成下方「缺」的工作）
 
 - App 內入口：`apps/mobile/app/(tabs)/settings.tsx:454–470` 會呼叫 RPC `request_account_deletion`，`:190` 用 `get_my_account_deletion_request` 查詢狀態。確認文字：「…may take up to 30 days」（`src/i18n/locales/en.ts:299`）。
 - 後端：migration `20261105000002_account_deletion_requests.sql` 已部署到正式環境，並用 10 項正式 HTTP 檢查驗證（`artifacts/qa/2026-11-07-support-deletion/production-rpc.json`）。
 - 這是「提出申請，再由人工處理」，Apple 允許這種做法，前提是要說明處理時間並通知完成（Apple「Offering account deletion in your app」）。
-- **要老闆決定**：`docs/account-deletion-operations.md:9`、`:29` 寫明「30 日目標需要產品／法務負責人核准」，另外還要指定處理人，以及申請紀錄要保留多久。
+- 已核准（11/8）：30 日內處理（`docs/account-deletion-operations.md:9`、`:29` 要求的核准）。
+- **還要老闆決定**：指定處理人，以及申請紀錄要保留多久（選項見前面的「11/8 老闆決定」）。
 - **缺**：
   - 完整刪除演練（Storage 照片、群組移交、Apple 登入 token 撤銷、完成通知）還沒做。
   - 完成通知信目前不能寄：Resend 金鑰回 401，排程也還沒啟用（`current-status.md`）。
@@ -135,7 +144,7 @@ cd apps/mobile/ios && xcodebuild -workspace ShiftSnap.xcworkspace -scheme ShiftS
 - 修正了 iOS 27 缺少 scene lifecycle 導致的 SIGTRAP 閃退（`plugins/with-ios-scene-lifecycle`）。
 - 還沒做：Build 15 的實機畫面驗收（`current-status.md`：iPhone 鏡像需要 Mac 解鎖）。需要老闆或負責人拿實機開一次。
 
-### 11. 已知問題：掃描時「處理中」很久｜缺（只記錄，沒有修）
+### 11. 已知問題：掃描時「處理中」很久｜缺（只記錄，沒有修；後續由 ops #51 處理）
 
 根因證據：
 - `supabase/functions/ocr-process/index.ts:13`：`const DEFAULT_MODEL = "gemini-3-flash-preview";`。也可以被資料庫 `gemini_model` 設定覆寫（`:57`、`:67`），但這次因 Supabase MCP 無法連線，**沒能確認正式環境的實際值**。

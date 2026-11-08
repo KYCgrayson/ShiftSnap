@@ -1,0 +1,12 @@
+{
+  "configuration": "Release Simulator, localhost synthetic backend",
+  "exit_code": 0,
+  "bundle_sha256": "d9404d1df204b30d60ecfbc32dce391889fa6c224a5bfce9581288f56aef770e",
+  "sources_sha256": {
+    "apps/mobile/app/(tabs)/scan.tsx": "001958ccb16ac1035cfdbbdb118dc32650c066962c7b2f233f1143b3c333f253",
+    "apps/mobile/app/review-schedule.tsx": "918450979065100b5ff78a645970344191a59a5b9cab5a7f31f9a6182919c8c2",
+    "apps/mobile/app/(tabs)/settings.tsx": "d0b0c68d7baa2785942bb3f0ce717e850d45c391d44916e81bb6763c9842dafb",
+    "apps/mobile/src/stores/scheduleStore.ts": "e8e919d702794ae128fa3c0d81b9fae63f660e5852ba621bf23b6b37eee1f39e",
+    "apps/mobile/src/services/rosterPhotoConsent.ts": "43a0a7f07c1fb6efe50da6a708dfd07378bbb3a1e5c529bdbca742279d58d076"
+  }
+}

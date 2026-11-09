@@ -39,6 +39,7 @@ import { useLocaleStore } from '../../src/stores/localeStore';
 import { useDailyNoteStore } from '../../src/stores/dailyNoteStore';
 import { useFocusEffect } from 'expo-router';
 import {
+  formatShiftTimeRange,
   formatYearMonth,
   PERSON_COLOR_HEX,
   getShiftTypeColor,
@@ -1175,8 +1176,7 @@ export default function CalendarScreen() {
                       </Text>
                       {!shift.isDayOff && shift.startTime && (
                         <Text style={[styles.shiftTime, { color: theme.colors.textSecondary }]}>
-                          {shift.startTime}
-                          {shift.endTime && ` - ${shift.endTime}`}
+                          {formatShiftTimeRange(shift.startTime, shift.endTime)}
                         </Text>
                       )}
                       {isShiftOverridden(shift) && (
@@ -1362,8 +1362,7 @@ export default function CalendarScreen() {
                         )}
                         {!shift.isDayOff && shift.startTime && (
                           <Text style={[styles.shiftTime, { color: theme.colors.textSecondary }]}>
-                            {shift.startTime}
-                            {shift.endTime && ` - ${shift.endTime}`}
+                            {formatShiftTimeRange(shift.startTime, shift.endTime)}
                           </Text>
                         )}
                         {isReference && (

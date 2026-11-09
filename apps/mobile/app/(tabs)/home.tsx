@@ -19,7 +19,7 @@ import { useShiftCodeStore } from '../../src/stores/shiftCodeStore';
 import { useGroupStore } from '../../src/stores/groupStore';
 import { Card, Button, useToast } from '../../src/components/ui';
 import { GuestUpgradeBanner } from '../../src/components/GuestUpgradeBanner';
-import { formatDate, getShortWeekday } from '@shiftsnap/shared';
+import { formatDate, formatShiftTimeRange, getShortWeekday } from '@shiftsnap/shared';
 import { useLocaleStore } from '../../src/stores/localeStore';
 
 export default function HomeScreen() {
@@ -171,7 +171,7 @@ export default function HomeScreen() {
                   {todayShift.is_day_off
                     ? t('common.dayOff')
                     : todayShift.start_time
-                      ? `${todayShift.start_time}${todayShift.end_time ? ` - ${todayShift.end_time}` : ''}`
+                      ? formatShiftTimeRange(todayShift.start_time, todayShift.end_time)
                       : ''}
                 </Text>
               </View>
@@ -269,7 +269,7 @@ export default function HomeScreen() {
                         {shift.is_day_off
                           ? t('common.dayOff')
                           : shift.start_time
-                            ? t('home.startsAt', { time: shift.start_time })
+                            ? t('home.startsAt', { time: formatShiftTimeRange(shift.start_time) })
                             : shift.shift_code}
                       </Text>
                     </View>

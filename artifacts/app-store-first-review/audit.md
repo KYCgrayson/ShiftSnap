@@ -7,7 +7,7 @@
 
 ## 結論
 
-共 11 項，每項只標一個主狀態：**好了 3 項（#2、#5、#9）、缺 8 項（#1、#3、#4、#6、#7、#8、#10、#11）、要老闆決定 0 項**（11/8 老闆已決定 Gemini 方案、刪除期限、處理人與紀錄保留方式，見下方）。有些「缺」的項目也需要老闆配合決定，列在表格最後一欄。
+共 11 項，每項只標一個主狀態：**（11/9 更新）好了 5 項（#1、#2、#3、#5、#9）、缺 6 項（#4、#6、#7、#8、#10、#11）、要老闆決定 0 項**。11/8 初版是好了 3、缺 8（11/8 老闆已決定 Gemini 方案、刪除期限、處理人與紀錄保留方式，見下方）。有些「缺」的項目也需要老闆配合決定，列在表格最後一欄。
 
 最該先做的三件事：
 1. **修 OCR「處理中」等很久的問題，再出新 build**（第 11 項）。審查員一定會掃描範例班表；如果一直轉圈或逾時，很可能被以 2.1（App 完整性）退件。修好後要出 Build 16，並重新驗收實機。**已另開 ops #51，由總窗口在 Studio 處理。**
@@ -25,13 +25,22 @@
 - 掃描太慢：另開 ops #51，由總窗口在 Studio 測試，本 run log 不處理。
 - **自家 App 推廣（11/9 老闆決定：「等 1.0.1 再加」）**：首版送審不放。1.0.1 在設定頁加「我的其他 App」區塊，點了開 App Store 頁面，不接廣告 SDK、不追蹤用戶，所以 App Privacy 問卷不用改。前提是被推廣的 App 已經上架。老闆提到「鑑寶快追蹤」與「shift shift」，正式名稱與 App Store 連結到 1.0.1 再確認。
 
+## 11/9 進度（老闆要求「把還沒做完的事情做一做」）
+
+在 MacBook 上完成、沒有動到任何正式資料：
+- **#1 本機 archive**：`xcodebuild … archive CODE_SIGNING_ALLOWED=NO IPHONEOS_DEPLOYMENT_TARGET=15.1` → `** ARCHIVE SUCCEEDED **`。原本的錯誤只是 Pods 的部署目標太舊，用命令列覆寫就好；`ios/` 被 gitignore，所以沒改檔案。正式簽章仍走 EAS。
+- **App 修正（新發現）**：日曆詳細頁、班別頁、首頁今日卡片、首頁「即將到來的班次」都把資料庫時間直接顯示成「07:00:00」。新增 `formatShiftTimeRange`（`packages/shared/src/utils/index.ts`），改顯示「07:00 - 15:00」。`pnpm typecheck` 通過，模擬器畫面已確認。**這需要出 Build 16 才會到用戶手上。**
+- **#3 截圖**：`artifacts/app-store-first-review/upload-v2/` 有 iPhone 6.9 吋 4 張、iPad 13 吋 4 張（歡迎頁、首頁、月曆、班別），尺寸符合規格，RGB JPG。使用中文合成資料（王小明、早班／小夜／大夜／休假）。重拍工具在 `scripts/qa/store-screenshot-fixture.mjs` 和 `scripts/qa/store-screenshots/`。
+- **#4、#6、#7 貼上稿**：`docs/app-store-first-review/asc-paste-sheet.md` 照 App Store Connect 的頁面順序整理了說明文字、App 隱私問卷逐格答案、英文審查備註，以及隱私權政策建議補充的兩句話。實際貼上和儲存要老闆自己來，所以這三項仍標「缺」。
+- 新發現、未修：班別頁的「常用代碼」建議清單只有英文說明（`packages/shared/src/constants/config.ts:52`）。
+
 ## 逐項清單
 
 | # | 項目 | 狀態 | 一句話 | 需老闆決定或配合的事 |
 |---|---|---|---|---|
-| 1 | Xcode archive | 缺 | 本機 Xcode 27 archive 失敗；正式出包走 EAS，Build 15 已成功，**走 EAS 就不擋送審** | 是否需要能在本機 archive |
+| 1 | Xcode archive | 好了（11/9） | 加上 `IPHONEOS_DEPLOYMENT_TARGET=15.1` 後，本機 archive 成功；正式出包仍走 EAS | 是否需要能在本機 archive |
 | 2 | Bundle ID／版本／build／簽章 | 好了 | `com.shiftsnap.app` 1.0.0 (15)，由 EAS 遠端管理憑證 | — |
-| 3 | 截圖 | 缺 | 必要尺寸各只有 1 張，畫面有瑕疵，也還沒拍新的歡迎頁 | 是否上架英文版 |
+| 3 | 截圖 | 好了（11/9） | `upload-v2/` 每個必要尺寸 4 張，要搭配 Build 16 | 是否上架英文版 |
 | 4 | 名稱／副標／說明／關鍵字／支援網址 | 缺 | 已存在後台；新版說明文字還沒確認貼入 | — |
 | 5 | 隱私權政策網址 | 好了 | HTTP 200，內容如實寫出 Gemini | 營運者名稱、保存期限（建議補） |
 | 6 | App Privacy 問卷 | 缺 | 還沒填；下方有建議答案 | 已確認付費方案（11/8），只剩實際填寫 |

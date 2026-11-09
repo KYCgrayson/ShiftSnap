@@ -22,7 +22,7 @@ import { useShiftStore } from '../../src/stores/shiftStore';
 import { useScheduleStore } from '../../src/stores/scheduleStore';
 import { useCalendarStore } from '../../src/stores/calendarStore';
 import { useGroupStore } from '../../src/stores/groupStore';
-import { COMMON_SHIFT_CODES } from '@shiftsnap/shared';
+import { COMMON_SHIFT_CODES, formatShiftTimeRange } from '@shiftsnap/shared';
 import { GuestUpgradeBanner } from '../../src/components/GuestUpgradeBanner';
 
 const UNIFY_DAYOFF_KEY = 'shiftsnap_unify_dayoff';
@@ -383,8 +383,7 @@ export default function ShiftsScreen() {
               </Text>
               {!item.isDayOff && item.startTime && (
                 <Text style={[styles.codeTime, { color: theme.colors.textSecondary }]}>
-                  {item.startTime}
-                  {item.endTime && ` - ${item.endTime}`}
+                  {formatShiftTimeRange(item.startTime, item.endTime)}
                 </Text>
               )}
             </View>

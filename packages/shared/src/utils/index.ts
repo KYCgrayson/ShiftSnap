@@ -24,6 +24,16 @@ export function generateGroupInviteCode(): string {
 }
 
 /**
+ * Format a shift time range for display, dropping database seconds
+ * ("09:00:00" -> "09:00"). Returns '' when there is no start time.
+ */
+export function formatShiftTimeRange(start: string | null | undefined, end?: string | null): string {
+  if (!start) return '';
+  const hhmm = (time: string) => time.slice(0, 5);
+  return end ? `${hhmm(start)} - ${hhmm(end)}` : hhmm(start);
+}
+
+/**
  * Format time string from HH:MM to localized format
  */
 export function formatTime(time: string | null, locale: string = 'en'): string {

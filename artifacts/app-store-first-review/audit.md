@@ -203,3 +203,13 @@ cd apps/mobile/ios && xcodebuild -workspace ShiftSnap.xcworkspace -scheme ShiftS
 - 版本：`codex-cli 0.167.0-alpha.3.2`。沿用既有的 `~/.codex/` 登入，沒有重新登入，也沒有讀取 auth.json。
 - 實測：`codex exec --sandbox read-only --skip-git-repo-check -c model_reasoning_effort="xhigh" "Reply with exactly: ok"` 回傳 `ok`。輸出顯示 model gpt-6-astra、sandbox read-only、reasoning effort xhigh。
 - 之後 iShift 的程式照 D52 交給 Codex（xhigh）寫。Claude 只做規劃和驗證。
+
+## 11/9 送審準備（老闆要求「補完、送 TestFlight、填好資料」）
+
+- 截圖：v3 已由老闆上傳完成。iPhone 6.9 吋和 iPad 13 吋各 5 張（`upload-v3/`）。
+- App Store Connect 看不到 icon：IPA 裡有 icon（Assets.car 有 1024 的 AppIcon，CFBundleIcons 也正確），原因是版本頁還沒選 build。選了 Build 16 之後就會出現。
+- 常用代碼中文化：Codex（xhigh）寫，Claude 驗證，`pnpm typecheck` 通過，commit 810d764。
+- 隱私權網頁：Codex 改好、Claude 驗證 diff。appai 分支 `ishift-privacy-2026-11-09`（2c51a62）已推上去。直接推到 main 會上線正式網站，被安全規則擋下，等老闆或大管家合併。
+- Build 16：EAS 已把 buildNumber 從 15 升到 16，但 production 的 Provisioning Profile 已過期，非互動模式沒辦法重新產生。這台 MacBook 沒有簽章身分，Xcode 也沒有登入 Apple 帳號。**要老闆本人登入 Apple ID 跑 `eas build --auto-submit`**。
+- App Store Connect 文字資料：已做好 `apps/mobile/store.config.json`，老闆登入後跑 `eas metadata:push` 就能寫入。AI 自己跑時，EAS 會要求輸入 Apple ID。
+- 老闆要做的完整步驟：`docs/app-store-first-review/boss-final-steps.md`（a940562）。

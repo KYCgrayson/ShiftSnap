@@ -9,7 +9,7 @@ Prepared from the current repository on 2026-11-05. For the fields actually save
 | Name | `IShift 班表掃描與輪班日曆` | 16 / 30 characters |
 | Subtitle | `拍下紙本班表，用原始代號看班次` | 15 / 30 characters |
 | Promotional text | `掃描紙本班表後先核對辨識結果，再查看輪班、休假，並選擇要同步到手機日曆的班次。` | 39 / 170 characters |
-| Keywords | `輪班,排班,工時,員工,同事,休假,值班,更表,班別,月曆` | 69 / 100 UTF-8 bytes |
+| Keywords | `班表,護理師,輪班,排班,休假,值班,大夜,小夜,月曆,掃描` | 72 / 100 UTF-8 bytes |
 
 **Description** (draft; 4,000-character limit):
 

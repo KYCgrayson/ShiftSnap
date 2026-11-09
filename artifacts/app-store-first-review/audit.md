@@ -23,6 +23,7 @@
 - **處理人已決定（11/8 老闆原話）**：「现在申请是用户申请，然后他会发信给我自己去手动去 Superbase…因为现在也没有用户，我预设应多有用户的情况不太好。」由老闆本人處理：用戶在 App 申請 → 管理通知寄到 appai@appai.info → 老闆照 `docs/support-and-deletion-guide.zh-TW.md` 在 Supabase 手動刪除，並把 `status` 改成完成。這跟 11/7 的設計（`docs/plans/2026-11-07-support-deletion-delivery.md:7`、`:31`）一致，不另外設計多人分工。
 - **前提缺口**：通知信目前還寄不出去（Resend 金鑰 401，排程未啟用）。修好之前，老闆收不到申請通知，只能定期在 SQL Editor 執行 `scripts/admin/request-inbox.sql` 查看有沒有新申請。
 - 掃描太慢：另開 ops #51，由總窗口在 Studio 測試，本 run log 不處理。
+- **自家 App 推廣（11/9 老闆決定：「等 1.0.1 再加」）**：首版送審不放。1.0.1 在設定頁加「我的其他 App」區塊，點了開 App Store 頁面，不接廣告 SDK、不追蹤用戶，所以 App Privacy 問卷不用改。前提是被推廣的 App 已經上架。老闆提到「鑑寶快追蹤」與「shift shift」，正式名稱與 App Store 連結到 1.0.1 再確認。
 
 ## 逐項清單
 

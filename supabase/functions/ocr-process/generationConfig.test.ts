@@ -2,13 +2,14 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildGenerationConfig } from './generationConfig.ts';
 
-test('default OCR generation config preserves the first-pass settings', () => {
+test('default OCR generation config uses low thinking for a fast first pass', () => {
   assert.deepEqual(buildGenerationConfig(16384), {
     temperature: 0.1,
     topK: 32,
     topP: 1,
     maxOutputTokens: 16384,
     responseMimeType: 'application/json',
+    thinkingConfig: { thinkingLevel: 'low' },
   });
 });
 

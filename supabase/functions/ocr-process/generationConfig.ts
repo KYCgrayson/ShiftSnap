@@ -1,9 +1,11 @@
 export type RecognitionMode = 'accurate' | undefined;
 
 /**
- * Keeps the first-pass OCR request byte-for-byte equivalent in meaning to the
- * existing config. The accurate mode is intentionally opt-in for a user-led
- * re-analysis only.
+ * First-pass OCR uses thinkingLevel 'low': ops #51 bench (2026-11-08) showed
+ * gemini-3.6-flash + low reads the roster with 0 cell errors in ~7-8 s, while
+ * the model default (dynamic/high thinking) took 14-49 s and sometimes used up
+ * maxOutputTokens, truncating the JSON. The accurate mode is intentionally
+ * opt-in for a user-led re-analysis only.
  */
 export function buildGenerationConfig(maxOutputTokens: number, recognitionMode?: RecognitionMode) {
   const defaultConfig = {
@@ -12,6 +14,7 @@ export function buildGenerationConfig(maxOutputTokens: number, recognitionMode?:
     topP: 1,
     maxOutputTokens,
     responseMimeType: 'application/json',
+    thinkingConfig: { thinkingLevel: 'low' },
   };
 
   if (recognitionMode !== 'accurate') return defaultConfig;

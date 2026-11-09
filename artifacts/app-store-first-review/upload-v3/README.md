@@ -1,6 +1,6 @@
 # IShift 上架截圖 v3（2026-11-09）
 
-只做 iPhone 6.9 吋（1320 × 2868，RGB JPG），上傳到大尺寸 iPhone 欄位，Apple 會自動縮給較小的機型。資料全部來自合成 fixture（`scripts/qa/store-screenshot-fixture.mjs`）。
+iPhone 6.9 吋（`zh-Hant/iPhone-6.9/`，1320 × 2868）傳到大尺寸 iPhone 欄位，Apple 會自動縮給較小的 iPhone。iPad 13 吋（`zh-Hant/iPad-13/`，2064 × 2752）傳到 iPad 欄位。兩組都是 RGB JPG，各 5 張。資料全部來自合成 fixture（`scripts/qa/store-screenshot-fixture.mjs`）。
 
 1. 01-welcome：歡迎頁（沿用 v2）
 2. 02-home：首頁今天的班

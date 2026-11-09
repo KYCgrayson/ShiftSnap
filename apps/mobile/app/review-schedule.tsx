@@ -617,7 +617,7 @@ export default function ReviewScheduleScreen() {
     } else {
       const common = COMMON_SHIFT_CODES.find((c) => c.code === code);
       if (common) {
-        setDefMeaning(common.meaning);
+        setDefMeaning(t(common.meaningKey, { defaultValue: common.meaning }));
         setDefStartTime(common.start_time || '');
         setDefEndTime(common.end_time || '');
         setDefIsDayOff(common.is_day_off);
@@ -949,7 +949,7 @@ export default function ReviewScheduleScreen() {
       // Get current meaning for display
       const existing = shiftCodes.find((sc) => sc.code === code);
       const common = COMMON_SHIFT_CODES.find((c) => c.code === code);
-      const displayMeaning = existing?.meaning || common?.meaning || '';
+      const displayMeaning = existing?.meaning || (common ? t(common.meaningKey, { defaultValue: common.meaning }) : '') || '';
 
       return (
         <View key={code} style={isIgnored ? { opacity: 0.5 } : undefined}>

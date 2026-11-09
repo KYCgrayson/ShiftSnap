@@ -16,6 +16,24 @@ export default {
     dayOff: 'Day Off',
   },
 
+  commonShiftCodes: {
+    morningShift: 'Morning shift',
+    afternoonShift: 'Afternoon shift',
+    nightShift: 'Night shift',
+    dayShift: 'Day shift',
+    dayOff: 'Day off',
+    vacation: 'Vacation',
+    holiday: 'Holiday',
+    littleNewYear: 'Little New Year',
+    newYearsEve: "New Year's Eve",
+    cnyDay1: 'CNY Day 1',
+    cnyDay2: 'CNY Day 2',
+    cnyDay3: 'CNY Day 3',
+    cnyDay4: 'CNY Day 4',
+    cnyDay5: 'CNY Day 5',
+    cnyDay6: 'CNY Day 6',
+  },
+
   // Tab names
   tabs: {
     home: 'Home',

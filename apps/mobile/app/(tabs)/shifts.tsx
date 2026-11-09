@@ -687,7 +687,7 @@ export default function ShiftsScreen() {
                       saveShiftCode(
                         user.id,
                         common.code,
-                        common.meaning,
+                        t(common.meaningKey, { defaultValue: common.meaning }),
                         common.start_time,
                         null,
                         common.is_day_off
@@ -699,7 +699,7 @@ export default function ShiftsScreen() {
                     {common.code}
                   </Text>
                   <Text style={[styles.commonCodeMeaning, { color: theme.colors.textSecondary }]}>
-                    {common.meaning}
+                    {t(common.meaningKey, { defaultValue: common.meaning })}
                   </Text>
                 </TouchableOpacity>
               ))}

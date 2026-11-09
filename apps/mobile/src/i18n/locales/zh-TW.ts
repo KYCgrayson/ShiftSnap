@@ -16,6 +16,24 @@ export default {
     dayOff: '休假',
   },
 
+  commonShiftCodes: {
+    morningShift: '早班',
+    afternoonShift: '午班',
+    nightShift: '夜班',
+    dayShift: '白班',
+    dayOff: '休假',
+    vacation: '特休',
+    holiday: '國定假日',
+    littleNewYear: '小年',
+    newYearsEve: '除夕',
+    cnyDay1: '初一',
+    cnyDay2: '初二',
+    cnyDay3: '初三',
+    cnyDay4: '初四',
+    cnyDay5: '初五',
+    cnyDay6: '初六',
+  },
+
   // Tab names
   tabs: {
     home: '首頁',

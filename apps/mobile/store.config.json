@@ -41,10 +41,6 @@
         "supportUrl": "https://appai.info/ishift/support.html",
         "privacyPolicyUrl": "https://appai.info/ishift/privacy.html"
       }
-    },
-    "review": {
-      "demoRequired": true,
-      "notes": "IShift turns a photo of a paper work roster into shifts the user reviews before saving.\n\nHow to test:\n1. Sign in with the demo account provided in the Sign-In Information fields.\n2. Open the Scan tab and choose the attached sample roster (IShift-Demo-Roster-September-2026.png). It is fully synthetic.\n3. Before any upload, IShift shows a consent dialog explaining that the image is sent to Google Gemini for recognition. Tap Agree to continue. Cancel sends nothing.\n4. Review the recognized rows, save, then open the Calendar tab and switch to September 2026 to see the imported shifts.\n5. Optional: Calendar > Export to sync selected shifts to the device calendar.\n\nGuest mode (no sign-in) shows sample data but cannot scan.\nAccount deletion: Settings > Delete Account submits a deletion request; we complete it within 30 days and email a confirmation.\nPrivacy policy: https://appai.info/ishift/privacy.html\nSupport: appai@appai.info"
     }
   }
 }

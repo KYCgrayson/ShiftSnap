@@ -1,0 +1,50 @@
+{
+  "configVersion": 0,
+  "apple": {
+    "info": {
+      "zh-Hant": {
+        "title": "IShift 班表掃描與輪班日曆",
+        "subtitle": "拍下紙本班表，用原始代號看班次",
+        "promoText": "掃描紙本班表後先核對辨識結果，再查看輪班、休假，並選擇要同步到手機日曆的班次。",
+        "keywords": [
+          "輪班",
+          "排班",
+          "工時",
+          "員工",
+          "同事",
+          "休假",
+          "值班",
+          "更表",
+          "班別",
+          "月曆"
+        ],
+        "description": "下週三上 A 班還是 B 班？拍下紙本班表，核對辨識結果，就能在手機月曆查看每天的班次與休假。\n\n保留你熟悉的班別代號\nIShift 協助辨識日期、人員和班別。儲存前可以對照原圖，把看錯的代號改回來。\n\n讓手機日曆一眼就看懂\n選要匯出的工作日或休假日。事件標題可以只寫「B」，也可以加上班別名稱或姓名。確認摘要後，班次才會寫入你選的班表日曆。\n\n分享一張月班表\n把整個月的班次和休假排成圖片。想讓家人知道哪天有空，可以只顯示代號；需要交班時，再加上班別時間或備註。\n\n與群組一起排班\n有選取群組時，新班表會存入該群組，成員可查看班次和原始班表照片。\n\n不登入也能先看示範班表。掃描與雲端儲存需要登入和網路。",
+        "supportUrl": "https://appai.info/ishift/support.html",
+        "privacyPolicyUrl": "https://appai.info/ishift/privacy.html"
+      },
+      "en-US": {
+        "title": "IShift Shift Calendar",
+        "subtitle": "Scan Paper Work Schedules",
+        "promoText": "Scan a paper roster, check the recognized shifts, then view or sync the shifts you choose.",
+        "keywords": [
+          "schedule",
+          "roster",
+          "work",
+          "planner",
+          "rota",
+          "staff",
+          "timetable",
+          "OCR",
+          "days off"
+        ],
+        "description": "Turn a paper work roster into a digital schedule you can review and manage.\n\nScan and review  Take or choose a roster photo. IShift helps recognize dates, people rows, and shift codes. Review and correct the result before saving. Recognition may be inaccurate, so check against the original roster.\n\nView shifts in a calendar  See work shifts and days off by date. View schedules shared by invited group members, and open a date to read its shifts and notes.\n\nSync selected shifts  Choose workdays, days off, or all shifts. Set the schedule calendar name and color. Exported event titles start with the original shift code; choose whether to add the shift name or person's name. Review the export summary before writing events to the selected device calendar.\n\nShare a monthly image  Export a calendar image and choose whether to show shift names and times. Add a short message and schedule notes.\n\nGuest mode includes sample data. Sign in to use cloud features, create groups, and share schedules with invited members. When a group is selected, new rosters are saved to that group; its members can view shifts and the original roster photo. Cloud features require sign-in and an internet connection.",
+        "supportUrl": "https://appai.info/ishift/support.html",
+        "privacyPolicyUrl": "https://appai.info/ishift/privacy.html"
+      }
+    },
+    "review": {
+      "demoRequired": true,
+      "notes": "IShift turns a photo of a paper work roster into shifts the user reviews before saving.\n\nHow to test:\n1. Sign in with the demo account provided in the Sign-In Information fields.\n2. Open the Scan tab and choose the attached sample roster (IShift-Demo-Roster-September-2026.png). It is fully synthetic.\n3. Before any upload, IShift shows a consent dialog explaining that the image is sent to Google Gemini for recognition. Tap Agree to continue. Cancel sends nothing.\n4. Review the recognized rows, save, then open the Calendar tab and switch to September 2026 to see the imported shifts.\n5. Optional: Calendar > Export to sync selected shifts to the device calendar.\n\nGuest mode (no sign-in) shows sample data but cannot scan.\nAccount deletion: Settings > Delete Account submits a deletion request; we complete it within 30 days and email a confirmation.\nPrivacy policy: https://appai.info/ishift/privacy.html\nSupport: appai@appai.info"
+    }
+  }
+}

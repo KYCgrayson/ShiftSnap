@@ -31,30 +31,42 @@ final class StoreShotsTests: XCTestCase {
         let calendarTab = element(app, "^日曆(,.*)?$")
         XCTAssertTrue(calendarTab.waitForExistence(timeout: 30), "App did not reach tabs")
         sleep(2)
-        shot("01-home")
+        shot("02-home")
 
         calendarTab.tap()
         sleep(2)
+
+        // Header toggle shows the first working shift code ("A"); turn codes on so
+        // each day cell shows its shift instead of only colour bars.
+        let codesOn = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@", "A")).firstMatch
+        if codesOn.exists { codesOn.tap(); sleep(4) } // let the toast fade
+
         let today = Calendar.current.component(.day, from: Date())
         let day = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label BEGINSWITH %@", "\(today)")).element(boundBy: 0)
         if day.exists { day.tap(); sleep(1) }
-        shot("02-calendar")
+        shot("03-calendar")
 
-        let share = app.buttons.element(boundBy: 0)
+        let share = element(app, "^分享本月班表$")
         if share.exists {
             share.tap()
             sleep(3)
-            shot("03-share")
+            // Cycle quote style 溫柔 -> 毒舌.
+            let mode = element(app, "^短句：溫柔$")
+            if mode.exists { mode.tap(); sleep(2) }
+            let names = element(app, "^顯示班別名稱$")
+            if names.exists { names.tap(); sleep(2) }
+            // Tapping the toggles auto-scrolls; bring the poster (with its quote) back to the top.
+            let scroll = app.scrollViews.firstMatch
+            if scroll.exists { scroll.swipeDown(); scroll.swipeDown(); sleep(2) }
+            shot("04-share")
             let close = element(app, "^(關閉|取消|完成|Close|Cancel|Done)$")
             if close.exists { close.tap() } else { app.swipeDown() }
             sleep(1)
         }
 
         let codesTab = element(app, "^班別(,.*)?$")
-        if codesTab.exists { codesTab.tap(); sleep(2); shot("04-codes") }
-
-        let scanTab = element(app, "^掃描(,.*)?$")
-        if scanTab.exists { scanTab.tap(); dismissSystemAlert(); sleep(2); shot("05-scan") }
+        if codesTab.exists { codesTab.tap(); sleep(2); shot("05-shift-codes") }
     }
 }

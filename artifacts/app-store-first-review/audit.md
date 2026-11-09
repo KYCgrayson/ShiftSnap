@@ -195,3 +195,11 @@ cd apps/mobile/ios && xcodebuild -workspace ShiftSnap.xcworkspace -scheme ShiftS
 - 沒有讀正式 Supabase 的 `gemini_model` 設定與 log（MCP 無法連線）。
 - 沒有看 Gemini 帳單方案（需要老闆）。
 - 沒有讀 ops 的市調檔（這台電腦沒有 ops）。
+
+## 11/9 MacBook Codex CLI（D52）
+
+- 這台 MacBook 沒有另外裝 Codex。用的是 ChatGPT.app 附的 CLI：`/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex`。
+- 已經在 `~/.local/bin/codex` 建 symlink，這個資料夾本來就在 PATH 裡（`~/.bashrc`、`~/.bash_profile`）。
+- 版本：`codex-cli 0.167.0-alpha.3.2`。沿用既有的 `~/.codex/` 登入，沒有重新登入，也沒有讀取 auth.json。
+- 實測：`codex exec --sandbox read-only --skip-git-repo-check -c model_reasoning_effort="xhigh" "Reply with exactly: ok"` 回傳 `ok`。輸出顯示 model gpt-6-astra、sandbox read-only、reasoning effort xhigh。
+- 之後 iShift 的程式照 D52 交給 Codex（xhigh）寫。Claude 只做規劃和驗證。

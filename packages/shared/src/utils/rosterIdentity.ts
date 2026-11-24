@@ -6,9 +6,11 @@ export function normalizeRosterName(value: string | null | undefined): string {
   return (value ?? '').trim().replace(/\s+/g, '').toLocaleLowerCase();
 }
 
-/** Numeric row labels are common in exported rosters (for example, Jason0). */
+/** Removes leading and trailing roster labels from the comparison key. */
 export function withoutTrailingRosterNumber(value: string | null | undefined): string {
-  return normalizeRosterName(value).replace(/[0-9０-９]+$/u, '');
+  const normalized = normalizeRosterName(value);
+  const withoutEdgeLabels = normalized.replace(/^[0-9０-９.。．_-]+|[0-9０-９.。．_-]+$/gu, '');
+  return withoutEdgeLabels || normalized.replace(/[0-9０-９]+$/u, '') || normalized;
 }
 
 export function rosterComparisonKey(

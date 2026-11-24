@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -28,22 +28,28 @@ import {
 } from '../../src/stores/calendarStore';
 import { useLocaleStore } from '../../src/stores/localeStore';
 import { usePersonStore } from '../../src/stores/personStore';
-import { useGroupStore } from '../../src/stores/groupStore';
+import { useGroupStore, type GroupScheduleClaimRow, type ScheduleClaim } from '../../src/stores/groupStore';
 import { supabase } from '../../src/services/supabase';
 import * as Clipboard from 'expo-clipboard';
-import { APP_VERSION, SUPPORTED_LOCALES, LOCALE_NAMES, PERSON_COLOR_HEX, ALARM_OPTIONS, DEFAULT_ALARM_MINUTES, rosterComparisonKey, type RosterNameMatchingMode, type RosterNameSensitivity } from '@shiftsnap/shared';
+import { APP_VERSION, SUPPORTED_LOCALES, LOCALE_NAMES, PERSON_COLOR_HEX, ALARM_OPTIONS, DEFAULT_ALARM_MINUTES, formatYearMonth, rosterComparisonKey, type RosterNameMatchingMode, type RosterNameSensitivity } from '@shiftsnap/shared';
 import { useShiftStore } from '../../src/stores/shiftStore';
 import { useShiftCodeStore } from '../../src/stores/shiftCodeStore';
 import { useScheduleStore } from '../../src/stores/scheduleStore';
 import { CalendarExportSettings } from '../../src/components/settings/CalendarExportSettings';
 import {
   requestNotificationPermissions,
-  scheduleShiftReminder,
+  replaceShiftReminders,
+  refreshEnabledShiftReminders,
+  NOTIFICATIONS_KEY,
   cancelAllReminders,
 } from '../../src/services/notifications';
 
 const MY_COLOR_KEY = 'shiftsnap_my_schedule_color';
-const NOTIFICATIONS_KEY = 'shiftsnap_notifications_enabled';
+
+interface ClaimSchedule {
+  yearMonth: string;
+  rows: Array<{ scheduleId: string; name: string; shiftCount: number }>;
+}
 
 type AccountDeletionRequestStatus = 'pending' | 'in_progress' | 'action_required' | 'completed' | 'rejected';
 interface AccountDeletionRequest {
@@ -112,7 +118,7 @@ export default function SettingsScreen() {
     groups, currentGroup, members,
     fetchMembers, switchGroup,
     joinGroupByInvite, leaveGroup, updateGroupName, removeMember,
-    claimPersonInSchedule, unclaimPersonInSchedule, setRosterNameMatching,
+    addScheduleClaim, removeScheduleClaim, setRosterNameMatching,
   } = useGroupStore();
 
   const [editingProfile, setEditingProfile] = useState(false);
@@ -144,21 +150,17 @@ export default function SettingsScreen() {
   const [groupName, setGroupName] = useState('');
   const [mergeLoading, setMergeLoading] = useState(false);
 
-  // Claim-my-schedule modal state. claimRows lists the distinct name +
-  // shift count tuples extracted from the latest group schedule, so the
-  // user can pick which row of the imported sheet is them.
   const [showClaimModal, setShowClaimModal] = useState(false);
   const [claimLoading, setClaimLoading] = useState(false);
-  const [claimScheduleId, setClaimScheduleId] = useState<string | null>(null);
-  const [claimYearMonth, setClaimYearMonth] = useState<string | null>(null);
-  const [claimRows, setClaimRows] = useState<Array<{ name: string; shiftCount: number }>>([]);
+  const [claimSchedules, setClaimSchedules] = useState<ClaimSchedule[]>([]);
+  const claimMutationInFlight = useRef(false);
 
   const upcomingShifts = useShiftStore((s) => s.upcomingShifts);
   const getCodeInfo = useShiftCodeStore((s) => s.getCodeInfo);
   const { getUnsharedCount, shareSchedulesWithGroup } = useScheduleStore();
   const myGroupMembership = useMemo(
-    () => members.find((member) => member.user_id === user?.id),
-    [members, user?.id],
+    () => members.find((member) => member.group_id === currentGroup?.id && member.user_id === user?.id),
+    [currentGroup?.id, members, user?.id],
   );
 
   useEffect(() => {
@@ -601,20 +603,8 @@ export default function SettingsScreen() {
     );
   };
 
-  const scheduleAllReminders = async (minutes: number) => {
-    await cancelAllReminders();
-    const shifts = upcomingShifts ?? [];
-    for (const shift of shifts) {
-      if (shift.is_day_off || !shift.start_time) continue;
-      // Each reminder is isolated so one bad shift can't abort the batch.
-      try {
-        const codeInfo = getCodeInfo(shift.shift_code);
-        await scheduleShiftReminder(shift, codeInfo ? { meaning: codeInfo.meaning } : undefined, minutes);
-      } catch (e) {
-        console.warn('Failed to schedule reminder for shift', shift.id, e);
-      }
-    }
-  };
+  const scheduleAllReminders = (minutes: number) =>
+    replaceShiftReminders(upcomingShifts, getCodeInfo, minutes);
 
   const handleToggleNotifications = async () => {
     if (notificationsEnabled) {
@@ -766,110 +756,88 @@ export default function SettingsScreen() {
   };
 
   const handleOpenClaimModal = async () => {
-    if (!currentGroup?.id) return;
+    const groupId = currentGroup?.id;
+    if (!groupId) return;
     setClaimLoading(true);
     setShowClaimModal(true);
-    setClaimRows([]);
-    setClaimScheduleId(null);
-    setClaimYearMonth(null);
+    setClaimSchedules([]);
     try {
-      // Pull the latest schedule for this group, then derive distinct
-      // (name_on_schedule, shift_count) tuples from its shifts. Names
-      // are listed in descending shift count to put the "main" rows
-      // first, since OCR sometimes detects empty header rows that we
-      // don't want to push to the top.
-      const { data: schedule, error: sErr } = await supabase
-        .from('schedules')
-        .select('id, year_month')
-        .eq('group_id', currentGroup.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (sErr) throw sErr;
-      if (!schedule) {
-        setClaimRows([]);
-        return;
-      }
-      setClaimScheduleId(schedule.id);
-      setClaimYearMonth(schedule.year_month);
-
-      const { data: shifts, error: shErr } = await supabase
-        .from('shifts')
-        .select('name_on_schedule')
-        .eq('schedule_id', schedule.id);
-      if (shErr) throw shErr;
-
-      const counts = new Map<string, number>();
-      (shifts ?? []).forEach((s: any) => {
-        const name = (s.name_on_schedule || '').trim();
-        if (!name) return;
-        counts.set(name, (counts.get(name) ?? 0) + 1);
+      const now = new Date();
+      const months = [-1, 0, 1].map((offset) => formatYearMonth(new Date(now.getFullYear(), now.getMonth() + offset, 1)));
+      const { data, error } = await supabase.rpc('get_group_schedule_claim_rows', {
+        p_group_id: groupId,
+        p_year_months: months,
       });
-      const rows = Array.from(counts.entries())
-        .map(([name, shiftCount]) => ({ name, shiftCount }))
-        .sort((a, b) => b.shiftCount - a.shiftCount);
-      setClaimRows(rows);
-    } catch (e) {
-      Alert.alert(t('common.error'), e instanceof Error ? e.message : '');
+      if (error) throw error;
+      const schedules = new Map<string, ClaimSchedule['rows']>();
+      for (const row of (data ?? []) as GroupScheduleClaimRow[]) {
+        let rows = schedules.get(row.year_month);
+        if (!rows) {
+          rows = [];
+          schedules.set(row.year_month, rows);
+        }
+        rows.push({ scheduleId: row.schedule_id, name: row.name_on_schedule, shiftCount: row.shift_count });
+      }
+      if (useGroupStore.getState().currentGroup?.id === groupId) {
+        setClaimSchedules(Array.from(schedules, ([yearMonth, rows]) => ({
+          yearMonth,
+          rows: rows.sort((a, b) => b.shiftCount - a.shiftCount),
+        })));
+      }
+    } catch {
+      Alert.alert(t('common.error'), t('settings.claimLoadFailed'));
     } finally {
       setClaimLoading(false);
     }
   };
 
-  const handleConfirmClaim = async (name: string) => {
-    if (!claimScheduleId || !user?.id) return;
-    const performClaim = async () => {
-      try {
-        const updated = await claimPersonInSchedule(claimScheduleId, name);
-        setShowClaimModal(false);
-        // Refresh the member's one claimed identity, all personal views, and
-        // Apple Calendar. The canonical shifts themselves are not transferred.
-        if (currentGroup?.id) await fetchMembers(currentGroup.id);
-        if (claimYearMonth) {
-          await useShiftStore.getState().fetchShiftsForMonth(user.id, claimYearMonth);
-        }
-        await useShiftStore.getState().fetchTodayShift(user.id);
-        await useShiftStore.getState().fetchUpcomingShifts(user.id);
-        if (calendarConnected && claimYearMonth) {
-          await syncUserShifts(user.id, getMonthDateRange(claimYearMonth));
-        }
-        Alert.alert(
-          t('settings.claimSuccessTitle'),
-          t('settings.claimSuccessBody', { count: updated, name }),
-        );
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : '';
-        Alert.alert(
-          t('common.error'),
-          msg === 'NOT_GROUP_MEMBER'
-            ? t('settings.claimNotMember')
-            : msg === 'SCHEDULE_NOT_IN_GROUP'
-              ? t('settings.claimScheduleMissing')
-              : t('settings.claimFailed'),
-        );
-      }
-    };
-
-    const currentClaim = myGroupMembership?.claimed_name_on_schedule?.trim();
-    if (currentClaim && currentClaim.toLocaleLowerCase() !== name.trim().toLocaleLowerCase()) {
-      Alert.alert(
-        t('settings.claimReplaceTitle'),
-        t('settings.claimReplaceBody', { current: currentClaim, next: name }),
-        [
-          { text: t('common.cancel'), style: 'cancel' },
-          { text: t('settings.claimReplaceConfirm'), onPress: () => void performClaim() },
-        ],
-      );
-      return;
-    }
-
-    await performClaim();
+  const refreshClaims = async (groupId: string, userId: string) => {
+    const shiftStore = useShiftStore.getState();
+    await Promise.all([
+      fetchMembers(groupId),
+      shiftStore.fetchTodayShift(userId),
+      shiftStore.fetchUpcomingShifts(userId),
+    ]);
+    await refreshEnabledShiftReminders(
+      useShiftStore.getState().upcomingShifts,
+      getCodeInfo,
+      () => useAuthStore.getState().user?.id === userId && !useAuthStore.getState().isOfflineReadOnly,
+    );
   };
 
-  const handleUnclaimSchedule = () => {
+  const handleConfirmClaim = async (scheduleId: string, yearMonth: string, name: string) => {
+    if (!currentGroup?.id || !user?.id || claimMutationInFlight.current) return;
+    claimMutationInFlight.current = true;
+    try {
+      const updated = await addScheduleClaim(scheduleId, name);
+      setShowClaimModal(false);
+      await refreshClaims(currentGroup.id, user.id);
+      if (calendarConnected) {
+        await syncUserShifts(user.id, getMonthDateRange(yearMonth));
+      }
+      Alert.alert(
+        t('settings.claimSuccessTitle'),
+        t('settings.claimSuccessBody', { count: updated, name }),
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '';
+      Alert.alert(
+        t('common.error'),
+        msg === 'SCHEDULE_CLAIM_LIMIT' ? t('settings.claimLimit')
+          : msg === 'NOT_GROUP_MEMBER' ? t('settings.claimNotMember')
+          : msg === 'SCHEDULE_NOT_IN_GROUP' ? t('settings.claimScheduleMissing')
+          : msg === 'AMBIGUOUS_SCHEDULE_ROW' ? t('settings.claimAmbiguous')
+          : t('settings.claimFailed'),
+      );
+    } finally {
+      claimMutationInFlight.current = false;
+    }
+  };
+
+  const handleUnclaimSchedule = (claim: ScheduleClaim, name: string) => {
     if (!currentGroup?.id || !user?.id) return;
     Alert.alert(
-      t('settings.unclaimTitle'),
+      t('settings.unclaimTitle', { name }),
       t('settings.unclaimBody'),
       [
         { text: t('common.cancel'), style: 'cancel' },
@@ -877,35 +845,16 @@ export default function SettingsScreen() {
           text: t('settings.unclaimConfirm'),
           style: 'destructive',
           onPress: async () => {
+            if (claimMutationInFlight.current) return;
+            claimMutationInFlight.current = true;
             try {
-              // The RPC validates membership against a concrete schedule. Do
-              // not sync here: previously synced device-calendar events are
-              // intentionally preserved until the user removes them manually.
-              const { data: schedule, error } = await supabase
-                .from('schedules')
-                .select('id')
-                .eq('group_id', currentGroup.id)
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .maybeSingle();
-              if (error) throw error;
-              if (!schedule) throw new Error('SCHEDULE_NOT_IN_GROUP');
-
-              await unclaimPersonInSchedule(schedule.id);
-              await fetchMembers(currentGroup.id);
-              const currentMonth = getCurrentYearMonth();
-              await useShiftStore.getState().fetchShiftsForMonth(user.id, currentMonth);
-              await useShiftStore.getState().fetchTodayShift(user.id);
-              await useShiftStore.getState().fetchUpcomingShifts(user.id);
+              await removeScheduleClaim(currentGroup.id, claim.id);
+              await refreshClaims(currentGroup.id, user.id);
               Alert.alert(t('settings.unclaimSuccessTitle'), t('settings.unclaimSuccessBody'));
-            } catch (e) {
-              const msg = e instanceof Error ? e.message : '';
-              Alert.alert(
-                t('common.error'),
-                msg === 'SCHEDULE_NOT_IN_GROUP'
-                  ? t('settings.claimScheduleMissing')
-                  : t('settings.unclaimFailed'),
-              );
+            } catch {
+              Alert.alert(t('common.error'), t('settings.unclaimFailed'));
+            } finally {
+              claimMutationInFlight.current = false;
             }
           },
         },
@@ -1266,33 +1215,27 @@ export default function SettingsScreen() {
                 }
               />
               <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
-              {/* Claim my schedule */}
-              {(() => {
-                const claimedName = myGroupMembership?.claimed_name_on_schedule || null;
+              <SettingsItem
+                icon="bookmark-outline"
+                title={t('settings.claimMySchedule')}
+                subtitle={t('settings.claimMyScheduleHint')}
+                onPress={handleOpenClaimModal}
+              />
+              {myGroupMembership?.scheduleClaims.map((claim) => {
+                const name = claim.name_on_schedule
+                  ?? persons.find((person) => person.id === claim.person_id)?.name
+                  ?? t('settings.rosterUnknownName');
                 return (
-                  <>
-                    <SettingsItem
-                      icon="bookmark-outline"
-                      title={
-                        claimedName
-                          ? t('settings.claimedAs', { name: claimedName })
-                          : t('settings.claimMySchedule')
-                      }
-                      subtitle={t('settings.claimMyScheduleHint')}
-                      onPress={handleOpenClaimModal}
-                    />
-                    {claimedName && (
-                      <SettingsItem
-                        icon="close-circle-outline"
-                        title={t('settings.unclaimSchedule')}
-                        subtitle={t('settings.unclaimHint')}
-                        onPress={handleUnclaimSchedule}
-                        destructive
-                      />
-                    )}
-                  </>
+                  <SettingsItem
+                    key={claim.id}
+                    icon="close-circle-outline"
+                    title={t('settings.claimedAs', { name })}
+                    subtitle={t('settings.unclaimSchedule')}
+                    onPress={() => handleUnclaimSchedule(claim, name)}
+                    destructive
+                  />
                 );
-              })()}
+              })}
               <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
               {/* Members */}
               <View style={styles.settingsItem}>
@@ -1962,7 +1905,7 @@ export default function SettingsScreen() {
       </Modal>
 
       {/* Claim my schedule modal */}
-      <Modal visible={showClaimModal} transparent animationType="fade">
+      <Modal visible={showClaimModal} transparent animationType="fade" onRequestClose={() => setShowClaimModal(false)}>
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
@@ -1976,65 +1919,70 @@ export default function SettingsScreen() {
               {t('settings.claimMySchedule')}
             </Text>
             <Text style={[styles.shareHint, { color: theme.colors.textSecondary, marginBottom: 12 }]}>
-              {claimYearMonth
-                ? t('settings.claimModalHint', { yearMonth: claimYearMonth })
-                : t('settings.claimMyScheduleHint')}
+              {t('settings.claimModalHint')}
             </Text>
 
             {claimLoading ? (
               <Text style={{ color: theme.colors.textSecondary, paddingVertical: 24, textAlign: 'center' }}>
                 {t('common.loading')}
               </Text>
-            ) : claimRows.length === 0 ? (
+            ) : claimSchedules.length === 0 ? (
               <Text style={{ color: theme.colors.textSecondary, paddingVertical: 24, textAlign: 'center' }}>
                 {t('settings.claimNoSchedules')}
               </Text>
             ) : (
               <ScrollView style={{ maxHeight: 320, alignSelf: 'stretch' }}>
-                {claimRows.map((row) => {
-                  const isClaimedByMe =
-                    myGroupMembership?.claimed_name_on_schedule?.trim().toLocaleLowerCase()
-                    === row.name.trim().toLocaleLowerCase();
-                  return (
-                  <TouchableOpacity
-                    key={row.name}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      paddingVertical: 12,
-                      paddingHorizontal: 12,
-                      borderRadius: 12,
-                      borderWidth: StyleSheet.hairlineWidth,
-                      borderColor: theme.colors.border,
-                      marginBottom: 8,
-                    }}
-                    onPress={() => {
-                      if (isClaimedByMe) {
-                        Alert.alert(t('settings.claimSuccessTitle'), t('settings.claimAlreadyBody', { name: row.name }));
-                        return;
-                      }
-                      handleConfirmClaim(row.name);
-                    }}
-                  >
-                    <Ionicons name="person-outline" size={20} color={theme.colors.primary} style={{ marginRight: 12 }} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: theme.colors.textPrimary, fontSize: 15, fontWeight: '600' }}>
-                        {row.name}
-                      </Text>
-                      <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
-                        {isClaimedByMe
-                          ? t('settings.claimedByMe')
-                          : t('settings.claimRowShifts', { count: row.shiftCount })}
-                      </Text>
-                    </View>
-                    <Ionicons
-                      name={isClaimedByMe ? 'checkmark-circle' : 'chevron-forward'}
-                      size={18}
-                      color={isClaimedByMe ? theme.colors.success : theme.colors.textMuted}
-                    />
-                  </TouchableOpacity>
-                  );
-                })}
+                {claimSchedules.map((schedule) => (
+                  <View key={schedule.yearMonth}>
+                    <Text style={[styles.settingsTitle, { color: theme.colors.textSecondary, marginBottom: 8 }]}>
+                      {schedule.yearMonth}
+                    </Text>
+                    {schedule.rows.map((row) => {
+                      const isClaimedByMe = myGroupMembership?.scheduleClaims.some((claim) =>
+                        claim.name_on_schedule?.trim().toLowerCase() === row.name.toLowerCase()
+                      );
+                      return (
+                        <TouchableOpacity
+                          key={row.name}
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            paddingVertical: 12,
+                            paddingHorizontal: 12,
+                            borderRadius: 12,
+                            borderWidth: StyleSheet.hairlineWidth,
+                            borderColor: theme.colors.border,
+                            marginBottom: 8,
+                          }}
+                          onPress={() => {
+                            if (isClaimedByMe) {
+                              Alert.alert(t('settings.claimSuccessTitle'), t('settings.claimAlreadyBody', { name: row.name }));
+                              return;
+                            }
+                            void handleConfirmClaim(row.scheduleId, schedule.yearMonth, row.name);
+                          }}
+                        >
+                          <Ionicons name="person-outline" size={20} color={theme.colors.primary} style={{ marginRight: 12 }} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ color: theme.colors.textPrimary, fontSize: 15, fontWeight: '600' }}>
+                              {row.name}
+                            </Text>
+                            <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
+                              {isClaimedByMe
+                                ? t('settings.claimedByMe')
+                                : t('settings.claimRowShifts', { count: row.shiftCount })}
+                            </Text>
+                          </View>
+                          <Ionicons
+                            name={isClaimedByMe ? 'checkmark-circle' : 'chevron-forward'}
+                            size={18}
+                            color={isClaimedByMe ? theme.colors.success : theme.colors.textMuted}
+                          />
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                ))}
               </ScrollView>
             )}
 

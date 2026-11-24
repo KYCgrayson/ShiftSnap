@@ -16,6 +16,8 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
+import { personalShiftKey, personalShiftTiming } from '../../src/services/personalShifts';
+import { refreshEnabledShiftReminders } from '../../src/services/notifications';
 import { uploadNoteImage, deleteNoteImage } from '../../src/services/noteImages';
 import { Ionicons } from '@expo/vector-icons';
 import { Calendar, DateData, LocaleConfig } from 'react-native-calendars';
@@ -105,7 +107,7 @@ export default function CalendarScreen() {
   const locale = useLocaleStore((s) => s.locale);
   const { user, session, isOfflineReadOnly, offlineLastUpdatedAt, setOfflineReadOnly, retryOnlineSession } = useAuthStore();
   const { monthShifts, shiftsByMonth, monthUpdatedAt, activeScopeKey, fetchShiftsWindow, updateShift, loading } = useShiftStore();
-  const { shiftCodes, fetchShiftCodes, getCodeInfo } = useShiftCodeStore();
+  const { shiftCodes, codeTimingRevision, fetchShiftCodes, getCodeInfo } = useShiftCodeStore();
   const { persons, fetchPersons, updatePerson } = usePersonStore();
   const { isConnected: calendarConnected, syncUserShifts } = useCalendarStore();
   const { notesByDate, fetchNotesForMonth, saveNote } = useDailyNoteStore();
@@ -116,7 +118,8 @@ export default function CalendarScreen() {
   const cycleViewScope = useGroupStore((s) => s.cycleViewScope);
   const groupMembers = useGroupStore((s) => s.members);
   const fetchGroupMembers = useGroupStore((s) => s.fetchMembers);
-  const claimPersonInSchedule = useGroupStore((s) => s.claimPersonInSchedule);
+  const addScheduleClaim = useGroupStore((s) => s.addScheduleClaim);
+  const scheduleClaimRevision = useGroupStore((s) => s.scheduleClaimRevision);
   const toast = useToast();
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split('T')[0]
@@ -279,10 +282,13 @@ export default function CalendarScreen() {
     if (userId) {
       fetchShiftCodes(userId);
       fetchPersons(userId);
-      loadMonth(currentMonth);
       fetchNotesForMonth(userId, currentMonth);
     }
   }, [userId, currentMonth, currentGroupId, viewScope]);
+
+  useEffect(() => {
+    void loadMonth(currentMonth);
+  }, [loadMonth, currentMonth, currentGroupId, viewScope, scheduleClaimRevision, codeTimingRevision]);
 
   // Fetch this view's photos locally. The schedule store follows the active
   // editing group, which is intentionally different from Calendar's view
@@ -407,14 +413,14 @@ export default function CalendarScreen() {
     );
   }, [availableSchedulePhotos, markSchedulePhotoFailed, schedulePhotoIndex, t]);
 
-  // Member profiles include each member's one claimed roster identity.
+  // Member profiles include every claimed roster identity.
   useEffect(() => {
     if (currentGroupId) fetchGroupMembers(currentGroupId);
   }, [currentGroupId]);
 
   const myMembership = useMemo(
-    () => groupMembers.find((member) => member.user_id === userId),
-    [groupMembers, userId],
+    () => groupMembers.find((member) => member.group_id === currentGroupId && member.user_id === userId),
+    [currentGroupId, groupMembers, userId],
   );
 
   const rosterMatchingMode =
@@ -461,15 +467,25 @@ export default function CalendarScreen() {
     return result;
   }, [currentGroupId, persons, rosterMatchingMode]);
 
-  // Person IDs that at least one group member uses as their one schedule.
+  // Highlight roster rows followed by any member of the active group.
   const claimedPersonIds = useMemo(() => {
-    return new Set(
-      groupMembers
-        .map((member) => member.claimed_person_id)
-        .filter((id): id is string => !!id)
-        .map((id) => displayPersonByRawId.get(id)?.id ?? id)
-    );
-  }, [displayPersonByRawId, groupMembers]);
+    const claims = groupMembers
+      .filter((member) => member.group_id === currentGroupId)
+      .flatMap((member) => member.scheduleClaims);
+    const ids = new Set<string>();
+    const names = new Set<string>();
+    for (const claim of claims) {
+      if (claim.person_id) ids.add(displayPersonByRawId.get(claim.person_id)?.id ?? claim.person_id);
+      else if (claim.name_on_schedule) names.add(rosterComparisonKey(claim.name_on_schedule, rosterMatchingMode));
+    }
+    for (const shift of windowShifts) {
+      if (shift.group_id === currentGroupId && shift.person_id
+          && names.has(rosterComparisonKey(shift.name_on_schedule, rosterMatchingMode))) {
+        ids.add(displayPersonByRawId.get(shift.person_id)?.id ?? shift.person_id);
+      }
+    }
+    return ids;
+  }, [currentGroupId, displayPersonByRawId, groupMembers, rosterMatchingMode, windowShifts]);
 
   // Authenticated month loads are annotated by the same database function
   // used by Home and Apple Calendar. The fallback keeps guest/demo rows working.
@@ -491,21 +507,26 @@ export default function CalendarScreen() {
   // 3-month window (not just the visible month) so the calendar grid's
   // adjacent-month padding days already have bars painted in.
   const shifts: ShiftEvent[] = useMemo(() => {
-    return windowShifts.map((shift) => {
+    const seenPersonalShifts = new Set<string>();
+    return windowShifts.flatMap((shift) => {
       const person = shift.person_id ? displayPersonByRawId.get(shift.person_id) ?? null : null;
       const isSelf = isPersonalMonthShift(shift);
       // For self shifts: color by shift type (morning/afternoon/night/day-off)
       // For coworker shifts: color by person
       const codeInfo = getCodeInfo(shift.shift_code);
-      const startTime = shift.start_time || codeInfo?.start_time || null;
-      const isDayOff = shift.is_day_off || codeInfo?.is_day_off || false;
-      return {
+      const { startTime, endTime, isDayOff } = personalShiftTiming(shift, codeInfo);
+      if (isSelf) {
+        const key = personalShiftKey(shift, codeInfo);
+        if (seenPersonalShifts.has(key)) return [];
+        seenPersonalShifts.add(key);
+      }
+      return [{
         id: shift.id,
         scheduleId: shift.schedule_id,
         date: shift.date,
         code: shift.shift_code,
-        startTime: shift.start_time,
-        endTime: shift.end_time,
+        startTime: shift.personal_timing ? startTime : shift.start_time,
+        endTime: shift.personal_timing ? endTime : shift.end_time,
         isDayOff,
         personId: person?.id ?? shift.person_id ?? null,
         personName: person?.name || (shift as any).name_on_schedule,
@@ -517,7 +538,7 @@ export default function CalendarScreen() {
         comparisonStatus: (shift as any).comparison_status || null,
         shiftUserId: shift.user_id,
         isMine: isSelf,
-      };
+      }];
     });
   }, [windowShifts, shiftCodes, theme, displayPersonByRawId, getCodeInfo, isPersonalMonthShift]);
 
@@ -709,15 +730,10 @@ export default function CalendarScreen() {
     });
   };
 
-  // Long-press on a coworker's legend row to claim their row as "this is
-  // me" — e.g. a husband uploaded his wife's schedule under his account,
-  // and she wants her calendar to show it as her own going forward.
-  // Reuses the same claim_person_in_schedule RPC the settings-page claim
-  // modal uses, but targets the specific schedule that produced this
-  // person's most recent shift instead of "the group's latest schedule".
+  // Use the most recent upload containing this roster row.
   const [claiming, setClaiming] = useState(false);
   const handleLongPressClaim = (person: { personId: string; name: string }) => {
-    if (claiming || !userId) return;
+    if (claiming || !userId || !currentGroupId) return;
     const candidates = windowShifts
       .filter((s) => !!s.person_id
         && (displayPersonByRawId.get(s.person_id)?.id ?? s.person_id) === person.personId
@@ -730,17 +746,11 @@ export default function CalendarScreen() {
       return;
     }
     const nameOnSchedule = target.name_on_schedule || person.name;
-    const normalizedTargetName = rosterComparisonKey(nameOnSchedule, rosterMatchingMode);
-    const targetDisplayPersonId = target.person_id
-      ? displayPersonByRawId.get(target.person_id)?.id ?? target.person_id
-      : null;
     const memberUsesTarget = (member: (typeof groupMembers)[number]) =>
-      rosterComparisonKey(member.claimed_name_on_schedule, rosterMatchingMode) === normalizedTargetName
-      || (
-        !!targetDisplayPersonId
-        && !!member.claimed_person_id
-        && (displayPersonByRawId.get(member.claimed_person_id)?.id ?? member.claimed_person_id)
-          === targetDisplayPersonId
+      member.group_id === currentGroupId && member.scheduleClaims.some((claim) =>
+        claim.name_on_schedule
+          ? claim.name_on_schedule.trim().toLowerCase() === nameOnSchedule.trim().toLowerCase()
+          : claim.person_id === target.person_id
       );
     if (myMembership && memberUsesTarget(myMembership)) {
       toast(t('calendar.claimAlready', { name: person.name }));
@@ -763,10 +773,18 @@ export default function CalendarScreen() {
         onPress: async () => {
           setClaiming(true);
           try {
-            await claimPersonInSchedule(target.schedule_id, nameOnSchedule);
-            if (currentGroupId) await fetchGroupMembers(currentGroupId);
-            await fetchPersons(userId);
-            await loadMonth(currentMonth);
+            await addScheduleClaim(target.schedule_id, nameOnSchedule);
+            await fetchGroupMembers(currentGroupId);
+            const shiftStore = useShiftStore.getState();
+            await Promise.all([
+              shiftStore.fetchTodayShift(userId),
+              shiftStore.fetchUpcomingShifts(userId),
+            ]);
+            await refreshEnabledShiftReminders(
+              useShiftStore.getState().upcomingShifts,
+              getCodeInfo,
+              () => useAuthStore.getState().user?.id === userId && !useAuthStore.getState().isOfflineReadOnly,
+            );
             if (calendarConnected) {
               await syncUserShifts(
                 userId,
@@ -778,11 +796,11 @@ export default function CalendarScreen() {
             const msg = e instanceof Error ? e.message : '';
             Alert.alert(
               t('common.error'),
-              msg === 'NOT_GROUP_MEMBER'
-                ? t('settings.claimNotMember')
-                : msg === 'SCHEDULE_NOT_IN_GROUP'
-                  ? t('settings.claimScheduleMissing')
-                  : t('settings.claimFailed'),
+              msg === 'SCHEDULE_CLAIM_LIMIT' ? t('settings.claimLimit')
+                : msg === 'NOT_GROUP_MEMBER' ? t('settings.claimNotMember')
+                : msg === 'SCHEDULE_NOT_IN_GROUP' ? t('settings.claimScheduleMissing')
+                : msg === 'AMBIGUOUS_SCHEDULE_ROW' ? t('settings.claimAmbiguous')
+                : t('settings.claimFailed'),
             );
           } finally {
             setClaiming(false);
@@ -810,6 +828,7 @@ export default function CalendarScreen() {
         start_time: editStartTime || null,
         end_time: editEndTime || null,
       });
+      await loadMonth(currentMonth);
       // Reconcile the affected month so calendar day filters and shared-row
       // subscriptions are both respected after an edit.
       if (calendarConnected && userId) {

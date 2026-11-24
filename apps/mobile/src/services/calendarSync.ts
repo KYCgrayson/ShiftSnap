@@ -1,5 +1,6 @@
 import * as Calendar from 'expo-calendar';
 import { Platform } from 'react-native';
+import { personalShiftTiming, uniquePersonalShifts, type ResolvedShiftTiming } from './personalShifts';
 
 export const CALENDAR_NAME = 'IShift';
 export const CALENDAR_COLOR = '#4A9DAD';
@@ -21,6 +22,7 @@ export interface CalendarShiftForSync {
   is_day_off: boolean;
   source?: string | null;
   calendar_event_id: string | null;
+  personal_timing?: ResolvedShiftTiming;
 }
 
 export interface CalendarShiftCodeForSync {
@@ -243,17 +245,6 @@ function formatLocalDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function normalizeTime(time?: string | null): string | null {
-  if (!time) return null;
-  const match = /^(\d{1,2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?$/.exec(time.trim());
-  if (!match) return null;
-  const hour = Number(match[1]);
-  const minute = Number(match[2]);
-  const second = match[3] === undefined ? 0 : Number(match[3]);
-  if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59) return null;
-  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-}
-
 function dateAtLocalTime(date: string, time: string): Date {
   const parsed = parseISODate(date);
   const [hour, minute] = time.split(':').map(Number);
@@ -308,9 +299,8 @@ function buildEventDetails(
   if (titleOptions.includePerson && rowName) parts.push(rowName);
   const title = parts.join(' · ');
 
-  const startTime = normalizeTime(shift.start_time) || normalizeTime(codeInfo?.start_time);
-  const endTime = normalizeTime(shift.end_time) || normalizeTime(codeInfo?.end_time);
-  const isAllDay = shift.is_day_off || codeInfo?.is_day_off || !startTime;
+  const { startTime, endTime, isDayOff } = personalShiftTiming(shift, codeInfo);
+  const isAllDay = isDayOff || !startTime;
 
   let startDate: Date;
   let endDate: Date;
@@ -516,7 +506,11 @@ export async function reconcileShiftsToCalendar(
     ? new Set([range.userId])
     : new Set(shifts.map((shift) => shift.user_id));
   const touchedEventIds = new Set<string>();
-  const desiredShifts = [...shifts].sort((a, b) => a.date.localeCompare(b.date));
+  const desiredShifts = uniquePersonalShifts(
+    shifts,
+    (code) => shiftCodes.find((item) => item.code === code),
+    (shift) => range?.userId ?? shift.user_id,
+  ).sort((a, b) => a.date.localeCompare(b.date));
 
   for (const shift of desiredShifts) {
     const syncKey = getShiftSyncKey(shift, range?.userId);

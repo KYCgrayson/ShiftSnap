@@ -74,22 +74,25 @@ try {
 
   // 2. Repeated reconciliation and title mode updates reuse the event.
   events = [];
-  const first = await reconcileShiftsToCalendar([baseShift()], [{ code: 'D', meaning: 'Day' }], 'calendar-1', range);
+  const withTitleDetails = { ...range, titleOptions: { includeMeaning: true, includePerson: true } };
+  const first = await reconcileShiftsToCalendar([baseShift()], [{ code: 'D', meaning: 'Day' }], 'calendar-1', withTitleDetails);
   const firstId = first.eventIdsByShiftId.get('shift-1');
-  const second = await reconcileShiftsToCalendar([baseShift()], [{ code: 'D', meaning: 'Day' }], 'calendar-1', range);
+  const second = await reconcileShiftsToCalendar([baseShift()], [{ code: 'D', meaning: 'Day' }], 'calendar-1', withTitleDetails);
   assert.equal(second.updated, 1);
   assert.equal(events.length, 1);
   assert.equal(second.eventIdsByShiftId.get('shift-1'), firstId);
-  assert.equal(events[0].title, 'Day (D) · Alex');
-  const shiftOnly = await reconcileShiftsToCalendar([baseShift()], [{ code: 'D', meaning: 'Day' }], 'calendar-1', { ...range, titleMode: 'shift_only' });
+  assert.equal(events[0].title, 'D · Day · Alex');
+  const shiftOnly = await reconcileShiftsToCalendar([baseShift()], [{ code: 'D', meaning: 'Day' }], 'calendar-1', range);
   assert.equal(events.length, 1);
-  assert.equal(events[0].title, 'Day (D)');
+  assert.equal(events[0].title, 'D');
   assert.equal(shiftOnly.eventIdsByShiftId.get('shift-1'), firstId);
-  const nameFirst = await reconcileShiftsToCalendar([baseShift()], [{ code: 'D', meaning: 'Day' }], 'calendar-1', { ...range, titleMode: 'name_first' });
+  const withName = await reconcileShiftsToCalendar([baseShift()], [{ code: 'D', meaning: 'Day' }], 'calendar-1', {
+    ...range, titleOptions: { includeMeaning: false, includePerson: true },
+  });
   assert.equal(events.length, 1);
-  assert.equal(events[0].title, 'Alex · Day (D)');
-  assert.equal(nameFirst.eventIdsByShiftId.get('shift-1'), firstId);
-  record('idempotent sync and title updates', { created: first.created, updated: second.updated + shiftOnly.updated + nameFirst.updated, eventId: firstId, title: events[0].title });
+  assert.equal(events[0].title, 'D · Alex');
+  assert.equal(withName.eventIdsByShiftId.get('shift-1'), firstId);
+  record('idempotent sync and title updates', { created: first.created, updated: second.updated + shiftOnly.updated + withName.updated, eventId: firstId, title: events[0].title });
 
   // 3. Other account events remain untouched during the current account sync.
   events = [ownedEvent('other-b', 'user-b', 'shift-2')];
@@ -138,6 +141,30 @@ try {
     validSecondsStart: new Date(secondsOk.startDate).toISOString(),
     invalidSecondsFallbackStart: new Date(secondsInvalid.startDate).toISOString(),
   });
+
+  events = [];
+  const combined = await reconcileShiftsToCalendar(
+    [
+      baseShift({ id: 'claimed-a', name_on_schedule: 'Jason0', start_time: null, end_time: null }),
+      baseShift({ id: 'claimed-b', name_on_schedule: 'Jason1.', user_id: 'uploader-b' }),
+      baseShift({ id: 'different-time', name_on_schedule: 'Jason1.', start_time: '11:00' }),
+    ],
+    [{ code: 'D', meaning: 'Day', start_time: '09:00', end_time: '17:00' }],
+    'calendar-1',
+    range,
+  );
+  assert.equal(combined.created, 2);
+  assert.deepEqual(events.map((event) => new Date(event.startDate).getHours()), [9, 11]);
+  record('claimed labels with the same effective shift create one native event', { created: combined.created });
+
+  events = [];
+  const groupTimings = await reconcileShiftsToCalendar([
+    baseShift({ id: 'early-group', start_time: null, end_time: null, personal_timing: { startTime: '08:00', endTime: '16:00', isDayOff: false } }),
+    baseShift({ id: 'late-group', start_time: null, end_time: null, personal_timing: { startTime: '09:00', endTime: '17:00', isDayOff: false } }),
+  ], [{ code: 'D', meaning: 'Day', start_time: '09:00', end_time: '17:00' }], 'calendar-1', range);
+  assert.equal(groupTimings.created, 2);
+  assert.deepEqual(events.map((event) => new Date(event.startDate).getHours()), [8, 9]);
+  record('same shift codes with different group timing remain separate', { created: groupTimings.created });
 
   // 6. A failed native create is reported and does not affect another account.
   events = [

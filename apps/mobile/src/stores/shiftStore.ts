@@ -1,3 +1,4 @@
+import { readPersonalShift, type ResolvedShiftTiming, type ScheduleShiftDetail } from '../services/personalShifts';
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../services/supabase';
@@ -27,6 +28,7 @@ interface ShiftItem {
   calendar_event_id: string | null;
   synced_at: string | null;
   is_personal?: boolean;
+  personal_timing?: ResolvedShiftTiming;
 }
 
 // Adjacent-months window used by the calendar screen: last month, the
@@ -59,7 +61,8 @@ async function fetchAuthedMonthShifts(userId: string, yearMonth: string, scope: 
       .gte('date', startDate)
       .lte('date', endDate)
       .order('date', { ascending: true }),
-    supabase.rpc('get_my_schedule_shifts', {
+    supabase.rpc('get_my_schedule_shift_details', {
+      p_include_duplicates: true,
       p_start_date: startDate,
       p_end_date: endDate,
     }),
@@ -68,15 +71,19 @@ async function fetchAuthedMonthShifts(userId: string, yearMonth: string, scope: 
   if (ownResult.error) throw ownResult.error;
   if (personalResult.error) throw personalResult.error;
 
-  const personalShiftIds = new Set(
-    (personalResult.data || []).map((shift: { id: string }) => shift.id),
+  const personalDetails = new Map(
+    ((personalResult.data ?? []) as ScheduleShiftDetail[]).map((detail) => {
+      const shift = readPersonalShift(detail);
+      return [shift.id, shift.personal_timing];
+    }),
   );
   let allShifts: ShiftItem[] = (ownResult.data || []).map((row: any) => {
     const { schedules, ...shift } = row;
     return {
       ...shift,
       group_id: schedules?.group_id ?? null,
-      is_personal: personalShiftIds.has(shift.id),
+      is_personal: personalDetails.has(shift.id),
+      personal_timing: personalDetails.get(shift.id),
     };
   });
   const realGroupIds = scope.groupIds.filter((id) => id !== 'guest-group');
@@ -103,7 +110,8 @@ async function fetchAuthedMonthShifts(userId: string, yearMonth: string, scope: 
           return {
             ...shift,
             group_id: schedules?.group_id ?? null,
-            is_personal: personalShiftIds.has(shift.id),
+            is_personal: personalDetails.has(shift.id),
+            personal_timing: personalDetails.get(shift.id),
           };
         });
       allShifts = [...allShifts, ...uniqueGroupShifts];
@@ -117,12 +125,12 @@ async function fetchMyScheduleShifts(
   startDate: string | null,
   endDate: string | null,
 ): Promise<ShiftItem[]> {
-  const { data, error } = await withReadTimeout(supabase.rpc('get_my_schedule_shifts', {
+  const { data, error } = await withReadTimeout(supabase.rpc('get_my_schedule_shift_details', {
     p_start_date: startDate,
     p_end_date: endDate,
   }));
   if (error) throw error;
-  return (data || []) as ShiftItem[];
+  return ((data ?? []) as ScheduleShiftDetail[]).map(readPersonalShift);
 }
 
 interface ShiftState {
@@ -599,9 +607,10 @@ export const useShiftStore = create<ShiftState>((set, get) => ({
         .eq('id', shiftId);
       if (error) throw error;
 
-      // Update in-memory state immediately
-      const applyUpdates = (shifts: ShiftItem[]) =>
-        shifts.map((s) => (s.id === shiftId ? { ...s, ...updates } : s));
+      // Reload resolved timing with the month after applying the saved fields.
+      const applyUpdates = (shifts: ShiftItem[]) => shifts.map((shift) =>
+        shift.id === shiftId ? { ...shift, ...updates, personal_timing: undefined } : shift
+      );
       set((state) => ({
         monthShifts: applyUpdates(state.monthShifts),
         shiftsByMonth: Object.fromEntries(

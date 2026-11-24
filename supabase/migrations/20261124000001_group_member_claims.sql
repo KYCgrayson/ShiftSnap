@@ -10,8 +10,27 @@ CREATE TABLE public.group_member_claims (
   follow_roster_identity BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   FOREIGN KEY (group_id, user_id) REFERENCES public.group_members(group_id, user_id) ON DELETE CASCADE,
-  UNIQUE (group_id, user_id, slot)
+  UNIQUE (group_id, user_id, slot),
+  CONSTRAINT group_member_claims_identity_present CHECK (person_id IS NOT NULL OR name_on_schedule IS NOT NULL)
 );
+
+CREATE FUNCTION public.drop_id_only_schedule_claims() RETURNS TRIGGER
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE r RECORD;
+BEGIN
+  FOR r IN
+    DELETE FROM public.group_member_claims
+    WHERE person_id = OLD.id AND name_on_schedule IS NULL
+    RETURNING group_id, user_id
+  LOOP
+    PERFORM public.refresh_legacy_schedule_claims(r.group_id, r.user_id);
+  END LOOP;
+  RETURN OLD;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.drop_id_only_schedule_claims() FROM PUBLIC, anon, authenticated;
+CREATE TRIGGER drop_id_only_schedule_claims BEFORE DELETE ON public.persons
+FOR EACH ROW EXECUTE FUNCTION public.drop_id_only_schedule_claims();
 
 -- Hold the membership table from concurrent writes through the compatibility
 -- function swap. The migration runner applies the file transactionally.
@@ -222,7 +241,8 @@ BEGIN
   SELECT group_id INTO v_group_id FROM public.schedules WHERE id = p_schedule_id;
   IF v_group_id IS NULL THEN RAISE EXCEPTION 'SCHEDULE_NOT_IN_GROUP'; END IF;
   PERFORM public.lock_schedule_claim_membership(v_group_id);
-  DELETE FROM public.group_member_claims WHERE group_id = v_group_id AND user_id = auth.uid() AND slot = 1;
+  -- Old clients show a single claim; after their unclaim the member must have none.
+  DELETE FROM public.group_member_claims WHERE group_id = v_group_id AND user_id = auth.uid();
   PERFORM public.refresh_legacy_schedule_claims(v_group_id, auth.uid());
 END;
 $$;

@@ -201,14 +201,15 @@ BEGIN
   PERFORM public.unclaim_person_in_schedule(p_schedule_id => november);
   PERFORM public.unclaim_person_in_schedule(p_schedule_id => november);
   PERFORM pg_temp.assert_claim_test(
-    (SELECT jsonb_array_length(schedule_claims) = 2 AND claimed_name_on_schedule IS NULL
+    (SELECT jsonb_array_length(schedule_claims) = 0 AND claimed_name_on_schedule IS NULL
+       AND claimed_person_id IS NULL
      FROM public.get_group_member_profiles(test_group_id) WHERE user_id = owner_id),
-    'legacy unclaim and retry clear only its slot');
+    'legacy unclaim and retry clear every claim in the group');
   PERFORM public.claim_person_in_schedule(p_schedule_id => december, p_name_on_schedule => 'Jason1.');
   PERFORM pg_temp.assert_claim_test(
-    (SELECT jsonb_array_length(schedule_claims) = 2 AND claimed_name_on_schedule = 'Jason1.'
+    (SELECT jsonb_array_length(schedule_claims) = 1 AND claimed_name_on_schedule = 'Jason1.'
      FROM public.get_group_member_profiles(test_group_id) WHERE user_id = owner_id),
-    'legacy claim reuses an existing secondary claim');
+    'legacy claim after full unclaim creates the primary claim');
 
   PERFORM public.add_schedule_claim(november, 'Cross group A');
   PERFORM public.add_schedule_claim('13500000-0000-4000-8000-000000000035', 'Cross group B');
@@ -244,5 +245,15 @@ SELECT pg_temp.assert_claim_test(
   NOT has_function_privilege('anon', 'public.add_schedule_claim(uuid,text)', 'EXECUTE')
   AND NOT has_function_privilege('anon', 'public.get_my_schedule_shift_matches(date,date)', 'EXECUTE'),
   'claim and match RPCs require authentication');
+
+-- Deleting a roster person must not leave an empty claim shell.
+DELETE FROM public.persons WHERE id = '13500000-0000-4000-8000-000000000024';
+SELECT pg_temp.assert_claim_test(
+  NOT EXISTS (SELECT 1 FROM public.group_member_claims WHERE person_id IS NULL AND name_on_schedule IS NULL),
+  'ID-only claim removed with its person');
+SELECT pg_temp.assert_claim_test(
+  (SELECT claimed_person_id IS NULL AND claimed_name_on_schedule IS NULL FROM public.group_members
+   WHERE user_id = '13500000-0000-4000-8000-000000000005' AND group_id = '13500000-0000-4000-8000-000000000010'),
+  'legacy projection cleared with the ID-only claim');
 
 ROLLBACK;

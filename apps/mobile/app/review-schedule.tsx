@@ -135,9 +135,9 @@ export default function ReviewScheduleScreen() {
 
   // Step 4: Optional per-row "this row is group member X" tag. When set,
   // the row's shifts are written with that member's user_id and source
-  // self_scan, so the member sees the schedule as their own without
-  // having to claim it later. null means "uploader-owned coworker row"
-  // (legacy reference_scan behaviour).
+  // self_scan. This supplies the default personal schedule for a group
+  // member who has no explicit claims. null leaves the row uploader-owned
+  // as a reference_scan.
   const [coworkerAssignedUser, setCoworkerAssignedUser] = useState<Map<number, string>>(new Map());
   const [memberPickerForRow, setMemberPickerForRow] = useState<number | null>(null);
   const [selfAssignedUser, setSelfAssignedUser] = useState<string | null>(null);

@@ -20,6 +20,7 @@ interface ShiftCodeItem {
 
 interface ShiftCodeState {
   shiftCodes: ShiftCodeItem[];
+  codeTimingRevision: number;
   recentlyUsedCodes: Set<string>;
   loading: boolean;
   error: string | null;
@@ -43,6 +44,7 @@ const RECENT_MONTHS_WINDOW = 3;
 
 export const useShiftCodeStore = create<ShiftCodeState>((set, get) => ({
   shiftCodes: [],
+  codeTimingRevision: 0,
   recentlyUsedCodes: new Set(),
   loading: false,
   error: null,
@@ -266,10 +268,14 @@ export const useShiftCodeStore = create<ShiftCodeState>((set, get) => ({
           .update({ start_time: startTime, end_time: endTime, is_day_off: isDayOff })
           .eq('user_id', userId)
           .eq('shift_code', code);
-        // Update in-memory shifts
         const shiftState = useShiftStore.getState();
-        const applyUpdate = (s: any) =>
-          s.shift_code === code ? { ...s, start_time: startTime, end_time: endTime, is_day_off: isDayOff } : s;
+        const applyUpdate = (shift: (typeof shiftState.monthShifts)[number]) => {
+          if (shift.shift_code !== code) return shift;
+          if (shift.user_id !== userId) return { ...shift, personal_timing: undefined };
+          return {
+            ...shift, start_time: startTime, end_time: endTime, is_day_off: isDayOff, personal_timing: undefined,
+          };
+        };
         useShiftStore.setState({
           monthShifts: shiftState.monthShifts.map(applyUpdate),
           shiftsByMonth: Object.fromEntries(
@@ -280,8 +286,8 @@ export const useShiftCodeStore = create<ShiftCodeState>((set, get) => ({
         console.error('Non-critical: failed to cascade shift code times to shifts:', cascadeError);
       }
 
-      // Refresh the list
       await get().fetchShiftCodes(userId);
+      set((state) => ({ codeTimingRevision: state.codeTimingRevision + 1 }));
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to save shift code';
       set({ error: message });
@@ -303,6 +309,7 @@ export const useShiftCodeStore = create<ShiftCodeState>((set, get) => ({
 
       set((state) => ({
         shiftCodes: state.shiftCodes.filter((sc) => sc.id !== id),
+        codeTimingRevision: state.codeTimingRevision + 1,
       }));
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to delete shift code';
@@ -316,6 +323,6 @@ export const useShiftCodeStore = create<ShiftCodeState>((set, get) => ({
   },
 
   reset: () => {
-    set({ shiftCodes: [], recentlyUsedCodes: new Set(), loading: false, error: null });
+    set({ shiftCodes: [], codeTimingRevision: 0, recentlyUsedCodes: new Set(), loading: false, error: null });
   },
 }));

@@ -30,6 +30,7 @@ import { useAuthStore } from './authStore';
 import { supabase } from '../services/supabase';
 import { useShiftCodeStore } from './shiftCodeStore';
 import { useShiftStore } from './shiftStore';
+import { personalShiftTiming, readPersonalShift, type ScheduleShiftDetail } from '../services/personalShifts';
 import { DEFAULT_ALARM_MINUTES } from '@shiftsnap/shared';
 
 const CALENDAR_DESTINATION_KEY_PREFIX = 'shiftsnap_calendar_destination:';
@@ -245,7 +246,7 @@ function matchesCalendarSyncFilter(
   filter: CalendarSyncFilter,
   codeInfo?: CalendarShiftCodeForSync,
 ): boolean {
-  const isDayOff = shift.is_day_off || codeInfo?.is_day_off || false;
+  const { isDayOff } = personalShiftTiming(shift, codeInfo);
   if (filter === 'work_days') return !isDayOff;
   if (filter === 'days_off') return isDayOff;
   return true;
@@ -301,15 +302,15 @@ export const useCalendarStore = create<CalendarState>((set, get) => ({
     if (managedId && !candidate && !await hasCalendarPermissions()) throw new Error('Calendar permission denied');
     const codeStore = useShiftCodeStore.getState();
     if (codeStore.shiftCodes.length === 0) await codeStore.fetchShiftCodes(userId);
-    const { data, error } = await supabase.rpc('get_my_schedule_shifts', {
+    const { data, error } = await supabase.rpc('get_my_schedule_shift_details', {
       p_start_date: monthRange.startDate,
       p_end_date: monthRange.endDate,
     });
     if (error) throw error;
     const shiftCodes = useShiftCodeStore.getState().shiftCodes;
-    const shifts = ((data || []) as CalendarShiftForSync[]).filter((shift) => matchesCalendarSyncFilter(
-      shift, draft.filter, shiftCodes.find((code) => code.code === shift.shift_code),
-    ));
+    const getCode = (code: string) => shiftCodes.find((item) => item.code === code);
+    const shifts = ((data ?? []) as ScheduleShiftDetail[]).map(readPersonalShift)
+      .filter((shift) => matchesCalendarSyncFilter(shift, draft.filter, getCode(shift.shift_code)));
     return { userId, range: monthRange, draft: { ...draft, name }, destination: candidate, expectedManagedId: managedId, legacyAdoption: !!legacyId, selectedCount: shifts.length, shifts, shiftCodes };
   },
 

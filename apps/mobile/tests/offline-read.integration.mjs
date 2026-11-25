@@ -102,7 +102,7 @@ async function execute(query) {
 const supabase = {
   from: (table) => makeQuery(table),
   rpc: async (name, args) => {
-    if (name === 'get_my_schedule_shifts') {
+    if (name === 'get_my_schedule_shift_details') {
       if (failureMode === 'partial-personal-failure') return { data: null, error: new Error('personal read failed') };
       return { data: [], error: null };
     }

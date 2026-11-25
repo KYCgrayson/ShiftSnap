@@ -62,6 +62,54 @@ export type Database = {
         }
         Relationships: []
       }
+      group_member_claims: {
+        Row: {
+          created_at: string
+          follow_roster_identity: boolean
+          group_id: string
+          id: string
+          name_on_schedule: string | null
+          person_id: string | null
+          slot: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          follow_roster_identity?: boolean
+          group_id: string
+          id?: string
+          name_on_schedule?: string | null
+          person_id?: string | null
+          slot: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          follow_roster_identity?: boolean
+          group_id?: string
+          id?: string
+          name_on_schedule?: string | null
+          person_id?: string | null
+          slot?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_member_claims_group_id_user_id_fkey"
+            columns: ["group_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "group_members"
+            referencedColumns: ["group_id", "user_id"]
+          },
+          {
+            foreignKeyName: "group_member_claims_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       group_members: {
         Row: {
           claimed_name_on_schedule: string | null
@@ -835,6 +883,10 @@ export type Database = {
         Args: { p_person_name: string; p_user_id: string; p_year_month: string }
         Returns: undefined
       }
+      add_schedule_claim: {
+        Args: { p_name_on_schedule: string; p_schedule_id: string }
+        Returns: number
+      }
       claim_person_in_schedule: {
         Args: { p_name_on_schedule: string; p_schedule_id: string }
         Returns: number
@@ -854,8 +906,31 @@ export type Database = {
           membership_id: string
           nickname: string
           role: Database["public"]["Enums"]["group_role"]
+          schedule_claims: Json
           user_id: string
         }[]
+      }
+      get_group_schedule_claim_rows: {
+        Args: { p_group_id: string; p_year_months: string[] }
+        Returns: {
+          name_on_schedule: string
+          schedule_id: string
+          shift_count: number
+          year_month: string
+        }[]
+      }
+      get_my_schedule_shift_details: {
+        Args: { p_end_date?: string; p_include_duplicates?: boolean; p_start_date?: string }
+        Returns: {
+          effective_end_time: string | null
+          effective_is_day_off: boolean
+          effective_start_time: string | null
+          shift_row: Database["public"]["Tables"]["shifts"]["Row"]
+        }[]
+      }
+      get_my_schedule_shift_matches: {
+        Args: { p_end_date?: string; p_start_date?: string }
+        Returns: Database["public"]["Tables"]["shifts"]["Row"][]
       }
       get_my_schedule_shifts: {
         Args: { p_end_date?: string; p_start_date?: string }
@@ -905,6 +980,10 @@ export type Database = {
       resolve_roster_person: {
         Args: { p_color?: string; p_group_id: string; p_name: string }
         Returns: string
+      }
+      remove_schedule_claim: {
+        Args: { p_claim_id: string; p_group_id: string }
+        Returns: undefined
       }
       roster_normalize_name: {
         Args: { p_ignore_trailing_number?: boolean; p_name: string }

@@ -4,6 +4,7 @@ import { supabase } from '../services/supabase';
 import { getIsGuest, getIsOfflineReadOnly, useAuthStore } from './authStore';
 import { getOfflineReadGeneration, invalidateOfflineReadRequests, isOfflineReadRequestCurrent, readLatestOfflineSnapshot, saveOfflineSnapshotPatch, withReadTimeout } from '../services/offlineReadCache';
 import type { RosterNameMatchingMode, RosterNameSensitivity } from '@shiftsnap/shared';
+import type { Database } from '@shiftsnap/shared/types/database';
 
 const VIEW_SCOPE_KEY = 'shiftsnap:group-view-scope';
 
@@ -18,6 +19,15 @@ interface GroupItem {
   created_at: string;
 }
 
+type GroupMemberProfile = Database['public']['Functions']['get_group_member_profiles']['Returns'][number];
+export type GroupScheduleClaimRow = Database['public']['Functions']['get_group_schedule_claim_rows']['Returns'][number];
+
+export interface ScheduleClaim {
+  id: string;
+  person_id: string | null;
+  name_on_schedule: string | null;
+}
+
 export interface GroupMemberItem {
   id: string;
   group_id: string;
@@ -28,8 +38,7 @@ export interface GroupMemberItem {
   is_visible: boolean;
   joined_at: string;
   display_name?: string;
-  claimed_person_id?: string | null;
-  claimed_name_on_schedule?: string | null;
+  scheduleClaims: ScheduleClaim[];
 }
 
 /** Read members without changing the active group's global picker state. */
@@ -39,7 +48,7 @@ export async function loadGroupMembers(groupId: string): Promise<GroupMemberItem
   // profiles, so admin/member name + email are populated correctly.
   const { data, error } = await supabase.rpc('get_group_member_profiles', { gid: groupId });
   if (error) throw error;
-  const members: GroupMemberItem[] = (data || []).map((m: any) => ({
+  const members: GroupMemberItem[] = ((data ?? []) as GroupMemberProfile[]).map((m) => ({
     id: m.membership_id,
     group_id: groupId,
     user_id: m.user_id,
@@ -49,8 +58,7 @@ export async function loadGroupMembers(groupId: string): Promise<GroupMemberItem
     is_visible: m.is_visible,
     joined_at: m.joined_at,
     display_name: m.display_name || m.email?.split('@')[0] || undefined,
-    claimed_person_id: m.claimed_person_id ?? null,
-    claimed_name_on_schedule: m.claimed_name_on_schedule ?? null,
+    scheduleClaims: (m.schedule_claims as unknown as ScheduleClaim[] | undefined) ?? [],
   }));
   return members;
 }
@@ -73,6 +81,7 @@ interface GroupState {
   groups: GroupItem[];
   currentGroup: GroupItem | null;
   members: GroupMemberItem[];
+  scheduleClaimRevision: number;
   loading: boolean;
   error: string | null;
 
@@ -90,8 +99,8 @@ interface GroupState {
   updateGroupName: (groupId: string, name: string) => Promise<void>;
   setRosterNameMatching: (groupId: string, mode: RosterNameMatchingMode, sensitivity: RosterNameSensitivity) => Promise<void>;
   removeMember: (groupId: string, targetUserId: string) => Promise<void>;
-  claimPersonInSchedule: (scheduleId: string, nameOnSchedule: string) => Promise<number>;
-  unclaimPersonInSchedule: (scheduleId: string) => Promise<void>;
+  addScheduleClaim: (scheduleId: string, nameOnSchedule: string) => Promise<number>;
+  removeScheduleClaim: (groupId: string, claimId: string) => Promise<void>;
   initViewScope: () => Promise<void>;
   cycleViewScope: () => { scope: GroupViewScope; label: string };
   reset: () => void;
@@ -101,6 +110,7 @@ export const useGroupStore = create<GroupState>((set, get) => ({
   groups: [],
   currentGroup: null,
   members: [],
+  scheduleClaimRevision: 0,
   loading: false,
   error: null,
   viewScope: 'all',
@@ -265,8 +275,14 @@ export const useGroupStore = create<GroupState>((set, get) => ({
       return;
     }
     try {
+      const userId = useAuthStore.getState().user?.id;
+      const revision = get().scheduleClaimRevision;
       const members = await loadGroupMembers(groupId);
-      set({ members });
+      if (get().currentGroup?.id === groupId
+          && get().scheduleClaimRevision === revision
+          && useAuthStore.getState().user?.id === userId) {
+        set({ members });
+      }
     } catch (error) {
       console.error('Error fetching group members:', error);
     }
@@ -398,38 +414,29 @@ export const useGroupStore = create<GroupState>((set, get) => ({
     }));
   },
 
-  claimPersonInSchedule: async (scheduleId: string, nameOnSchedule: string) => {
+  addScheduleClaim: async (scheduleId: string, nameOnSchedule: string) => {
     if (getIsOfflineReadOnly()) throw new Error('Offline mode is read-only. Reconnect to manage groups.');
     if (getIsGuest()) return 0;
-    const { data, error } = await supabase.rpc('claim_person_in_schedule', {
+    const { data, error } = await supabase.rpc('add_schedule_claim', {
       p_schedule_id: scheduleId,
       p_name_on_schedule: nameOnSchedule,
     });
-    if (error) {
-      const msg = error.message || '';
-      if (msg.includes('NOT_AUTHENTICATED')) throw new Error('NOT_AUTHENTICATED');
-      if (msg.includes('NOT_GROUP_MEMBER')) throw new Error('NOT_GROUP_MEMBER');
-      if (msg.includes('SCHEDULE_NOT_IN_GROUP')) throw new Error('SCHEDULE_NOT_IN_GROUP');
-      if (msg.includes('SCHEDULE_ROW_NOT_FOUND')) throw new Error('SCHEDULE_ROW_NOT_FOUND');
-      if (msg.includes('AMBIGUOUS_SCHEDULE_ROW')) throw new Error('AMBIGUOUS_SCHEDULE_ROW');
-      throw error;
-    }
-    return (data as number) ?? 0;
+    if (error) throw new Error(error.message);
+    invalidateOfflineReadRequests();
+    set((state) => ({ scheduleClaimRevision: state.scheduleClaimRevision + 1 }));
+    return data ?? 0;
   },
 
-  unclaimPersonInSchedule: async (scheduleId: string) => {
+  removeScheduleClaim: async (groupId: string, claimId: string) => {
     if (getIsOfflineReadOnly()) throw new Error('Offline mode is read-only. Reconnect to manage groups.');
     if (getIsGuest()) return;
-    const { error } = await supabase.rpc('unclaim_person_in_schedule', {
-      p_schedule_id: scheduleId,
+    const { error } = await supabase.rpc('remove_schedule_claim', {
+      p_group_id: groupId,
+      p_claim_id: claimId,
     });
-    if (error) {
-      const msg = error.message || '';
-      if (msg.includes('NOT_AUTHENTICATED')) throw new Error('NOT_AUTHENTICATED');
-      if (msg.includes('NOT_GROUP_MEMBER')) throw new Error('NOT_GROUP_MEMBER');
-      if (msg.includes('SCHEDULE_NOT_IN_GROUP')) throw new Error('SCHEDULE_NOT_IN_GROUP');
-      throw error;
-    }
+    if (error) throw new Error(error.message);
+    invalidateOfflineReadRequests();
+    set((state) => ({ scheduleClaimRevision: state.scheduleClaimRevision + 1 }));
   },
 
   initViewScope: async () => {
@@ -458,7 +465,7 @@ export const useGroupStore = create<GroupState>((set, get) => ({
   },
 
   reset: () => {
-    set({ groups: [], currentGroup: null, members: [], loading: false, error: null, viewScope: 'all' });
+    set({ groups: [], currentGroup: null, members: [], scheduleClaimRevision: 0, loading: false, error: null, viewScope: 'all' });
     AsyncStorage.removeItem(VIEW_SCOPE_KEY).catch(() => {});
   },
 }));

@@ -1,3 +1,5 @@
+BEGIN;
+
 -- Keep the first slot as the editable projection for clients with the old RPCs.
 -- Fixed slots enforce the per-membership limit even outside the RPCs.
 CREATE TABLE public.group_member_claims (
@@ -33,7 +35,8 @@ CREATE TRIGGER drop_id_only_schedule_claims BEFORE DELETE ON public.persons
 FOR EACH ROW EXECUTE FUNCTION public.drop_id_only_schedule_claims();
 
 -- Hold the membership table from concurrent writes through the compatibility
--- function swap. The migration runner applies the file transactionally.
+-- function swap. The whole file is one explicit transaction (BEGIN/COMMIT) so
+-- LOCK TABLE also works under `supabase db push`, which does not open one.
 LOCK TABLE public.group_members IN SHARE ROW EXCLUSIVE MODE;
 
 INSERT INTO public.group_member_claims (group_id, user_id, slot, person_id, name_on_schedule, follow_roster_identity)
@@ -540,3 +543,5 @@ $$;
 
 REVOKE ALL ON FUNCTION public.get_group_schedule_claim_rows(UUID, TEXT[]) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.get_group_schedule_claim_rows(UUID, TEXT[]) TO authenticated;
+
+COMMIT;
